@@ -1,0 +1,209 @@
+# Import packages
+
+## Python
+
+```{python}
+import polars as pl
+from src.ryp import r, to_r
+```
+
+## R packages
+
+```{r}
+library(ggpubr)
+library(pheatmap)
+library(RColorBrewer)
+library(stringr)
+library(scales)
+library(dplyr)
+```
+
+# Visualization
+
+## MDS plot
+
+```{r}
+#TODO Make this faster
+pbid_count_matrix <- read_parquet("proc/pbid_count_matrix.parquet")
+classification <- read_parquet("proc/filtered_lite_classification.parquet")
+
+pbid_count_matrix %>%
+  rowwise() %>%
+  mutate(total = sum(c_across(-pbid)))
+
+common_pbids <- intersect(pbid_count_matrix$pbid, classification$isoform)
+pbid_count_matrix <- pbid_count_matrix %>% filter(pbid %in% common_pbids)
+classification <- classification %>% filter(isoform %in% common_pbids)
+
+classification <- classification %>% 
+    mutate(structural_category2 = ifelse(structural_category %in% categories_to_show, structural_category, "Other")) %>%     
+    mutate(counts = rowSums(pbid_count_matrix[, -1]))
+
+cpm <- sweep(pbid_count_matrix[, -(1)], 2, colSums(pbid_count_matrix[, -1]), `/`) * 1000000
+mds <- cmdscale(dist(t(log2(.1+cpm))), k = 4)
+df <- data.frame(sample=rownames(mds), PC1 = mds[, 1], PC2=mds[, 2], PC3=mds[, 3], PC4=mds[, 4])
+df$Timepoint <- str_split(df$sample, "_") %>% map_chr(1)
+df %>% 
+    ggplot(aes(x=PC1, y=PC2, color=Timepoint, label = sample)) +
+    geom_point(size=4) +  geom_text(color="black", size=2) +  theme_bw() + ggtitle("Isoform level clustering")
+ggsave("figures/mds_plot.png", width=8, height=5, dpi = 300)
+```
+
+## Comparing total reads between Illumina and PacBio
+
+```{python}
+illumina_total_reads = pl.read_csv("data/short_read/gene_count_matrix.csv")\
+    .select(pl.selectors.numeric()).sum()
+pacbio_total_reads = pl.read_parquet("proc/gene_count_matrix.parquet")\
+    .select(pl.selectors.numeric()).sum()\
+    .with_columns(
+        pl.all().cast(pl.Int64, strict=False))
+df = pl.concat([illumina_total_reads, pacbio_total_reads])\
+    .transpose(column_names=["Illumina", "PacBio"], include_header=True)\
+    .rename({"column": "Sample"})\
+    .melt(id_vars=["Sample"], value_name="Total Reads", variable_name="Technology")
+
+to_r(df, "df")
+```
+
+```{r}
+df %>% 
+    ggbarplot(x = "Sample", y = "Total Reads", fill = "Technology", position = position_dodge(0.9), x.text.angle = 90) +
+    scale_y_continuous(labels = unit_format(unit = "M", scale = 1e-6))
+ggsave("figures/total_reads.png")
+```
+
+## Transcript count comparison
+
+```{python}
+illumina = pl.read_csv("data/short_read/transcript_count_matrix.csv")\
+    .rename({"": "transcript_id"})\
+    [["transcript_id", "iPSC_1", "iPSC_2", "iPSC_3", "NPC_1_1", "NPC_1_3", "NPC_2_1", "NPC_2_2", "NPC_3_1", "NPC_3_3", "CN_1_2", "CN_1_3", "CN_2_1", "CN_2_2", "CN_3_1", "CN_3_2"]]
+illumina = illumina.with_columns(
+    pl.col("transcript_id").str.extract(r"^([^.]+)").alias("transcript_id")
+)
+classification = pl.read_parquet("proc/filtered_lite_classification.parquet")
+pacbio = pl.read_parquet("proc/pbid_count_matrix.parquet")\
+    [["pbid", "iPSC_1", "iPSC_2", "iPSC_3", "NPC_1_1", "NPC_1_3", "NPC_2_1", "NPC_2_2", "NPC_3_1", "NPC_3_3", "CN_1_2", "CN_1_3", "CN_2_1", "CN_2_2", "CN_3_1", "CN_3_2"]]\
+    .rename({"pbid": "isoform"})\
+    .join(classification[["isoform", "associated_transcript"]], on = ["isoform"], how = "inner")\
+    .filter(pl.col("associated_transcript") != "novel")\
+    .with_columns(
+        pl.col("associated_transcript").str.extract(r"^([^.]+)").alias("transcript_id"))\
+    .drop(["isoform", "associated_transcript"])
+```
+
+## Gene-level correlation
+
+```{python}
+pacbio = pl.read_parquet("proc/gene_count_matrix.parquet")
+data = pacbio.select(pl.selectors.numeric()).to_numpy() / pacbio.select(pl.selectors.numeric()).sum().to_numpy()[0] * 1000000
+pacbio = pl.DataFrame(
+    data.T, schema = pacbio.select(pl.selectors.numeric()).columns,
+    orient = "col").with_columns(Gene_ID = pacbio["Gene_ID"])
+
+illumina = pl.read_csv("data/short_read/combined_exons_round2.csv")
+illumina = illumina.select(illumina.columns[1:])
+data = illumina.select(pl.selectors.numeric()).to_numpy() / illumina.select(pl.selectors.numeric()).sum().to_numpy()[0] * 1000000
+illumina = pl.DataFrame(
+    data.T, schema = illumina.select(pl.selectors.numeric()).columns,
+    orient = "col").with_columns(Gene_ID = illumina["Gene_ID"])
+illumina = illumina[pacbio.columns]
+
+joined_gene = pacbio\
+    .join(illumina, on = "Gene_ID", how = "inner", suffix = "_illumina")\
+    .select(pl.selectors.numeric()).with_columns(
+        pl.col("*").add(1).log10()
+)
+
+to_r(joined_gene, "joined")
+```
+
+```{r}
+data <- cor(joined)
+annotation <- data.frame(
+    row.names = rownames(data),
+    time_point = str_extract(str_remove(rownames(data), "_illumina"), "^[^_]*"),
+    technology = c(rep("pacbio", 15), rep("illumina", 15))
+)
+
+pheatmap(
+    data,
+    color = colorRampPalette(brewer.pal(n = 7, name = "Reds"))(10),
+    breaks = seq(0.6, 1, length.out = 10),
+    cluster_rows = FALSE,
+    cluster_cols = FALSE,
+    annotation_col = annotation,
+    annotation_row = annotation,
+    show_rownames = FALSE,
+    show_colnames = FALSE,
+    display_numbers = TRUE,
+    number_color = "black",
+    fontsize_number = 6,
+    fontsize_row = 10,
+    fontsize_col = 10,
+    width = 10,
+    height = 10,
+    filename = "figures/correlation_matrix_gene.png"
+    )
+```
+
+## Transcript level correaltion
+
+```{python}
+classification = pl.read_parquet("proc/filtered_lite_classification.parquet")
+pacbio = pl.read_parquet("proc/pbid_count_matrix.parquet")\
+    [["pbid", "iPSC_1", "iPSC_2", "iPSC_3", "NPC_1_1", "NPC_1_3", "NPC_2_1", "NPC_2_2", "NPC_3_1", "NPC_3_3", "CN_1_2", "CN_1_3", "CN_2_1", "CN_2_2", "CN_3_1", "CN_3_2"]]\
+    .rename({"pbid": "isoform"})\
+    .join(classification[["isoform", "associated_transcript"]], on = ["isoform"], how = "inner")\
+    .filter(pl.col("associated_transcript") != "novel")\
+    .with_columns(
+        pl.col("associated_transcript").str.extract(r"^([^.]+)").alias("transcript_id"))\
+    .drop(["isoform", "associated_transcript"])
+library_size = pacbio\
+    .drop("transcript_id")\
+    .sum()
+pacbio = pl.DataFrame(pacbio.drop("transcript_id").to_numpy() / library_size.to_numpy() * 1000000, schema = pacbio.drop("transcript_id").columns)\
+    .with_columns(transcript_id = pacbio["transcript_id"])
+
+pacbio = pacbio.filter(pl.Series((pacbio.select(pl.selectors.numeric()) > 0.1).sum(axis=1) > 6))
+
+illumina = pl.read_csv("data/short_read/transcript_tpm.csv").rename({"": "transcript_id"})\
+    [["transcript_id", "iPSC_1", "iPSC_2", "iPSC_3", "NPC_1_1", "NPC_1_3", "NPC_2_1", "NPC_2_2", "NPC_3_1", "NPC_3_3", "CN_1_2", "CN_1_3", "CN_2_1", "CN_2_2", "CN_3_1", "CN_3_2"]]
+
+joined_transcript = pacbio\
+    .join(illumina, on = "transcript_id", how = "inner", suffix = "_illumina")\
+    .select(pl.selectors.numeric()).with_columns(
+        pl.col("*").add(1).log10()
+)
+
+to_r(joined_transcript, "joined")
+```
+
+```{r}
+data <- cor(joined)
+annotation <- data.frame(
+    row.names = rownames(data),
+    time_point = str_extract(str_remove(rownames(data), "_illumina"), "^[^_]*"),
+    technology = c(rep("pacbio", 15), rep("illumina", 15))
+)
+
+pheatmap(
+    data,
+    color = colorRampPalette(brewer.pal(n = 7, name = "Reds"))(10),
+    cluster_rows = FALSE,
+    cluster_cols = FALSE,
+    annotation_col = annotation,
+    annotation_row = annotation,
+    show_rownames = FALSE,
+    show_colnames = FALSE,
+    display_numbers = TRUE,
+    number_color = "black",
+    fontsize_number = 6,
+    fontsize_row = 10,
+    fontsize_col = 10,
+    width = 10,
+    height = 10,
+    filename = "figures/correlation_matrix_transcript.png"
+    )
+```

@@ -1,0 +1,17 @@
+# data files
+proc/*
+figures/
+data/
+envs/
+garbage/
+**/__pycache__/
+results/*
+
+# snakemake
+.snakemake
+
+# macOS
+.DS_Store
+
+# .vscode
+.vscode/

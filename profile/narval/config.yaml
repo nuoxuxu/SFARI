@@ -1,0 +1,8 @@
+executor: slurm
+jobs: 100
+use-conda: true
+set-resources:
+  cluster2:
+    runtime: 7200
+    cpus_per_task: 64
+    mem_mb: 240000

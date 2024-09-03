@@ -1,0 +1,38 @@
+
+scontrol show job 13254957
+JobId=13254957 JobName=isoseq_collapse
+   UserId=nxu(3122125) GroupId=shreejoy(6036412) MCS_label=N/A
+   Priority=2425855 Nice=0 Account=rrg-shreejoy QOS=normal
+   JobState=COMPLETING Reason=None Dependency=(null)
+   Requeue=0 Restarts=0 BatchFlag=1 Reboot=0 ExitCode=0:0
+   RunTime=00:29:49 TimeLimit=12:00:00 TimeMin=N/A
+   SubmitTime=2024-07-22T18:12:51 EligibleTime=2024-07-22T18:12:51
+   AccrueTime=2024-07-22T18:12:51
+   StartTime=2024-07-22T18:14:04 EndTime=2024-07-22T18:43:53 Deadline=N/A
+   SuspendTime=None SecsPreSuspend=0 LastSchedEval=2024-07-22T18:14:04 Scheduler=Main
+   Partition=compute AllocNode:Sid=nia-login01:65465
+   ReqNodeList=(null) ExcNodeList=(null)
+   NodeList=nia0457
+   BatchHost=nia0457
+   NumNodes=1 NumCPUs=80 NumTasks=1 CPUs/Task=1 ReqB:S:C:T=0:0:*:*
+   ReqTRES=cpu=1,mem=175000M,node=1
+   AllocTRES=cpu=80,mem=175000M,node=1,billing=40
+   Socks/Node=* NtasksPerN:B:S:C=0:0:*:* CoreSpec=*
+   MinCPUsNode=1 MinMemoryNode=175000M MinTmpDiskNode=0
+   Features=[skylake|cascade] DelayBoot=00:00:00
+   OverSubscribe=NO Contiguous=0 Licenses=(null) Network=(null)
+   Command=(null)
+   WorkDir=/gpfs/fs0/scratch/s/shreejoy/nxu/SFARI
+   Comment=/opt/slurm/bin/sbatch --export=NONE -t 0-12:0 --nodes=1 -o isoseq_collapse.out -J isoseq_collapse --wrap=/gpfs/fs0/scratch/s/shreejoy/nxu/SFARI/envs/tama/bin/isoseq collapse -j 50 proc/merged.bam merged_collapsed.gff 
+   StdErr=/gpfs/fs0/scratch/s/shreejoy/nxu/SFARI/isoseq_collapse.out
+   StdIn=/dev/null
+   StdOut=/gpfs/fs0/scratch/s/shreejoy/nxu/SFARI/isoseq_collapse.out
+   Power=
+   
+
+sacct -j 13254957
+JobID           JobName    Account    Elapsed  MaxVMSize     MaxRSS  SystemCPU    UserCPU ExitCode 
+------------ ---------- ---------- ---------- ---------- ---------- ---------- ---------- -------- 
+13254957     isoseq_co+ rrg-shree+   00:29:49                        09:42.433   04:10:40      0:0 
+13254957.ba+      batch rrg-shree+   00:29:49  13219732K  11292472K  09:42.432   04:10:40      0:0 
+13254957.ex+     extern rrg-shree+   00:29:49    629436K     18520K   00:00:00   00:00:00      0:0 

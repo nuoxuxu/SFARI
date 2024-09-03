@@ -1,0 +1,424 @@
+/home/s/shreejoy/nxu/tools/SQANTI3-5.2.2/sqanti3_qc.py:75: DeprecationWarning: Use shutil.which instead of find_executable
+  if distutils.spawn.find_executable(GTF2GENEPRED_PROG) is None:
+/home/s/shreejoy/nxu/tools/SQANTI3-5.2.2/sqanti3_qc.py:78: DeprecationWarning: Use shutil.which instead of find_executable
+  if distutils.spawn.find_executable(GFFREAD_PROG) is None:
+/home/s/shreejoy/nxu/tools/SQANTI3-5.2.2/sqanti3_qc.py:108: DeprecationWarning: Use shutil.which instead of find_executable
+  RSCRIPTPATH = distutils.spawn.find_executable('Rscript')
+Rscript (R) version 4.3.3 (2024-02-29)
+Error corrected FASTA /gpfs/fs0/scratch/s/shreejoy/nxu/SFARI/merged_collapsed.filtered_corrected.fasta already exists. Using it...
+WARNING: Skipping ORF prediction because user requested it. All isoforms will be non-coding!
+WARNING: All input isoforms were predicted as non-coding
+**** Parsing Isoforms....
+**** RT-switching computation....
+Full-length read abundance files not provided.
+Isoforms expression files not provided.
+**** Writing output files....
+**** Generating SQANTI3 report....
+Loading required package: Biobase
+Loading required package: BiocGenerics
+
+Attaching package: ‘BiocGenerics’
+
+The following object is masked from ‘package:gridExtra’:
+
+    combine
+
+The following objects are masked from ‘package:stats’:
+
+    IQR, mad, sd, var, xtabs
+
+The following objects are masked from ‘package:base’:
+
+    anyDuplicated, aperm, append, as.data.frame, basename, cbind,
+    colnames, dirname, do.call, duplicated, eval, evalq, Filter, Find,
+    get, grep, grepl, intersect, is.unsorted, lapply, Map, mapply,
+    match, mget, order, paste, pmax, pmax.int, pmin, pmin.int,
+    Position, rank, rbind, Reduce, rownames, sapply, setdiff, sort,
+    table, tapply, union, unique, unsplit, which.max, which.min
+
+Welcome to Bioconductor
+
+    Vignettes contain introductory material; view with
+    'browseVignettes()'. To cite Bioconductor, see
+    'citation("Biobase")', and for packages 'citation("pkgname")'.
+
+Loading required package: splines
+Loading required package: Matrix
+
+Attaching package: ‘Matrix’
+
+The following object is masked from ‘package:reshape’:
+
+    expand
+
+
+Attaching package: ‘plyr’
+
+The following objects are masked from ‘package:reshape’:
+
+    rename, round_any
+
+
+Attaching package: ‘plotly’
+
+The following objects are masked from ‘package:plyr’:
+
+    arrange, mutate, rename, summarise
+
+The following object is masked from ‘package:reshape’:
+
+    rename
+
+The following object is masked from ‘package:ggplot2’:
+
+    last_plot
+
+The following object is masked from ‘package:stats’:
+
+    filter
+
+The following object is masked from ‘package:graphics’:
+
+    layout
+
+
+Attaching package: ‘dplyr’
+
+The following objects are masked from ‘package:plyr’:
+
+    arrange, count, desc, failwith, id, mutate, rename, summarise,
+    summarize
+
+The following object is masked from ‘package:Biobase’:
+
+    combine
+
+The following objects are masked from ‘package:BiocGenerics’:
+
+    combine, intersect, setdiff, union
+
+The following object is masked from ‘package:gridExtra’:
+
+    combine
+
+The following object is masked from ‘package:reshape’:
+
+    rename
+
+The following objects are masked from ‘package:stats’:
+
+    filter, lag
+
+The following objects are masked from ‘package:base’:
+
+    intersect, setdiff, setequal, union
+
+Warning message:
+The `size` argument of `element_line()` is deprecated as of ggplot2 3.4.0.
+ℹ Please use the `linewidth` argument instead. 
+Warning message:
+Using `size` aesthetic for lines was deprecated in ggplot2 3.4.0.
+ℹ Please use `linewidth` instead. 
+Warning message:
+A numeric `legend.position` argument in `theme()` was deprecated in ggplot2
+3.5.0.
+ℹ Please use the `legend.position.inside` argument of `theme()` instead. 
+`summarise()` has grouped output by 'lenCat'. You can override using the
+`.groups` argument.
+`summarise()` has grouped output by 'associated_transcript'. You can override
+using the `.groups` argument.
+`summarise()` has grouped output by 'associated_transcript'. You can override
+using the `.groups` argument.
+
+
+processing file: SQANTI3_report.Rmd
+1/202                                              
+2/202 [setup]                                      
+3/202                                              
+4/202 [unnamed-chunk-1]                            
+5/202                                              
+6/202 [unnamed-chunk-2]                            
+7/202                                              
+8/202 [unnamed-chunk-3]                            
+9/202                                              
+10/202 [p0]                                         
+11/202                                              
+12/202 [p7]                                         
+13/202                                              
+14/202 [p.classByLen.a]                             
+15/202                                              
+16/202 [p.classByLen.b]                             
+17/202                                              
+18/202 [p.length.all]                               
+19/202                                              
+20/202 [p.length.cat]                               
+21/202                                              
+22/202 [p.length.exon]                              
+23/202                                              
+24/202 [unnamed-chunk-4]                            
+25/202                                              
+26/202 [unnamed-chunk-5]                            
+27/202                                              
+28/202 [p6]                                         
+29/202                                              
+30/202 [unnamed-chunk-6]                            
+31/202                                              
+32/202 [p10]                                        
+33/202                                              
+34/202 [p11]                                        
+35/202                                              
+36/202 [p1]                                         
+37/202                                              
+38/202 [p1.s.list]                                  
+39/202                                              
+40/202 [p4]                                         
+41/202                                              
+42/202 [p4.s1_p4.s2_p4.s3]                          
+43/202                                              
+44/202 [p5]                                         
+45/202                                              
+46/202 [p5.s1_p5.s2_p5.s3]                          
+47/202                                              
+48/202 [unnamed-chunk-7]                            
+49/202                                              
+50/202 [unnamed-chunk-8]                            
+51/202                                              
+52/202 [unnamed-chunk-9]                            
+53/202                                              
+54/202 [unnamed-chunk-10]                           
+55/202                                              
+56/202 [unnamed-chunk-11]                           
+57/202                                              
+58/202 [unnamed-chunk-12]                           
+59/202                                              
+60/202 [unnamed-chunk-13]                           
+61/202                                              
+62/202 [unnamed-chunk-14]                           
+63/202                                              
+64/202 [unnamed-chunk-15]                           
+65/202                                              
+66/202 [unnamed-chunk-16]                           
+67/202                                              
+68/202 [p23.a_p23.b_p29.a_p29.b]                    
+69/202                                              
+70/202 [p23.a_p23.b]                                
+71/202                                              
+72/202 [p29.a_p29.b]                                
+73/202                                              
+74/202 [unnamed-chunk-17]                           
+75/202                                              
+76/202 [p21.a_p21.b_p21.dist3.ISM.a_p21.dist3.ISM.b]
+77/202 [p21.a_p21.b]                                
+78/202                                              
+79/202 [p21.a]                                      
+80/202                                              
+81/202 [p21.b]                                      
+82/202                                              
+83/202 [p21.dist3.ISM.a_p21.dist3.ISM.b]            
+84/202                                              
+85/202 [p21.dist3.ISM.a]                            
+86/202 [p21.dist3.ISM.b]                            
+87/202                                              
+88/202 [p22.a_p22.b_p22.dist3.ISM.a_p22.dist3.ISM.b]
+89/202                                              
+90/202 [p22.a_p22.b]                                
+91/202                                              
+92/202 [p22.a]                                      
+93/202                                              
+94/202 [p22.b]                                      
+95/202                                              
+96/202 [p22.dist3.ISM.a_p22.dist3.ISM.b]            
+97/202                                              
+98/202 [p22.dist3.ISM.a]                            
+99/202 [p22.dist3.ISM.b]                            
+100/202                                              
+101/202 [unnamed-chunk-18]                           
+102/202                                              
+103/202 [unnamed-chunk-19]                           
+104/202                                              
+105/202 [unnamed-chunk-20]                           
+106/202                                              
+107/202 [p21.ISM.list]                               
+108/202                                              
+109/202 [unnamed-chunk-21]                           
+110/202                                              
+111/202 [p22.FSM.list]                               
+112/202                                              
+113/202 [p22.ISM.list]                               
+114/202                                              
+115/202 [unnamed-chunk-22]                           
+116/202                                              
+117/202 [unnamed-chunk-23]                           
+118/202                                              
+119/202 [unnamed-chunk-24]                           
+120/202                                              
+121/202 [unnamed-chunk-25]                           
+122/202                                              
+123/202 [unnamed-chunk-26]                           
+124/202                                              
+125/202 [unnamed-chunk-27]                           
+126/202                                              
+127/202 [unnamed-chunk-28]                           
+128/202                                              
+129/202 [unnamed-chunk-29]                           
+130/202                                              
+131/202 [unnamed-chunk-30]                           
+132/202                                              
+133/202 [unnamed-chunk-31]                           
+134/202                                              
+135/202 [unnamed-chunk-32]                           
+136/202                                              
+137/202 [unnamed-chunk-33]                           
+138/202                                              
+139/202 [unnamed-chunk-34]                           
+140/202                                              
+141/202 [unnamed-chunk-35]                           
+142/202                                              
+143/202 [unnamed-chunk-36]                           
+144/202                                              
+145/202 [unnamed-chunk-37]                           
+146/202                                              
+147/202 [unnamed-chunk-38]                           
+148/202                                              
+149/202 [unnamed-chunk-39]                           
+150/202                                              
+151/202 [unnamed-chunk-40]                           
+152/202                                              
+153/202 [unnamed-chunk-41]                           
+154/202                                              
+155/202 [unnamed-chunk-42]                           
+156/202                                              
+157/202 [unnamed-chunk-43]                           
+158/202                                              
+159/202 [unnamed-chunk-44]                           
+160/202                                              
+161/202 [unnamed-chunk-45]                           
+162/202                                              
+163/202 [unnamed-chunk-46]                           
+164/202                                              
+165/202 [unnamed-chunk-47]                           
+166/202                                              
+167/202 [unnamed-chunk-48]                           
+168/202                                              
+169/202 [unnamed-chunk-49]                           
+170/202                                              
+171/202 [p30]                                        
+172/202                                              
+173/202 [p31]                                        
+174/202                                              
+175/202 [p32]                                        
+176/202                                              
+177/202 [saturation]                                 
+178/202                                              
+179/202 [unnamed-chunk-50]                           
+180/202                                              
+181/202 [exists("p28.RTS")]                          
+182/202                                              
+183/202 [unnamed-chunk-51]                           
+184/202                                              
+185/202 [unnamed-chunk-52]                           
+186/202                                              
+187/202 [unnamed-chunk-53]                           
+188/202                                              
+189/202 [unnamed-chunk-54]                           
+190/202                                              
+191/202 [unnamed-chunk-55]                           
+192/202                                              
+193/202 [unnamed-chunk-56]                           
+194/202                                              
+195/202 [unnamed-chunk-57]                           
+196/202                                              
+197/202 [unnamed-chunk-58]                           
+198/202                                              
+199/202 [unnamed-chunk-59]                           
+200/202                                              
+201/202 [unnamed-chunk-60]                           
+202/202                                              
+output file: /gpfs/fs0/scratch/s/shreejoy/nxu/SFARI/SQANTI3_report.knit.md
+
+/home/s/shreejoy/nxu/miniforge3/envs/SQANTI3.env/bin/pandoc +RTS -K512m -RTS /gpfs/fs0/scratch/s/shreejoy/nxu/SFARI/SQANTI3_report.knit.md --to html4 --from markdown+autolink_bare_uris+tex_math_single_backslash --output /gpfs/fs0/scratch/s/shreejoy/nxu/SFARI/merged_collapsed.filtered_SQANTI3_report.html --lua-filter /gpfs/fs1/home/s/shreejoy/nxu/miniforge3/envs/SQANTI3.env/lib/R/library/rmarkdown/rmarkdown/lua/pagebreak.lua --lua-filter /gpfs/fs1/home/s/shreejoy/nxu/miniforge3/envs/SQANTI3.env/lib/R/library/rmarkdown/rmarkdown/lua/latex-div.lua --lua-filter /gpfs/fs1/home/s/shreejoy/nxu/miniforge3/envs/SQANTI3.env/lib/R/library/rmarkdown/rmarkdown/lua/table-classes.lua --embed-resources --standalone --variable bs3=TRUE --section-divs --table-of-contents --toc-depth 3 --variable toc_float=1 --variable toc_selectors=h1,h2,h3 --variable toc_collapsed=1 --variable toc_smooth_scroll=1 --variable toc_print=1 --template /gpfs/fs1/home/s/shreejoy/nxu/miniforge3/envs/SQANTI3.env/lib/R/library/rmarkdown/rmd/h/default.html --no-highlight --variable highlightjs=1 --variable theme=bootstrap --css style.css --mathjax --variable 'mathjax-url=https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML' --include-in-header /tmp/Rtmp0yCGWm/rmarkdown-str3aae528137d36.html 
+[WARNING] Could not fetch resource https://raw.githubusercontent.com/ConesaLab/SQANTI3/master/utilities/report_qc/howToUse.png: HttpExceptionRequest Request {
+    host                 = "raw.githubusercontent.com"
+    port                 = 443
+    secure               = True
+    requestHeaders       = []
+    path                 = "/ConesaLab/SQANTI3/master/utilities/report_qc/howToUse.png"
+    queryString          = ""
+    method               = "GET"
+    proxy                = Nothing
+    rawBody              = False
+    redirectCount        = 10
+    responseTimeout      = ResponseTimeoutDefault
+    requestVersion       = HTTP/1.1
+    proxySecureMode      = ProxySecureWithConnect
+  }
+   ConnectionTimeout
+[WARNING] Could not fetch resource http://kit.fontawesome.com/46057cf47a.js: HttpExceptionRequest Request {
+    host                 = "kit.fontawesome.com"
+    port                 = 80
+    secure               = False
+    requestHeaders       = []
+    path                 = "/46057cf47a.js"
+    queryString          = ""
+    method               = "GET"
+    proxy                = Nothing
+    rawBody              = False
+    redirectCount        = 10
+    responseTimeout      = ResponseTimeoutDefault
+    requestVersion       = HTTP/1.1
+    proxySecureMode      = ProxySecureWithConnect
+  }
+   ConnectionTimeout
+
+Output created: merged_collapsed.filtered_SQANTI3_report.html
+Removing temporary files....
+SQANTI3 complete in 26822.220135388998 sec.
+Write arguments to /gpfs/fs0/scratch/s/shreejoy/nxu/SFARI/merged_collapsed.filtered.params.txt...
+**** Running SQANTI3...
+**** Parsing provided files....
+Reading genome fasta /project/s/shreejoy/Genomic_references/GENCODE/GRCh38.primary_assembly.genome.fa....
+**** Predicting ORF sequences...
+**** Parsing Reference Transcriptome....
+/gpfs/fs0/scratch/s/shreejoy/nxu/SFARI/refAnnotation_merged_collapsed.filtered.genePred already exists. Using it.
+Splice Junction Coverage files not provided.
+**** TSS ratio will not be calculated since SR information was not provided
+**** Performing Classification of Isoforms....
+Number of classified isoforms: 4889981
+
+scontrol show job 13458300
+JobId=13458300 JobName=sqanti3_qc
+   UserId=nxu(3122125) GroupId=shreejoy(6036412) MCS_label=N/A
+   Priority=2368859 Nice=0 Account=rrg-shreejoy QOS=normal
+   JobState=COMPLETING Reason=None Dependency=(null)
+   Requeue=0 Restarts=0 BatchFlag=1 Reboot=0 ExitCode=0:0
+   RunTime=07:27:52 TimeLimit=1-00:00:00 TimeMin=N/A
+   SubmitTime=2024-08-22T17:35:34 EligibleTime=2024-08-22T17:35:34
+   AccrueTime=2024-08-22T17:35:34
+   StartTime=2024-08-22T17:35:34 EndTime=2024-08-23T01:03:26 Deadline=N/A
+   SuspendTime=None SecsPreSuspend=0 LastSchedEval=2024-08-22T17:35:34 Scheduler=Main
+   Partition=compute AllocNode:Sid=nia-login06:116168
+   ReqNodeList=(null) ExcNodeList=(null)
+   NodeList=nia0054
+   BatchHost=nia0054
+   NumNodes=1 NumCPUs=80 NumTasks=1 CPUs/Task=1 ReqB:S:C:T=0:0:*:*
+   ReqTRES=cpu=1,mem=175000M,node=1
+   AllocTRES=cpu=80,mem=175000M,node=1,billing=40
+   Socks/Node=* NtasksPerN:B:S:C=0:0:*:* CoreSpec=*
+   MinCPUsNode=1 MinMemoryNode=175000M MinTmpDiskNode=0
+   Features=[skylake|cascade] DelayBoot=00:00:00
+   OverSubscribe=NO Contiguous=0 Licenses=(null) Network=(null)
+   Command=/gpfs/fs0/scratch/s/shreejoy/nxu/SFARI/submit_sqanti3_qc.sh
+   WorkDir=/gpfs/fs0/scratch/s/shreejoy/nxu/SFARI
+   Comment=/opt/slurm/bin/sbatch --export=NONE submit_sqanti3_qc.sh 
+   StdErr=/gpfs/fs0/scratch/s/shreejoy/nxu/SFARI/sqanti3_qc.out
+   StdIn=/dev/null
+   StdOut=/gpfs/fs0/scratch/s/shreejoy/nxu/SFARI/sqanti3_qc.out
+   Power=
+   
+
+sacct -j 13458300
+JobID           JobName    Account    Elapsed  MaxVMSize     MaxRSS  SystemCPU    UserCPU ExitCode 
+------------ ---------- ---------- ---------- ---------- ---------- ---------- ---------- -------- 
+13458300     sqanti3_qc rrg-shree+   07:27:52                        09:23.506   07:21:35      0:0 
+13458300.ba+      batch rrg-shree+   07:27:52 115443743+ 100721824K  09:23.506   07:21:35      0:0 
+13458300.ex+     extern rrg-shree+   07:27:52    148744K      1080K   00:00:00   00:00:00      0:0 

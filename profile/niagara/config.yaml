@@ -1,0 +1,6 @@
+executor: slurm
+jobs: 100
+use-conda: true
+set-resources:
+  cluster2:
+    runtime: 1440

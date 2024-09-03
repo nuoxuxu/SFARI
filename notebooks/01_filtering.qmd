@@ -1,0 +1,110 @@
+# Import packages
+
+```{python}
+#| label: import-python
+import polars as pl
+import polars.selectors as cs
+from src.single_cell import SingleCell
+import anndata as ad
+import numpy as np
+from src.ryp import r, to_r, to_py
+```
+
+```{r}
+#| label: import-r
+library(IsoformSwitchAnalyzeR)
+library(tidyverse)
+library(ggpubr)
+library(pheatmap)
+library(RColorBrewer)
+library(stringr)
+library(scales)
+library(dplyr)
+colorVector <- c(
+  "full-splice_match" = "#009E73",
+  "incomplete-splice_match"   = "#0072B2",
+  "novel_in_catalog"   = "#D55E00",
+  "novel_not_in_catalog"   = "#E69F00",
+  "Other" = "#000000"
+)
+```
+
+# Import data
+
+```{python}
+lr_bulk = SingleCell("proc/pbid.h5ad")
+classification = pl.read_csv("proc/merged_collapsed_classification.filtered_lite_classification.txt", separator="\t", null_values="NA")
+```
+
+# Filtering
+
+Filter pacbio id count matrix to keep only transcripts in `classification`
+The criteria include:
+   - no intra-priming
+   - no RT-switch
+   - minimal sample coverage 3
+
+```{python}
+lr_bulk = lr_bulk.filter_var( pl.col("pbid").is_in(classification["isoform"]))
+```
+
+Filter pacbio id count matrix based on number of unique samples, this is the final pacbio id count matrix
+
+```{python}
+lr_bulk = lr_bulk[:, np.where(np.sum(lr_bulk.X > 5, axis = 0) > 2)[0]]
+```
+
+# How many full-splice_match transcripts are there?
+
+```{python}
+n_FSM = lr_bulk.filter_var(pl.col("structural_category2") == "full-splice_match").shape[1]
+print("There are {} full-splice_match transcripts.".format(n_FSM))
+```
+
+
+# Get GENCODE gene count matrix
+Excluding transcripts in the "Other" category
+
+```{python}
+gene_count_matrix = lr_bulk\
+    .filter_var(
+        pl.col("structural_category2") != "Other")\
+    .aggregate_var("associated_gene", "/project/s/shreejoy/Genomic_references/Human_hg38_Gencode_v39/gencode.v39.annotation.gtf")
+
+gene_count_matrix.var\
+    .group_by(
+        pl.col("gene_type")
+    ).count().with_columns(
+        cs.numeric() / cs.numeric().sum()).to_pandas()
+```
+
+# Visualization
+
+```{python}
+df = lr_bulk\
+    .with_columns_var(
+        pl.Series("n_unique_samples", np.sum(lr_bulk.X > 0, axis = 0)))\
+        .var["structural_category2", "n_unique_samples"]
+to_r(df, "df")        
+```
+
+```{r}
+df %>%
+    ggplot(aes(x = n_unique_samples, fill = structural_category2)) +
+        stat_count(alpha=.75) +
+        scale_fill_manual(values = colorVector)
+```
+
+```{r}
+df %>%
+    ggplot(aes(x = n_unique_samples, fill = structural_category2)) +
+        stat_count(alpha=.75, position=position_fill()) +
+        scale_fill_manual(values = colorVector)
+```
+
+```{r}
+df %>%
+    ggplot(aes(x = n_unique_samples)) +
+        stat_count(alpha=.75) +
+        scale_y_continuous(trans='log10')
+```

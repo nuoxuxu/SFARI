@@ -1,0 +1,207 @@
+# Import packages
+
+```{python}
+#| label: import-python
+import polars as pl
+import polars.selectors as cs
+from src.ryp import r, to_r
+```
+
+```{r}
+#| label: import-r
+library(ggpubr)
+library(pheatmap)
+library(RColorBrewer)
+library(stringr)
+library(scales)
+library(dplyr)
+```
+
+# Visualization
+
+```{r}
+#| label: color-vec
+colorVector <- c(
+  "full-splice_match" = "#009E73",
+  "incomplete-splice_match"   = "#0072B2",
+  "novel_in_catalog"   = "#D55E00",
+  "novel_not_in_catalog"   = "#E69F00",
+  "Other" = "#000000"
+)
+```
+
+## The number of detected genes
+
+```{python}
+#| label: gene-count
+pacbio = pl.read_parquet("proc/gene_count_matrix.parquet")\
+    .select(pl.selectors.numeric())\
+    .sum(axis=0)\
+    .transpose(include_header=True)\
+    .rename({"column": "sample", "column_0": "total_count"})\
+    .with_columns(pl.lit("SFARI").alias("Study"))
+to_r(pacbio, "pacbio")
+```
+
+Note that loading the `Rdata` is quite slow. #TODO: Only load cts
+
+```{r}
+#| label: gene-count-plot
+load("/Users/xunuo/projects/Dev_Brain_IsoSeq/data/working/bulkTxome.Rdata")
+library_size <- cts %>%
+  dplyr::select(matches("(_CP$|_VZ$)")) %>% 
+  summarise_all(sum) %>% 
+  t()
+colnames(library_size) <- ("total_count")
+as_tibble(library_size, rownames = "sample") %>% 
+    mutate(Study = "Patowary et al., 2024") %>% 
+    rbind(pacbio) %>% 
+    ggplot(aes(x = sample, y = total_count, fill = Study)) +
+    geom_bar(stat = "identity", position = "dodge") +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+    scale_y_continuous(labels = unit_format(unit = "M", scale = 1e-6)) +
+    xlab("Sample") +
+    ylab("Total read count")
+ggsave("figures/patowary_vs_SFARI_total_count.png")    
+```
+
+## Transcript-level analyses
+
+### Prepare dataframe
+
+```{python}
+categories_to_show = ["full-splice_match", "incomplete-splice_match", "novel_in_catalog", "novel_not_in_catalog"]
+classification = pl.read_parquet("proc/filtered_lite_classification.parquet").rename({"isoform": "pbid"})\
+    .with_columns(
+        pl.when(pl.col("structural_category").is_in(categories_to_show)).then(pl.col("structural_category")).otherwise(pl.lit("Other")).alias("structural_category2"))
+pbid_count_matrix = pl.read_parquet("proc/pbid_count_matrix.parquet").with_columns(
+    pl.col("pbid"),
+    pl.sum_horizontal(cs.numeric() !=0).alias("n_unique_samples"),
+    pl.sum_horizontal(cs.numeric()).alias("counts"))
+
+len_and_nexon = pl.read_csv(
+    "proc/merged_collapsed.sorted.gff", separator = "\t",
+    comment_prefix = "##", has_header=False, 
+    new_columns=["seqid", "source", "type", "start", "end", "score", "strand", "phase", "attributes"]).with_columns(
+        pl.col("attributes").str.extract(r'transcript_id "([^;]*)";').alias("pbid")
+    )\
+    .filter(pl.col("type") == "exon")\
+    .with_columns(
+        (pl.col("end") - pl.col("start")).alias("length")
+    ).group_by("pbid")\
+    .agg(
+        pl.sum("length"),
+        pl.len().alias("nexon")
+    )
+
+df = pbid_count_matrix\
+    .join(classification["pbid", "structural_category2"], on = ["pbid"], how = "left")\
+    .join(len_and_nexon, on = ["pbid"], how = "left")\
+    .select(["pbid", "structural_category2", "counts", "length", "nexon", "n_unique_samples"])
+
+to_r(df, "df")
+```
+
+### Transcripts Identified by Novelty
+
+```{python}
+summary_df = df\
+    .group_by("structural_category2")\
+    .agg(pl.count().alias("count"))\
+    .with_columns(
+        (pl.col("count") / pl.col("count").sum() * 100).alias("percentage")
+    )
+to_r(summary_df, "summary_df")    
+```
+
+```{r}
+summary_df$structural_category2 <- factor(summary_df$structural_category2, levels = c("full-splice_match", "incomplete-splice_match", "novel_in_catalog", "novel_not_in_catalog", "Other"))
+
+summary_df %>% 
+    ggplot(aes(x = structural_category2, y = percentage, fill = structural_category2)) +
+    geom_bar(stat = "identity") +
+    geom_text(aes(label = paste0(round(percentage, 1), "%")), vjust = 2, colour = "white", size = 5) +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 12)) +
+    labs(x = "Structural Category", y = "Percentage", title = "Transcripts Identified by Novelty") +
+    scale_fill_manual(values=colorVector)
+```
+
+### Novelty vs abundance
+
+```{r}
+df$structural_category2 <- factor(df$structural_category2, levels = c("full-splice_match", "incomplete-splice_match", "novel_in_catalog", "novel_not_in_catalog", "Other"))
+
+df %>% 
+    filter(counts > 10) %>%
+    ggplot(aes(x=counts, fill=structural_category2)) +
+    geom_histogram(position=position_fill(), alpha=.75) +
+    theme_bw() +
+    scale_x_log10() +
+    annotation_logticks(scaled = T, sides= "b") +
+    theme(panel.grid.minor = element_blank()) + 
+    labs(x="Min observed counts", y="Proportion of transcripts") + 
+    ggtitle("Transcript novelty vs Abundance") + 
+    theme(plot.title = element_text(hjust=.5)) + 
+    scale_fill_manual(values=colorVector)
+ggsave("figures/novelty_vs_abundance.png",width=5,height=3)
+```
+
+### Novelty vs number of unique samples
+
+```{r}
+df %>% 
+    ggplot(aes(x=n_unique_samples, fill=structural_category2)) +
+        geom_histogram(position=position_stack(), alpha=.75) +
+        theme_bw() +
+        scale_x_continuous(breaks=seq(1, 15, 1)) +
+        scale_fill_manual(values=colorVector)
+```
+
+```{r}
+df %>% 
+    mutate(n_unique_samples = ifelse(n_unique_samples == 1, "private", "non-private")) %>%
+        ggplot(aes(x=structural_category2, fill=n_unique_samples)) +
+            geom_histogram(position=position_stack(), alpha=.75, stat="count") +
+            theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+            theme_bw()
+```
+
+```{r}
+df %>%
+    ggplot(aes(x=counts, fill=structural_category2)) +
+        geom_histogram() +
+        scale_x_log10() +
+        theme_bw()
+```
+
+```{python}
+df.filter(pl.col("counts") > 3).shape[0] / df.shape[0]
+```
+
+### Transcript Novelty vs Length
+
+```{r}
+df %>%
+  ggplot(aes(x=length, fill=structural_category2)) +
+    geom_histogram(alpha=.75, bins = 100) +
+    theme_bw() +
+    scale_fill_manual(values=colorVector) +
+    scale_x_continuous(trans = log10_trans(),breaks = trans_breaks("log10", function(x) 10^x), labels = trans_format("log10", math_format(10^.x)),limits = c(300,10^4)) +
+    annotation_logticks() +
+    labs(x="Transcript Length (bp)") + ggtitle("Transcript length distribution")
+ggsave("figures/novelty_vs_length.png", width=8, height=6, dpi = 300)
+```
+
+### Exon number
+
+```{r}
+df %>%
+    ggplot(aes(x=nexon, fill=structural_category2)) + geom_histogram(alpha=.75, binwidth = 1) +
+    theme_bw() + 
+    xlim(1,40) + 
+    scale_fill_manual(values=colorVector) + 
+    labs(x="# Exons", y="# Transcripts") + 
+    ggtitle('Exons per  Transcript') + 
+    theme(legend.position = "none")
+```

@@ -1,0 +1,18 @@
+{
+    "include": [
+    ],
+    "exclude": [
+      "**/__pycache__",
+      "data/**",
+      "proc/**",
+      "env/**",
+    ],
+    "stubPath": "typings",
+    "ignore": [
+    ],
+    "extraPaths": [
+      "patch_seq_spl",
+      "utility",
+      "scquint"
+    ]
+  }
