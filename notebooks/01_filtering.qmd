@@ -32,7 +32,8 @@ colorVector <- c(
 # Import data
 
 ```{python}
-lr_bulk = SingleCell("proc/pbid.h5ad")
+#| label: import-single-cell-object
+lr_bulk = SingleCell("results/long_read/pbid.h5ad")
 classification = pl.read_csv("proc/merged_collapsed_classification.filtered_lite_classification.txt", separator="\t", null_values="NA")
 ```
 
@@ -52,6 +53,12 @@ Filter pacbio id count matrix based on number of unique samples, this is the fin
 
 ```{python}
 lr_bulk = lr_bulk[:, np.where(np.sum(lr_bulk.X > 5, axis = 0) > 2)[0]]
+```
+
+Save the filtered pacbio id count matrix
+
+```{python}
+lr_bulk.save("results/long_read/pbid_filtered.h5ad")
 ```
 
 # How many full-splice_match transcripts are there?
@@ -92,7 +99,11 @@ to_r(df, "df")
 df %>%
     ggplot(aes(x = n_unique_samples, fill = structural_category2)) +
         stat_count(alpha=.75) +
-        scale_fill_manual(values = colorVector)
+        scale_fill_manual(values = colorVector) +
+        theme_minimal() +
+        scale_x_continuous(breaks = seq(1, 15, 1), minor_breaks = NULL) +
+        xlab("Number of unique samples the transcript is expressed in")
+ggsave("figures/n_unique_samples_final.png", width = 6, height = 4)    
 ```
 
 ```{r}

@@ -1,15 +1,14 @@
 # Import packages
 
-## Python
-
 ```{python}
+#| label: import-python
 import polars as pl
 from src.ryp import r, to_r
+from src.single_cell import SingleCell
 ```
 
-## R packages
-
 ```{r}
+#| label: import-r
 library(ggpubr)
 library(pheatmap)
 library(RColorBrewer)
@@ -17,6 +16,17 @@ library(stringr)
 library(scales)
 library(dplyr)
 ```
+
+# Import data
+
+```{python}
+#| label: import-single-cell-object
+lr_bulk = SingleCell("results/long_read/pbid.h5ad")
+classification = pl.read_csv("proc/merged_collapsed_classification.filtered_lite_classification.txt", separator="\t", null_values="NA")
+lr_bulk = lr_bulk.filter_var( pl.col("pbid").is_in(classification["isoform"]))
+```
+
+
 
 # Visualization
 
