@@ -1857,16 +1857,25 @@ class SingleCell:
             f'{plural("cell", len(self._obs))} (obs), {len(self._var):,} '
             f'{plural("gene", len(self._var))} (var), and {self._X.nnz:,} '
             f'non-zero {"entries" if self._X.nnz != 1 else "entry"} (X)')
-        terminal_width = os.get_terminal_size().columns
-        for attr in 'obs', 'var', 'obsm', 'varm', 'uns':
-            entries = getattr(self, attr).columns \
-                if attr == 'obs' or attr == 'var' else getattr(self, attr)
-            if len(entries) > 0:
-                descr += '\n' + fill(
-                    f'    {attr}: {", ".join(entries)}',
-                    width=terminal_width,
-                    subsequent_indent=' ' * (len(attr) + 6))
-        return descr
+
+        try:
+            terminal_width = os.get_terminal_size().columns
+            for attr in 'obs', 'var', 'obsm', 'varm', 'uns':
+                entries = getattr(self, attr).columns \
+                    if attr == 'obs' or attr == 'var' else getattr(self, attr)
+                if len(entries) > 0:
+                    descr += '\n' + fill(
+                        f'    {attr}: {", ".join(entries)}',
+                        width=terminal_width,
+                        subsequent_indent=' ' * (len(attr) + 6))
+            return descr
+        except:
+            for attr in 'obs', 'var', 'obsm', 'varm', 'uns':
+                entries = getattr(self, attr).columns \
+                    if attr == 'obs' or attr == 'var' else getattr(self, attr)
+                if len(entries) > 0:
+                    descr += '\n' + f'    {attr}: {", ".join(entries)}'
+            return descr
     
     @property
     def shape(self) -> tuple[int, int]:
