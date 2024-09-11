@@ -27,7 +27,6 @@ lr_bulk = lr_bulk.filter_var( pl.col("pbid").is_in(classification["isoform"]))
 ```
 
 
-
 # Visualization
 
 ## MDS plot

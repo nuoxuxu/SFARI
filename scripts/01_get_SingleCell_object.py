@@ -67,5 +67,4 @@ lr_bulk.var = lr_bulk.var\
     )
 
 # Save SingleCell object
-
-lr_bulk.save("proc/pbid.h5ad")
+lr_bulk.save("results/long_read/pbid.h5ad")

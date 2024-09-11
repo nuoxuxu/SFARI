@@ -4,7 +4,6 @@ figures/
 data/
 envs/
 garbage/
-**/__pycache__/
 results/*
 
 # snakemake
@@ -15,3 +14,7 @@ results/*
 
 # .vscode
 .vscode/
+
+# python
+*.egg-info/
+**/__pycache__/
