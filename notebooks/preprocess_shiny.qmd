@@ -4,7 +4,22 @@
 #| label: import-python
 import polars as pl
 from src.single_cell import SingleCell
+import numpy as np
 ```
+
+```{python}
+#| label: read-gencode_V39
+gencode_V39 = pl.read_csv("/Users/xunuo/Genomic_references/GENCODE/gencode.v39.annotation.gtf", separator="\t", comment_prefix="#", new_columns=["seqname","source","feature","start","end","score","strand","frame","attributes"])\
+    .with_columns(
+        pl.col("attributes").str.extract(r'gene_name "([^;]*)";').alias("gene_name"),
+        pl.col("attributes").str.extract(r'transcript_id "([^;]*)";').alias("transcript_id"),
+        pl.col("attributes").str.extract(r'gene_id "([^;]*)";').alias("gene_id"),
+        )\
+    .drop("attributes")\
+    .filter(pl.col("feature")=="exon")
+```
+
+# Preprocess TALON GTF
 
 Since `talon.gtf` is in hg19, we need to lift it over to hg38
 
@@ -15,69 +30,118 @@ curl -L https://hgdownload.cse.ucsc.edu/goldenpath/hg19/liftOver/hg19ToHg38.over
 CrossMap gff proc/hg19ToHg38.over.chain /Users/xunuo/projects/Dev_Brain_IsoSeq/data/cp_vz_0.75_min_7_recovery_talon.gtf proc/cp_vz_0.75_min_7_recovery_talon_hg38.gtf
 ```
 
-Filter out transcripts in merged_collapsed.sorted.gff that did not pass the filtering threshold
-
-```{python}
-#| label: filter-SFARI-gff
-path_to_gtf = "results/long_read/merged_collapsed.sorted.gff"
-pacbio_gtf = pl.read_csv(
-    path_to_gtf, 
-    separator = "\t", comment_prefix = "##",
-    new_columns=[
-        "chromosome",
-        "source",
-        "feature",
-        "start",
-        "end",
-        "score",
-        "strand",
-        "frame",
-        "attribute"]).with_columns(
-            transcript_id = pl.col("attribute").str.extract(r'transcript_id "([^;]*)";')
-        )
-
-lr_bulk = SingleCell("results/long_read/pbid_filtered.h5ad")
-
-pacbio_gtf\
-    .filter(pl.col("transcript_id").is_in(lr_bulk.var["pbid"]))\
-    .drop("transcript_id")\
-    .write_csv("proc/filtered_pacbio.gff", include_header=False, separator="\t", quote_style="never")
-```
-
-Run gffcompare to get a mapping from TALON transcript IDs to pbid in the SFARI dataset
+Since `talon.gtf` is mapped to Gencode v33, we need to get a mapping from TALON transcript IDs to ENST IDs in Gencode v39
 
 ```{bash}
 #| label: gffcompare
-gffcompare -r proc/cp_vz_0.75_min_7_recovery_talon_hg38.gtf proc/filtered_pacbio.gff -o proc/gffcmp
+
+gffcompare -r /Users/xunuo/Genomic_references/GENCODE/gencode.v39.annotation.gtf proc/cp_vz_0.75_min_7_recovery_talon_hg38.gtf -o proc/TALON_GENCODE_V39
 ```
 
-# Start here 
-
 ```{python}
-#| label: pbid_to_ref_id
-refmap = pl.read_csv("proc/gffcmp.filtered_pacbio.gff.refmap", separator="\t")\
-    .filter(pl.col("class_code")=="=")
+#| label: TALON_ID_to_GENCODE_V39
 
-refmap = refmap.with_columns(
-    refmap["qry_id_list"].str.split(",").map_elements(lambda s: [e.split("|")[1] for e in s]).alias("qry_id_list"))\
+TALON_ID_to_GENCODE_V39 = pl.read_csv("proc/TALON_GENCODE_V39.cp_vz_0.75_min_7_recovery_talon_hg38.gtf.refmap", separator="\t")\
+    .filter(pl.col("class_code")=="=")\
+    .with_columns(
+        pl.col("qry_id_list").str.split(",").map_elements(lambda s: [e.split("|")[1] for e in s]).alias("qry_id_list"))\
     .explode("qry_id_list")\
-    .with_columns(
-        pl.col("qry_id_list").alias("pbid"),
-        pl.col("ref_id").str.split("_").map_elements(lambda x: x[0], return_dtype=pl.String))\
-    .with_columns(
-        pl.col("ref_id").str.split(".").map_elements(lambda x: x[0], return_dtype=pl.String)
-    )\
-    .drop("qry_id_list")
+    .select(["qry_id_list", "ref_id"])\
+    .rename({"qry_id_list": "transcript_id"})
 ```
 
-# Get SFARI GFF
+Since the mappping between transcript_id and ref_id is not injective, we need to identify transcripts that are not uniquely mapped to a ref_id and remove them. It turns out that most transcript_id that are not uniquely mapped to a ref_id at least maps to one ref_id that matches transcript_id exactly (the version numbers could be different), so we decided to discard the other match and treat these cases as one-to-one. The transcript_id that are mapped to more than one ref_id where none of the matching ref_id matches the transcript_id are removed.
 
 ```{python}
-#| label: import-SFARI-gff
+#| label: n_transcripts_removed
+
+n_transcripts_removed = TALON_ID_to_GENCODE_V39\
+    .filter(pl.col("transcript_id").is_in(TALON_ID_to_GENCODE_V39.group_by("transcript_id").len().filter(pl.col("len")>1)["transcript_id"]))\
+    .with_columns(
+        pl.col("transcript_id").map_elements(lambda s: s.split("_")[0].split(".")[0], return_dtype=pl.String),
+        pl.col("ref_id").map_elements(lambda s: s.split(".")[0], return_dtype=pl.String)
+    )\
+    .with_columns(
+        is_same = (pl.col("transcript_id") == pl.col("ref_id"))
+    )\
+    .with_columns(
+        pl.col("is_same").cast(pl.Int16)
+    )\
+    .group_by("transcript_id").agg(
+        pl.col("is_same").sum().alias("is_same")
+    ).filter(pl.col("is_same")==0).shape[0]
+
+print(f"{n_transcripts_removed} transcripts will be removed because they are not uniquely mapped to a ref_id and none of the matching ref_id matches the transcript_id")    
+```
+
+Make sure TALON_ID_to_GENCODE_V39 is injective
+
+```{python}
+#| label: keep-only-one-to-one-mappings-TALON_ID_to_GENCODE_V39
+
+one_to_one = TALON_ID_to_GENCODE_V39\
+    .filter(pl.col("transcript_id").is_in(TALON_ID_to_GENCODE_V39.group_by("transcript_id").len().filter(pl.col("len")==1)["transcript_id"]))
+
+one_to_many = TALON_ID_to_GENCODE_V39\
+    .filter(pl.col("transcript_id").is_in(TALON_ID_to_GENCODE_V39.group_by("transcript_id").len().filter(pl.col("len")>1)["transcript_id"]))\
+    .with_columns(
+        is_same = (pl.col("transcript_id").map_elements(lambda s: s.split("_")[0].split(".")[0], return_dtype=pl.String) ==  pl.col("ref_id").map_elements(lambda s: s.split(".")[0], return_dtype=pl.String))
+    )\
+    .with_columns(
+        pl.col("is_same").cast(pl.Int16)
+    )\
+    .filter(
+        pl.col("is_same") == 1
+    ).drop("is_same")
+
+TALON_ID_to_GENCODE_V39 = pl.concat([one_to_one, one_to_many], how="vertical")
+```
+
+```{python}
+#| label: import-TALON_gtf
+
+TALON_gtf = pl.read_csv(
+    "proc/cp_vz_0.75_min_7_recovery_talon_hg38.gtf",
+    separator="\t", comment_prefix="#",
+    new_columns=["seqname","source","feature","start","end","score","strand","frame","attributes"])\
+    .with_columns(
+        pl.col("attributes").str.extract(r'gene_name "([^;]*)";').alias("gene_name"),
+        pl.col("attributes").str.extract(r'transcript_id "([^;]*)";').alias("transcript_id"),
+        pl.col("attributes").str.extract(r'gene_id "([^;]*)";').alias("gene_id"),
+        )\
+    .filter(pl.col("feature")=="exon")\
+    .with_columns(
+        pl.col("gene_name").cast(pl.String)
+    )\
+    .filter(
+        pl.col("gene_name").str.starts_with("TALON").not_()
+    ).drop("attributes")
+```
+
+```{python}
+#| label: write-TALON_not_in_GENCODE
+
+TALON_gtf\
+    .filter(
+        (pl.col("transcript_id").str.starts_with("TALON")) & (pl.col("transcript_id").is_in(TALON_ID_to_GENCODE_V39["transcript_id"]).not_())
+    )\
+    .with_columns(
+        attributes = pl.lit('gene_name "') + pl.col("gene_name") + pl.lit('"; transcript_id "') + pl.col("transcript_id") + pl.lit('"; gene_id "') + pl.col("gene_id") + pl.lit('";')
+    )\
+    .drop("gene_name", "transcript_id", "gene_id")\
+    .write_csv("proc/TALON_not_in_GENCODE.gtf", separator="\t", quote_style="never", include_header=False)    
+```
+
+# Preprocess SFARI GTF
+
+```{python}
+#| label: import-SFARI_gff
+
 SFARI_gff = pl.read_csv(
     "/Users/xunuo/projects/SFARI/results/long_read/merged_collapsed.sorted.gff",
     separator="\t",comment_prefix="##",
-    new_columns=["seqname","source","feature","start","end","score","strand","frame","attributes"])
+    new_columns=["seqname","source","feature","start","end","score","strand","frame","attributes"])\
+    .filter(pl.col("feature")=="exon")
 
 lr_bulk = SingleCell("results/long_read/pbid_filtered.h5ad")
 
@@ -86,121 +150,166 @@ SFARI_gff = SFARI_gff\
         pl.col("attributes").str.extract(r'transcript_id "([^;]*)";').alias("pbid")
         )\
     .drop("attributes")\
-    .join(lr_bulk.var["pbid", "associated_transcript", "associated_gene", "structural_category"], on="pbid", how="inner")\
-    .select([
-        "pbid",
+    .join(lr_bulk.var["pbid", "associated_transcript", "associated_gene", "structural_category"], on="pbid", how="left")\
+    .filter(pl.col("associated_gene").cast(pl.String).str.starts_with("novelGene").not_())\
+    .with_columns(
+        pl.col("associated_transcript").cast(pl.String)
+        )
+```
+
+```{python}
+#| label: write-SFARI_not_in_GENCODE
+
+SFARI_gff\
+    .filter(pl.col("associated_transcript") == "novel")\
+    .with_columns(
+        attributes = pl.lit('gene_id "') + pl.col("associated_gene") + pl.lit('"; transcript_id "') + pl.col("pbid") + pl.lit('";')
+    )\
+    .drop("pbid", "associated_gene", "associated_transcript", "structural_category")\
+    .write_csv("proc/SFARI_not_in_GENCODE.gtf", separator="\t", quote_style="never", include_header=False)
+```
+
+Get a mapping from SFARI pbid to TALON transcript ID
+
+```{bash}
+#| label: gffcompare
+
+gffcompare -r proc/TALON_not_in_GENCODE.gtf proc/SFARI_not_in_GENCODE.gtf -o proc/SFARI_TALON
+```
+
+```{python}
+#| label: get-PBID_to_TALON_ID
+
+PBID_to_TALON_ID = pl.read_csv("proc/SFARI_TALON.SFARI_not_in_GENCODE.gtf.refmap", separator="\t")\
+    .filter(pl.col("class_code")=="=")\
+    .with_columns(
+        pl.col("qry_id_list").str.split(",").map_elements(lambda s: [e.split("|")[1] for e in s]).alias("qry_id_list"))\
+    .explode("qry_id_list")\
+    .select(["qry_id_list", "ref_id"])\
+    .rename({"qry_id_list": "pbid"})
+```
+
+```{python}
+#| label: get-combined_gtf
+
+GENCODE_ID_union = np.union1d(
+    TALON_ID_to_GENCODE_V39["ref_id"].unique().to_numpy().reshape(-1),
+    SFARI_gff.filter(pl.col("associated_transcript").is_in(["novel"]).not_()).select(["associated_transcript"]).unique().to_numpy().reshape(-1)
+    )
+
+GENCODE_part = gencode_V39\
+    .filter(pl.col("transcript_id").is_in(GENCODE_ID_union))\
+    .select(
+        [
+            "seqname",
+            "start",
+            "end",
+            "strand",
+            "gene_name",
+            "transcript_id"
+        ]
+    )
+
+# TALON IDs that are not in GENCODE
+
+TALON_part = TALON_gtf.filter((pl.col("transcript_id").str.starts_with("TALON")) & (pl.col("transcript_id").is_in(TALON_ID_to_GENCODE_V39["transcript_id"]).not_()))\
+    .select(
+        [
+            "seqname",
+            "start",
+            "end",
+            "strand",
+            "gene_name",
+            "transcript_id"
+        ]
+    )
+
+# novel PBIDs that are not in TALON
+
+SFARI_part = SFARI_gff\
+    .filter(pl.col("associated_transcript").is_in(["novel"]))\
+    .filter(pl.col("pbid").is_in(PBID_to_TALON_ID["pbid"]).not_())\
+    .select(
+    [
         "seqname",
-        "source",
-        "feature",
         "start",
         "end",
         "strand",
         "associated_gene",
-        "associated_transcript", 
-        "structural_category"
+        "pbid"
     ])\
-    .filter(pl.col("associated_gene").cast(pl.String).str.starts_with("novelGene").not_())\
-    .with_columns(
-        pl.col("associated_transcript").cast(pl.String).str.split(".").map_elements(lambda x: x[0], return_dtype=pl.String)
-        )
-```
+    .rename({"associated_gene": "gene_name", "pbid": "transcript_id"})\
+    .cast({"gene_name": pl.String})
 
-If a transcript is a full-splice match, use the associated transcript name as the transcript name
-and also join the refmap to get the ref_id
-
-```{python}
-SFARI_gff = SFARI_gff\
-    .with_columns(
-        pl.when(pl.col("structural_category").is_in(["full-splice_match"])).then(pl.col("associated_transcript")).otherwise(pl.col("pbid")).alias("pbid").alias("transcript_name")
-    )\
-    .join(refmap["pbid", "ref_id"], on="pbid", how="left")
-```
-
-Since TALON gtf is mapped to Gencode v33, SFARI gtf is mapped to Gencode v39, there are transcripts that are present in SFARI gtf but labeled as novel (TALONT000) in the TALON gtf. We need to get a mapping from these TALON transcripts to the ENST ID in Gencode v39
-
-```{python}
-TALON_to_ENST = SFARI_gff\
-    .filter(
-        pl.col("structural_category")=="full-splice_match",
-        pl.col("feature")=="transcript",
-        pl.col("ref_id").str.starts_with("TALON"))\
-    .select(["transcript_name", "ref_id"])\
-    .to_pandas().set_index("ref_id")["transcript_name"].to_dict()
-```
-
-
-```{python}
-inspect = SFARI_gff\
-    .filter(
-        pl.col("structural_category")=="full-splice_match",
-        pl.col("feature")=="transcript",
-        pl.col("ref_id").str.starts_with("TALON").not_())\
-    .with_columns(
-        pl.col("transcript_name") == pl.col("ref_id")
-    )\
-    .filter(pl.col("transcript_name")==False)
+combined_gtf = pl.concat([GENCODE_part, TALON_part, SFARI_part], how="vertical")    
 ```
 
 ```{python}
-SFARI_gff = SFARI_gff\
-    .with_columns(
-        pl.when(pl.col("structural_category").is_in(["full-splice_match"]))\
-            .then(pl.col("transcript_name"))\
-            .otherwise(pl.col("pbid"))\
-            .alias("transcript_name"),
-        pl.col("associated_gene").cast(pl.String)
-    )\
-    .rename({"associated_gene": "gene_name"})\
-    .drop(["associated_transcript", "pbid", "structural_category"])\
-    .filter(pl.col("feature")=="exon")
-```
+#| label: add-dataset-label
 
-```{python}
-TALON_gtf = pl.read_csv(
-    "proc/cp_vz_0.75_min_7_recovery_talon_hg38.gtf",
-    separator="\t", comment_prefix="#",
-    new_columns=["seqname","source","feature","start","end","score","strand","frame","attributes"])\
-    .with_columns(
-        pl.col("attributes").str.extract(r'gene_name "([^;]*)";').alias("gene_name"),
-        pl.col("attributes").str.extract(r'transcript_name "([^;]*)";').alias("transcript_name"),
-        pl.col("attributes").str.extract(r'exon_status "([^;]*)";').alias("exon_status"),
-        )\
-    .with_columns(
-        pl.col("gene_name").cast(pl.String)
-    )\
-    .select(["seqname", "source", "feature", "start", "end", "strand", "gene_name", "transcript_name", "exon_status"])\
-    .filter(pl.col("feature")=="exon")
-```
+GENCODE_unique_to_TALON = np.setdiff1d(
+    TALON_ID_to_GENCODE_V39["ref_id"].unique().to_numpy().reshape(-1),
+    SFARI_gff.filter(pl.col("associated_transcript").is_in(["novel"]).not_()).select(["associated_transcript"]).unique().to_numpy().reshape(-1)
+)
 
-```{python}
-combined_gtf = pl.concat(
-    [TALON_gtf.drop("exon_status").with_columns(pl.lit("TALON").alias("dataset")), SFARI_gff.with_columns(pl.lit("SFARI").alias("dataset"))],
-    how="vertical")
-```
+GENCODE_unique_to_SFARI = np.setdiff1d(
+    SFARI_gff.filter(pl.col("associated_transcript").is_in(["novel"]).not_()).select(["associated_transcript"]).unique().to_numpy().reshape(-1),
+    TALON_ID_to_GENCODE_V39["ref_id"].unique().to_numpy().reshape(-1)
+)
 
-```{python}
-overlapped_transcripts = combined_gtf.group_by(["transcript_name", "dataset"]).count().group_by("transcript_name").count().filter(pl.col("count") > 1)["transcript_name"].to_numpy()
-```
+GENCODE_overlapped = np.intersect1d(
+    TALON_ID_to_GENCODE_V39["ref_id"].unique().to_numpy().reshape(-1),
+    SFARI_gff.filter(pl.col("associated_transcript").is_in(["novel"]).not_()).select(["associated_transcript"]).unique().to_numpy().reshape(-1)
+)
 
-```{python}
+TALON_transcripts = TALON_gtf\
+    .filter(pl.col("transcript_id").str.starts_with("TALON"))\
+    .filter(pl.col("transcript_id").is_in(PBID_to_TALON_ID["ref_id"]).not_())["transcript_id"].unique().to_numpy().reshape(-1)
+
+SFARI_transcripts = SFARI_gff\
+    .filter(pl.col("associated_transcript").is_in(["novel"]))\
+    .filter(pl.col("pbid").is_in(PBID_to_TALON_ID["pbid"]).not_())["pbid"].unique().to_numpy().reshape(-1)
+
+unique_to_TALON = np.union1d(GENCODE_unique_to_TALON, TALON_transcripts)
+
+unique_to_SFARI = np.union1d(GENCODE_unique_to_SFARI, SFARI_transcripts)
+
+overlapped = np.hstack([GENCODE_overlapped, PBID_to_TALON_ID["ref_id"].unique().to_numpy().reshape(-1)])
+
+dataset_label = pl.concat(
+    [
+        pl.DataFrame({
+            "transcript_id": unique_to_TALON,
+            "dataset": np.repeat("Patowary et al.", len(unique_to_TALON))
+        }),
+        pl.DataFrame({
+            "transcript_id": unique_to_SFARI,
+            "dataset": np.repeat("SFARI", len(unique_to_SFARI))
+        }),
+        pl.DataFrame({
+            "transcript_id": overlapped,
+            "dataset": np.repeat("Overlapped", len(overlapped))
+        })
+    ],
+    how="vertical"
+)
+
 combined_gtf = combined_gtf\
+    .join(dataset_label, on="transcript_id", how="left")
+```
+
+# Get Novel Exons
+
+```{python}
+#| label: get-exon_status
+combined_gtf = combined_gtf\
+    .join(gencode_V39.unique(["seqname", "start", "end", "strand"])[["seqname", "start", "end", "strand", "source"]], on=["seqname", "start", "end", "strand"], how="left")\
     .with_columns(
-        pl.when(pl.col("transcript_name").is_in(overlapped_transcripts)).then(pl.lit("overlapped")).otherwise(pl.col("dataset")).alias("overlap_status")
-    )\
-    .drop("dataset")\
-    .rename({"overlap_status": "dataset"})
+        pl.when(pl.col("source").is_null()).then(pl.lit("NOVEL")).otherwise(pl.lit("KNOWN")).alias("exon_status")
+    ).drop("source")
 ```
 
 ```{python}
-combined_gtf.write_csv("proc/shiny.csv")
-```
-
-
-```{python}
-#| label: transcript_id_to_name
-transcript_id_to_name = pl.read_csv("/Users/xunuo/Genomic_references/GENCODE/gencode.v33.annotation.gtf", separator="\t", comment_prefix="##", columns = 8, has_header=False)\
-    .with_columns(
-        pl.col("column_9").str.extract(r'transcript_id "([^;]*)";').alias("associated_transcript"),
-        pl.col("column_9").str.extract(r'transcript_name "([^;]*)";').alias("transcript_name"),
-    ).drop("column_9").drop_nulls().unique(subset=["associated_transcript", "transcript_name"])
+#| label: write_combined_gtf
+combined_gtf.write_csv("transcript_vis_app/shiny.csv")
 ```
