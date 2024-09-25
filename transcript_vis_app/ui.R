@@ -1,10 +1,10 @@
 library(bslib)
 
-ui <- page_fluid(
+ui <- page_fillable(
   selectizeInput( 
     "select_genes", 
     "Select genes from list below:", 
-    choices = NULL
+    choices = c("SCN2A")
   ),
   plotOutput("ggtranscript_plot"),
 )

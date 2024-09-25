@@ -18,3 +18,5 @@ results/*
 # python
 *.egg-info/
 **/__pycache__/
+
+transcript_vis_app/shiny.csv
