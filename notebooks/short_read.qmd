@@ -1,0 +1,113 @@
+# Preparation
+
+```{python}
+#| label: import-python
+import polars as pl
+from pathlib import Path
+from src.utils import read_gtf
+```
+
+```{bash}
+#| label: copy-short-read-SJ-tabs
+rsync -rav dev02:/external/rprshnas01/netdata_kcni/stlab/Nuo/SFARI/STAR_fastp_outputs_round2/STAR_results/SJ_out_tabs results/short_read/
+```
+
+# Start here
+
+```{python}
+#| label: read-short-read-SJ-tabs
+SJ_tab = pl.concat([pl.read_csv(file, separator="\t", new_columns=["chrom", "start", "end", "strand", "motif", "annotated", "unique_reads", "multi_reads", "max_overhang"], schema_overrides={"chrom": pl.String}) for file in Path("results/short_read/SJ_out_tabs").rglob("*.tab")], how="vertical")
+```
+
+```{python}
+#| label: get-unique-SJs-from-short-read
+SR_SJ = SJ_tab\
+    .unique(["chrom", "start", "end", "strand"])\
+    .select(["chrom", "start", "end", "strand"])\
+    .with_columns(
+        strand = pl.col("strand").map_elements(lambda s: "+" if s == 1 else "-", return_dtype=pl.String)
+    )\
+    .with_columns(
+        SR = pl.lit(True)
+    )
+```
+
+```{python}
+#| label: read-gencode_V39-gtf
+gencode_V39_gtf = pl.read_csv("/Users/xunuo/Genomic_references/GENCODE/gencode.v39.annotation.gtf", separator="\t", comment_prefix="#", new_columns=["seqname","source","feature","start","end","score","strand","frame","attributes"])\
+    .with_columns(
+        transcript_id=pl.col("attributes").str.extract(r'transcript_id "([^;]*)";').alias("transcript_id")
+    ).drop("attributes").filter(pl.col("feature") == "exon")
+```
+
+```{python}
+#| label: gencode_V39-gtf-to-SJ
+gencode_V39_gtf_SJ = gencode_V39_gtf\
+    .with_columns(
+        seqname=pl.col("seqname").map_elements(lambda s: s.removeprefix("chr"), return_dtype=pl.String)
+    )\
+    .group_by("transcript_id", maintain_order=True)\
+    .agg(
+        pl.col("strand").unique().map_elements(lambda l: l[0], return_dtype=pl.String),
+        pl.col("seqname").unique().map_elements(lambda l: l[0], return_dtype=pl.String),
+        pl.col("start").map_elements(lambda l: np.sort(np.array(l)-1)[1:].tolist(), return_dtype=pl.List(pl.Int64)).alias("end"),
+        pl.col("end").map_elements(lambda l: np.sort(np.array(l)+1)[:-1].tolist(), return_dtype=pl.List(pl.Int64)).alias("start")
+    )\
+    .explode("start", "end")\
+    .rename({"seqname": "chrom"})    
+```
+
+```{python}
+#| label: read-long-read-gtf
+combined_gtf = pl.read_csv("transcript_vis_app/shiny.csv")
+```
+
+```{python}
+#| label: long-read-gtf-to-SJ
+LR_SJ = combined_gtf\
+    .with_columns(
+        seqname=pl.col("seqname").map_elements(lambda s: s.removeprefix("chr"), return_dtype=pl.String)
+    )\
+    .group_by("transcript_id", maintain_order=True)\
+    .agg(
+        pl.col("strand").unique().map_elements(lambda l: l[0], return_dtype=pl.String),
+        pl.col("seqname").unique().map_elements(lambda l: l[0], return_dtype=pl.String),
+        pl.col("start").map_elements(lambda l: np.sort(np.array(l)-1)[1:].tolist(), return_dtype=pl.List(pl.Int64)).alias("end"),
+        pl.col("end").map_elements(lambda l: np.sort(np.array(l)+1)[:-1].tolist(), return_dtype=pl.List(pl.Int64)).alias("start")
+    )\
+    .explode("start", "end")\
+    .rename({"seqname": "chrom"})
+```
+
+```{python}
+LR_SJ_novel = LR_SJ\
+    .filter(pl.col("start").is_null().not_())\
+    .join(
+        gencode_V39_gtf_SJ["chrom", "start", "end", "strand"].with_columns(GENCODE=pl.lit(True)),
+        on=["chrom", "start", "end", "strand"],
+        how="left"
+        )\
+    .filter(
+        pl.col("GENCODE").is_null()
+    )\
+    .join(SR_SJ, on=["chrom", "start", "end", "strand"], how="left")
+```
+
+```{python}
+f"{LR_SJ_novel["SR"].sum()/LR_SJ_novel.shape[0]} of the novel long-read SJs are supported by short-read data."
+```
+
+For our dataset, of 120,445 splice junctions not observed in Gencode v39, around 71% of the novel long-read SJs were supported by short-read data.
+
+For the Patowary dataset, of 38,115 splice junctions not observed in Gencode, 74% were validated by Intropolis.
+
+```{python}
+LR_SJ\
+    .join(SR_SJ, on=["chrom", "start", "end", "strand"], how="left")\
+    ["SR"].sum()
+
+LR_SJ\
+    .filter(pl.col("transcript_id").str.starts_with("ENST").not_())\
+    .join(SR_SJ, on=["chrom", "start", "end", "strand"], how="left")\
+    ["SR"].sum()
+```
