@@ -6,6 +6,7 @@ import polars as pl
 from src.single_cell import SingleCell
 from src.utils import read_gtf
 import numpy as np
+import polars.selectors as cs
 ```
 
 ```{python}
@@ -293,4 +294,54 @@ combined_gtf = combined_gtf\
 ```{python}
 #| label: write_combined_gtf
 combined_gtf.write_csv("transcript_vis_app/shiny.csv")
+```
+
+# Abundance
+
+```{python}
+pl.concat(
+    [
+        pl.DataFrame(((lr_bulk.X.T / lr_bulk.X.sum(axis=1)) * 1e6).toarray().T,schema=lr_bulk.var_names.to_list()), lr_bulk.obs_names.to_frame()
+    ],
+    how="horizontal"
+    )\
+    .with_columns(
+        sampleID = pl.col("sampleID").map_elements(lambda s: s.split("_")[0], return_dtype=pl.String)
+    )\
+    .group_by("sampleID")\
+    .agg(pl.col("*").mean())\
+    .transpose(column_names="sampleID", include_header=True, header_name="pbid")\
+    .join(lr_bulk.var["pbid", "associated_transcript"], on="pbid", how="left")\
+    .rename({"pbid": "transcript_id"})\
+    .with_columns(
+        transcript_id = pl.when(pl.col("associated_transcript")=="novel").then(pl.col("transcript_id")).otherwise(pl.col("associated_transcript"))
+    ).drop("associated_transcript")\
+    .join(PBID_to_TALON_ID, on="transcript_id", how="left")\
+    .with_columns(
+        transcript_id = pl.when(pl.col("ref_id").is_null()).then(pl.col("transcript_id")).otherwise(pl.col("ref_id"))
+    ).drop("ref_id")\
+    .filter(pl.col("transcript_id").is_in(combined_gtf["transcript_id"]))\
+    .group_by("transcript_id").sum()\
+    .write_csv("transcript_vis_app/pbid_abundance.csv")
+```
+
+```{python}
+pl.read_csv("/Users/xunuo/projects/Dev_Brain_IsoSeq/data/cp_vz_0.75_min_7_recovery_talon_abundance_filtered.tsv", separator="\t")\
+    .rename({"annot_transcript_id": "transcript_id"})\
+    .join(TALON_ID_to_GENCODE_V39, on="transcript_id", how="left")\
+    .with_columns(
+        transcript_id = pl.when(pl.col("ref_id").is_null()).then(pl.col("transcript_id")).otherwise(pl.col("ref_id"))
+    ).drop("ref_id")\
+    .group_by("transcript_id").sum()\
+    .with_columns(
+        cs.ends_with("CP") / cs.ends_with("CP").sum() * 1e6,
+        cs.ends_with("VZ") / cs.ends_with("VZ").sum() * 1e6
+    )\
+    .select(
+        pl.col("transcript_id"),
+        CP_mean = pl.mean_horizontal(cs.ends_with("CP")),      
+        VZ_mean = pl.mean_horizontal(cs.ends_with("VZ"))
+    )\
+    .filter(pl.col("transcript_id").is_in(combined_gtf["transcript_id"]))\
+    .write_csv("transcript_vis_app/talon_abundance.csv")
 ```
