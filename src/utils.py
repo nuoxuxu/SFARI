@@ -6895,3 +6895,9 @@ def get_positions_bim_or_pvar(bim_or_pvar_file, new_bim_or_pvar_file, dbSNP, *,
     if not is_pvar:
         run(f'rm "{new_prefix}.tmp2.pgen" "{new_prefix}.tmp2.pvar" '
             f'"{new_prefix}.tmp2.psam" "{new_prefix}.tmp2.log"')
+
+def read_gtf(file, attributes=["transcript_id"]):
+    return pl.read_csv(file, separator="\t", comment_prefix="#", new_columns=["seqname","source","feature","start","end","score","strand","frame","attributes"])\
+        .with_columns(
+            [pl.col("attributes").str.extract(rf'{attribute} "([^;]*)";').alias(attribute) for attribute in attributes]
+            ).drop("attributes")

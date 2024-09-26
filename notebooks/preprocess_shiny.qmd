@@ -4,19 +4,28 @@
 #| label: import-python
 import polars as pl
 from src.single_cell import SingleCell
+from src.utils import read_gtf
 import numpy as np
 ```
 
 ```{python}
 #| label: read-gencode_V39
-gencode_V39 = pl.read_csv("/Users/xunuo/Genomic_references/GENCODE/gencode.v39.annotation.gtf", separator="\t", comment_prefix="#", new_columns=["seqname","source","feature","start","end","score","strand","frame","attributes"])\
+
+gencode_V39 = read_gtf("/Users/xunuo/Genomic_references/GENCODE/gencode.v39.annotation.gtf", ["gene_name", "transcript_id", "gene_id"]).filter(pl.col("feature")=="exon")
+```
+
+```{python}
+#| label: define-functions
+
+def read_refmap(file):
+    out = pl.read_csv(file, separator="\t")\
+    .filter(pl.col("class_code")=="=")\
     .with_columns(
-        pl.col("attributes").str.extract(r'gene_name "([^;]*)";').alias("gene_name"),
-        pl.col("attributes").str.extract(r'transcript_id "([^;]*)";').alias("transcript_id"),
-        pl.col("attributes").str.extract(r'gene_id "([^;]*)";').alias("gene_id"),
-        )\
-    .drop("attributes")\
-    .filter(pl.col("feature")=="exon")
+        pl.col("qry_id_list").str.split(",").map_elements(lambda s: [e.split("|")[1] for e in s], return_dtype=pl.List(pl.String)).alias("qry_id_list"))\
+    .explode("qry_id_list")\
+    .select(["qry_id_list", "ref_id"])\
+    .rename({"qry_id_list": "transcript_id"})
+    return out
 ```
 
 # Preprocess TALON GTF
@@ -25,6 +34,7 @@ Since `talon.gtf` is in hg19, we need to lift it over to hg38
 
 ```{bash}
 #| label: liftover
+
 curl -L https://hgdownload.cse.ucsc.edu/goldenpath/hg19/liftOver/hg19ToHg38.over.chain.gz -o hg19ToHg38.over.chain.gz
 
 CrossMap gff proc/hg19ToHg38.over.chain /Users/xunuo/projects/Dev_Brain_IsoSeq/data/cp_vz_0.75_min_7_recovery_talon.gtf proc/cp_vz_0.75_min_7_recovery_talon_hg38.gtf
@@ -41,13 +51,7 @@ gffcompare -r /Users/xunuo/Genomic_references/GENCODE/gencode.v39.annotation.gtf
 ```{python}
 #| label: TALON_ID_to_GENCODE_V39
 
-TALON_ID_to_GENCODE_V39 = pl.read_csv("proc/TALON_GENCODE_V39.cp_vz_0.75_min_7_recovery_talon_hg38.gtf.refmap", separator="\t")\
-    .filter(pl.col("class_code")=="=")\
-    .with_columns(
-        pl.col("qry_id_list").str.split(",").map_elements(lambda s: [e.split("|")[1] for e in s]).alias("qry_id_list"))\
-    .explode("qry_id_list")\
-    .select(["qry_id_list", "ref_id"])\
-    .rename({"qry_id_list": "transcript_id"})
+TALON_ID_to_GENCODE_V39 = read_refmap("proc/TALON_GENCODE_V39.cp_vz_0.75_min_7_recovery_talon_hg38.gtf.refmap")
 ```
 
 Since the mappping between transcript_id and ref_id is not injective, we need to identify transcripts that are not uniquely mapped to a ref_id and remove them. It turns out that most transcript_id that are not uniquely mapped to a ref_id at least maps to one ref_id that matches transcript_id exactly (the version numbers could be different), so we decided to discard the other match and treat these cases as one-to-one. The transcript_id that are mapped to more than one ref_id where none of the matching ref_id matches the transcript_id are removed.
@@ -100,22 +104,11 @@ TALON_ID_to_GENCODE_V39 = pl.concat([one_to_one, one_to_many], how="vertical")
 ```{python}
 #| label: import-TALON_gtf
 
-TALON_gtf = pl.read_csv(
-    "proc/cp_vz_0.75_min_7_recovery_talon_hg38.gtf",
-    separator="\t", comment_prefix="#",
-    new_columns=["seqname","source","feature","start","end","score","strand","frame","attributes"])\
-    .with_columns(
-        pl.col("attributes").str.extract(r'gene_name "([^;]*)";').alias("gene_name"),
-        pl.col("attributes").str.extract(r'transcript_id "([^;]*)";').alias("transcript_id"),
-        pl.col("attributes").str.extract(r'gene_id "([^;]*)";').alias("gene_id"),
-        )\
-    .filter(pl.col("feature")=="exon")\
-    .with_columns(
-        pl.col("gene_name").cast(pl.String)
-    )\
+TALON_gtf = read_gtf("proc/cp_vz_0.75_min_7_recovery_talon_hg38.gtf", ["gene_name", "transcript_id", "gene_id"])\
     .filter(
+        pl.col("feature")=="exon",
         pl.col("gene_name").str.starts_with("TALON").not_()
-    ).drop("attributes")
+    )
 ```
 
 ```{python}
@@ -137,20 +130,14 @@ TALON_gtf\
 ```{python}
 #| label: import-SFARI_gff
 
-SFARI_gff = pl.read_csv(
-    "/Users/xunuo/projects/SFARI/results/long_read/merged_collapsed.sorted.gff",
-    separator="\t",comment_prefix="##",
-    new_columns=["seqname","source","feature","start","end","score","strand","frame","attributes"])\
-    .filter(pl.col("feature")=="exon")
-
 lr_bulk = SingleCell("results/long_read/pbid_filtered.h5ad")
 
-SFARI_gff = SFARI_gff\
-    .with_columns(
-        pl.col("attributes").str.extract(r'transcript_id "([^;]*)";').alias("pbid")
-        )\
-    .drop("attributes")\
-    .join(lr_bulk.var["pbid", "associated_transcript", "associated_gene", "structural_category"], on="pbid", how="left")\
+SFARI_gff = read_gtf(
+    "/Users/xunuo/projects/SFARI/results/long_read/merged_collapsed.sorted.gff", 
+    ["transcript_id"])\
+    .rename({"transcript_id": "pbid"})\
+    .filter(pl.col("feature")=="exon")\
+    .join(lr_bulk.var["pbid", "associated_transcript", "associated_gene"], on="pbid", how="left")\
     .filter(pl.col("associated_gene").cast(pl.String).str.starts_with("novelGene").not_())\
     .with_columns(
         pl.col("associated_transcript").cast(pl.String)
@@ -165,7 +152,7 @@ SFARI_gff\
     .with_columns(
         attributes = pl.lit('gene_id "') + pl.col("associated_gene") + pl.lit('"; transcript_id "') + pl.col("pbid") + pl.lit('";')
     )\
-    .drop("pbid", "associated_gene", "associated_transcript", "structural_category")\
+    .drop("pbid", "associated_gene", "associated_transcript")\
     .write_csv("proc/SFARI_not_in_GENCODE.gtf", separator="\t", quote_style="never", include_header=False)
 ```
 
@@ -180,13 +167,7 @@ gffcompare -r proc/TALON_not_in_GENCODE.gtf proc/SFARI_not_in_GENCODE.gtf -o pro
 ```{python}
 #| label: get-PBID_to_TALON_ID
 
-PBID_to_TALON_ID = pl.read_csv("proc/SFARI_TALON.SFARI_not_in_GENCODE.gtf.refmap", separator="\t")\
-    .filter(pl.col("class_code")=="=")\
-    .with_columns(
-        pl.col("qry_id_list").str.split(",").map_elements(lambda s: [e.split("|")[1] for e in s]).alias("qry_id_list"))\
-    .explode("qry_id_list")\
-    .select(["qry_id_list", "ref_id"])\
-    .rename({"qry_id_list": "pbid"})
+PBID_to_TALON_ID = read_refmap("proc/SFARI_TALON.SFARI_not_in_GENCODE.gtf.refmap")
 ```
 
 ```{python}
