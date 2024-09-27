@@ -4,6 +4,7 @@ library(dplyr)
 library(tidyr)
 library(readr)
 library(bslib)
+library(patchwork)
 
 combined_gtf <- read_csv("./shiny.csv")
 pbid_abundance <- read_csv("./pbid_abundance.csv")
@@ -20,20 +21,9 @@ ui <- page_fillable(
       title = "Gene Structure",
       plotOutput("ggtranscript_plot")
     ),
-    layout_columns(
-      card(
-        card_header("Overlapped transcripts abundance"),
-        uiOutput("Overlapped_abundance"),
-      ),
-      card(
-        card_header("Patowary et al. transcripts abundance"),
-        uiOutput("Patowary_abundance"),
-      ),
-      card(
-        card_header("SFARI transcripts abundance"),
-        uiOutput("SFARI_abundance")
-      ),
-      col_widths = c(12, 12, 12)
+    card(
+      title = "Abundance",
+      plotOutput("abundance")
     ),
     col_widths = c(8, 4)
   )
@@ -61,47 +51,47 @@ plot_ggtranscript <- function(gtf, gene_of_interest) {
         axis.ticks.y = element_blank(),
         axis.title.y = element_blank(),
         strip.text.y = element_text(size = 12),
-        axis.text.y = element_text(size = 12)
+        axis.text.y = element_text(size = 12),
+        legend.position = "top"
     )
 }
 
-get_n_transcripts <- function(gtf, gene_of_interest) {
-  gtf %>%
-    filter(gene_name == {{gene_of_interest}}) %>% 
-    summarise(n_distinct(transcript_id)) %>% 
-    pull()
-    }
-
 plot_SFARI <- function(gene_of_interest) {
   pbid_abundance_gene <- pbid_abundance %>% 
-    filter(transcript_id %in% (combined_gtf %>% filter(gene_name == {{gene_of_interest}}) %>% pull("transcript_id"))) %>% 
+    filter(transcript_id %in% (combined_gtf %>% filter(gene_name == {{gene_of_interest}} & dataset == "SFARI") %>% pull("transcript_id"))) %>% 
     pivot_longer(cols = c("CN", "NPC", "iPSC"), names_to = "time_point", values_to = "abundance")
 
   pbid_abundance_gene$time_point <- factor(pbid_abundance_gene$time_point, levels = c("iPSC", "NPC", "CN"))  
     
-  gg <- pbid_abundance_gene %>% 
+    pbid_abundance_gene %>% 
     ggplot(aes(x=transcript_id, y=abundance, fill=time_point)) +
     geom_col(position="dodge") +
     ylab("counts per million (CPM)") +
     theme(
       axis.text.x = element_text(angle = 90, hjust = 1),
-      axis.title.x = element_blank()
-    ) + coord_flip()
-  renderPlot(gg)
+      axis.title.x = element_blank(),
+      axis.title.y = element_blank(),
+      axis.text.y = element_text(size = 12)
+    ) + 
+    coord_flip() +
+    scale_color_brewer(palette="Dark2")
 }
 
 plot_Patowary <- function(gene_of_interest) {
-  gg <- talon_abundance %>% 
-    filter(transcript_id %in% (combined_gtf %>% filter(gene_name == {{gene_of_interest}}) %>% pull("transcript_id"))) %>% 
+    talon_abundance %>% 
+    filter(transcript_id %in% (combined_gtf %>% filter(gene_name == {{gene_of_interest}} & dataset == "Patowary et al.") %>% pull("transcript_id"))) %>% 
     pivot_longer(cols = c("CP_mean", "VZ_mean"), names_to = "time_point", values_to = "abundance") %>%
     ggplot(aes(x=transcript_id, y=abundance, fill=time_point)) +
     geom_col(position="dodge") +
     ylab("counts per million (CPM)") +
+    scale_color_brewer(palette = "PuOr") +
     theme(
       axis.text.x = element_text(angle = 90, hjust = 1),
-      axis.title.x = element_blank()
-    ) + coord_flip()
-  renderPlot(gg)
+      axis.title.x = element_blank(),
+      axis.title.y = element_blank(),
+      axis.text.y = element_text(size = 12)
+    ) + 
+    coord_flip()
 }
 
 plot_overlapped <- function(gene_of_interest) {
@@ -130,64 +120,57 @@ plot_overlapped <- function(gene_of_interest) {
       ) %>%
     ungroup()
 
-  gg <- bind_rows(pbid_abundance_gene, talon_abundance_gene) %>% 
+  bind_rows(pbid_abundance_gene, talon_abundance_gene) %>% 
   ggplot(aes(x=transcript_id, y=mean_value, fill=dataset)) +
   geom_col(position="dodge") +
   ylab("counts per million (CPM)") +
   theme(
     axis.text.x = element_text(angle = 90, hjust = 1),
-    axis.title.x = element_blank()
-  ) + coord_flip()
-  renderPlot(gg)
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.text.y = element_text(size = 12)
+  ) + 
+  coord_flip()
 }
 
-Overlapped_no_transcripts <- function(gene_of_interest) {
-  combined_gtf %>%
-    filter(gene_name == {{gene_of_interest}} & dataset == "Overlapped") %>%
-    pull(transcript_id) %>%
-    length()
+get_n_transcript_ratio <- function(gene_of_interest) {
+    combined_gtf %>% 
+        filter(gene_name == {{gene_of_interest}}) %>%
+        group_by(dataset) %>% 
+        summarise(n_transcript_id = n_distinct(transcript_id)) %>% 
+        pull(n_transcript_id, name=dataset)
 }
 
-TALON_no_transcripts <- function(gene_of_interest) {
-  combined_gtf %>%
-    filter(gene_name == {{gene_of_interest}} & dataset == "Patowary et al.") %>%
-    pull(transcript_id) %>%
-    length()
+plot_abundance <- function(gene_of_interest) {
+    if (setequal(c("Overlapped", "SFARI", "Patowary et al."), names(get_n_transcript_ratio(gene_of_interest)))) {
+        plot_overlapped(gene_of_interest) / plot_Patowary(gene_of_interest) / plot_SFARI(gene_of_interest) + plot_layout(heights = get_n_transcript_ratio(gene_of_interest)*2)
+    } else if (setequal(c("SFARI"), names(get_n_transcript_ratio(gene_of_interest)))) {
+        plot_SFARI(gene_of_interest) + plot_layout(heights = get_n_transcript_ratio(gene_of_interest)*2)
+    } else if (setequal(c("Patowary et al."), names(get_n_transcript_ratio(gene_of_interest)))) {
+        plot_Patowary(gene_of_interest) + plot_layout(heights = get_n_transcript_ratio(gene_of_interest)*2)
+    } else if (setequal(c("Overlapped"), names(get_n_transcript_ratio(gene_of_interest)))) {
+        plot_overlapped(gene_of_interest) + plot_layout(heights = get_n_transcript_ratio(gene_of_interest)*2)
+    } else if (setequal(c("SFARI", "Patowary et al."), names(get_n_transcript_ratio(gene_of_interest)))) {
+        plot_Patowary(gene_of_interest) / plot_SFARI(gene_of_interest) + plot_layout(heights = get_n_transcript_ratio(gene_of_interest)*2)
+    } else if (setequal(c("SFARI", "Overlapped"), names(get_n_transcript_ratio(gene_of_interest)))) {
+        plot_overlapped(gene_of_interest) / plot_SFARI(gene_of_interest) + plot_layout(heights = get_n_transcript_ratio(gene_of_interest)*2)
+    } else if (setequal(c("Patowary et al.", "Overlapped"), names(get_n_transcript_ratio(gene_of_interest)))) {
+        plot_overlapped(gene_of_interest) / plot_Patowary(gene_of_interest) + plot_layout(heights = get_n_transcript_ratio(gene_of_interest)*2)
+    }
 }
-
-SFARI_no_transcripts <- function(gene_of_interest) {
-  combined_gtf %>%
-    filter(gene_name == {{gene_of_interest}} & dataset == "SFARI") %>%
-    pull(transcript_id) %>%
-    length()
-}
-
 server <- function(input, output, session) {
-  Overlapped_show <- reactive({Overlapped_no_transcripts(input$select_genes) != 0})
-  TALON_show <- reactive({TALON_no_transcripts(input$select_genes) != 0})
-  SFARI_show <- reactive({SFARI_no_transcripts(input$select_genes) != 0})
-
-  output$ggtranscript_plot <- renderPlot(
-    {
-      plot_ggtranscript(combined_gtf, input$select_genes)
-      },
-    height = reactive({20 * get_n_transcripts(combined_gtf, input$select_genes) + 100})
-  )
-  output$Overlapped_abundance <- renderUI(
-    if (Overlapped_show()) {
-      plot_overlapped(input$select_genes)
-    }
-  )
-  output$Patowary_abundance <- renderUI(
-    if (TALON_show()) {
-      plot_Patowary(input$select_genes)
-    }
-  )  
-  output$SFARI_abundance <- renderUI(
-    if (SFARI_show()) {
-      plot_SFARI(input$select_genes)
-    }
-  )
+    output$ggtranscript_plot <- renderPlot(
+        {
+            plot_ggtranscript(combined_gtf, input$select_genes)
+        },
+        height = reactive({20 * sum(get_n_transcript_ratio(input$select_genes)) + 100})
+    )
+    output$abundance <- renderPlot(
+        {
+            plot_abundance(input$select_genes)
+        },
+        height = reactive({20 * sum(get_n_transcript_ratio(input$select_genes)) + 100})
+    )
 }
 
 shinyApp(ui, server)
