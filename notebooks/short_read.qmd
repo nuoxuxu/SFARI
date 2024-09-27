@@ -12,16 +12,37 @@ from src.utils import read_gtf
 rsync -rav dev02:/external/rprshnas01/netdata_kcni/stlab/Nuo/SFARI/STAR_fastp_outputs_round2/STAR_results/SJ_out_tabs results/short_read/
 ```
 
-# Start here
+```{python}
+#| label: define-functions
+def gtf_to_SJ(gtf):
+    return gtf\
+        .with_columns(
+            seqname=pl.col("seqname").map_elements(lambda s: s.removeprefix("chr"), return_dtype=pl.String)
+        )\
+        .group_by("transcript_id", maintain_order=True)\
+        .agg(
+            pl.col("strand").unique().map_elements(lambda l: l[0], return_dtype=pl.String),
+            pl.col("seqname").unique().map_elements(lambda l: l[0], return_dtype=pl.String),
+            pl.col("start").map_elements(lambda l: np.sort(np.array(l)-1)[1:].tolist(), return_dtype=pl.List(pl.Int64)).alias("end"),
+            pl.col("end").map_elements(lambda l: np.sort(np.array(l)+1)[:-1].tolist(), return_dtype=pl.List(pl.Int64)).alias("start")
+        )\
+        .explode("start", "end")\
+        .rename({"seqname": "chrom"})\
+        .filter(pl.col("start").is_null().not_())
+```
+
+# Load SJs
 
 ```{python}
-#| label: read-short-read-SJ-tabs
-SJ_tab = pl.concat([pl.read_csv(file, separator="\t", new_columns=["chrom", "start", "end", "strand", "motif", "annotated", "unique_reads", "multi_reads", "max_overhang"], schema_overrides={"chrom": pl.String}) for file in Path("results/short_read/SJ_out_tabs").rglob("*.tab")], how="vertical")
+#| label: get-gencode_V39_SJ
+gencode_V39_SJ = read_gtf("/Users/xunuo/Genomic_references/GENCODE/gencode.v39.annotation.gtf")\
+    .filter(pl.col("feature") == "exon")\
+    .pipe(gtf_to_SJ)
 ```
 
 ```{python}
-#| label: get-unique-SJs-from-short-read
-SR_SJ = SJ_tab\
+#| label: get-SR_SJ
+SR_SJ = pl.concat([pl.read_csv(file, separator="\t", new_columns=["chrom", "start", "end", "strand", "motif", "annotated", "unique_reads", "multi_reads", "max_overhang"], schema_overrides={"chrom": pl.String}) for file in Path("results/short_read/SJ_out_tabs").rglob("*.tab")], how="vertical")\
     .unique(["chrom", "start", "end", "strand"])\
     .select(["chrom", "start", "end", "strand"])\
     .with_columns(
@@ -33,51 +54,12 @@ SR_SJ = SJ_tab\
 ```
 
 ```{python}
-#| label: read-gencode_V39-gtf
-gencode_V39_gtf = pl.read_csv("/Users/xunuo/Genomic_references/GENCODE/gencode.v39.annotation.gtf", separator="\t", comment_prefix="#", new_columns=["seqname","source","feature","start","end","score","strand","frame","attributes"])\
-    .with_columns(
-        transcript_id=pl.col("attributes").str.extract(r'transcript_id "([^;]*)";').alias("transcript_id")
-    ).drop("attributes").filter(pl.col("feature") == "exon")
+#| label: get-LR_SJ
+LR_SJ = pl.read_csv("transcript_vis_app/shiny.csv")\
+    .pipe(gtf_to_SJ)
 ```
 
-```{python}
-#| label: gencode_V39-gtf-to-SJ
-gencode_V39_gtf_SJ = gencode_V39_gtf\
-    .with_columns(
-        seqname=pl.col("seqname").map_elements(lambda s: s.removeprefix("chr"), return_dtype=pl.String)
-    )\
-    .group_by("transcript_id", maintain_order=True)\
-    .agg(
-        pl.col("strand").unique().map_elements(lambda l: l[0], return_dtype=pl.String),
-        pl.col("seqname").unique().map_elements(lambda l: l[0], return_dtype=pl.String),
-        pl.col("start").map_elements(lambda l: np.sort(np.array(l)-1)[1:].tolist(), return_dtype=pl.List(pl.Int64)).alias("end"),
-        pl.col("end").map_elements(lambda l: np.sort(np.array(l)+1)[:-1].tolist(), return_dtype=pl.List(pl.Int64)).alias("start")
-    )\
-    .explode("start", "end")\
-    .rename({"seqname": "chrom"})    
-```
-
-```{python}
-#| label: read-long-read-gtf
-combined_gtf = pl.read_csv("transcript_vis_app/shiny.csv")
-```
-
-```{python}
-#| label: long-read-gtf-to-SJ
-LR_SJ = combined_gtf\
-    .with_columns(
-        seqname=pl.col("seqname").map_elements(lambda s: s.removeprefix("chr"), return_dtype=pl.String)
-    )\
-    .group_by("transcript_id", maintain_order=True)\
-    .agg(
-        pl.col("strand").unique().map_elements(lambda l: l[0], return_dtype=pl.String),
-        pl.col("seqname").unique().map_elements(lambda l: l[0], return_dtype=pl.String),
-        pl.col("start").map_elements(lambda l: np.sort(np.array(l)-1)[1:].tolist(), return_dtype=pl.List(pl.Int64)).alias("end"),
-        pl.col("end").map_elements(lambda l: np.sort(np.array(l)+1)[:-1].tolist(), return_dtype=pl.List(pl.Int64)).alias("start")
-    )\
-    .explode("start", "end")\
-    .rename({"seqname": "chrom"})
-```
+# Analysis
 
 ```{python}
 LR_SJ_novel = LR_SJ\
