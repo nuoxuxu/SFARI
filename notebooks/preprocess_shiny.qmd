@@ -301,27 +301,25 @@ combined_gtf.write_csv("transcript_vis_app/shiny.csv")
 ```{python}
 pl.concat(
     [
-        pl.DataFrame(((lr_bulk.X.T / lr_bulk.X.sum(axis=1)) * 1e6).toarray().T,schema=lr_bulk.var_names.to_list()), lr_bulk.obs_names.to_frame()
+        pl.DataFrame((lr_bulk.X.T).toarray(), schema=lr_bulk.obs_names.to_list()), 
+        lr_bulk.var_names.to_frame()
     ],
     how="horizontal"
     )\
-    .with_columns(
-        sampleID = pl.col("sampleID").map_elements(lambda s: s.split("_")[0], return_dtype=pl.String)
-    )\
-    .group_by("sampleID")\
-    .agg(pl.col("*").mean())\
-    .transpose(column_names="sampleID", include_header=True, header_name="pbid")\
     .join(lr_bulk.var["pbid", "associated_transcript"], on="pbid", how="left")\
-    .rename({"pbid": "transcript_id"})\
     .with_columns(
-        transcript_id = pl.when(pl.col("associated_transcript")=="novel").then(pl.col("transcript_id")).otherwise(pl.col("associated_transcript"))
+        pl.when(pl.col("associated_transcript")=="novel").then(pl.col("pbid")).otherwise(pl.col("associated_transcript"))
     ).drop("associated_transcript")\
-    .join(PBID_to_TALON_ID, on="transcript_id", how="left")\
+    .group_by("pbid").sum()\
     .with_columns(
-        transcript_id = pl.when(pl.col("ref_id").is_null()).then(pl.col("transcript_id")).otherwise(pl.col("ref_id"))
-    ).drop("ref_id")\
-    .filter(pl.col("transcript_id").is_in(combined_gtf["transcript_id"]))\
-    .group_by("transcript_id").sum()\
+        (cs.numeric() / cs.numeric().sum() * 1e6 + 1).log(base=2)
+    )\
+    .transpose(column_names="pbid", include_header=True, header_name="sampleID")\
+    .with_columns(
+        pl.col("sampleID").map_elements(lambda s: s.split("_")[0], return_dtype=pl.String)
+    )\
+    .group_by("sampleID").mean()\
+    .transpose(column_names="sampleID", include_header=True, header_name="transcript_id")\
     .write_csv("transcript_vis_app/pbid_abundance.csv")
 ```
 
@@ -334,8 +332,8 @@ pl.read_csv("/Users/xunuo/projects/Dev_Brain_IsoSeq/data/cp_vz_0.75_min_7_recove
     ).drop("ref_id")\
     .group_by("transcript_id").sum()\
     .with_columns(
-        cs.ends_with("CP") / cs.ends_with("CP").sum() * 1e6,
-        cs.ends_with("VZ") / cs.ends_with("VZ").sum() * 1e6
+        (cs.ends_with("CP") / cs.ends_with("CP").sum() * 1e6 + 1).log(base=2),
+        (cs.ends_with("VZ") / cs.ends_with("VZ").sum() * 1e6 + 1 ).log(base=2)
     )\
     .select(
         pl.col("transcript_id"),
