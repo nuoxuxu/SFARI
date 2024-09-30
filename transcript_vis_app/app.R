@@ -74,7 +74,7 @@ plot_SFARI <- function(gene_of_interest) {
       axis.text.y = element_text(size = 12)
     ) +
     coord_flip() +
-    scale_color_brewer(palette = "Dark2")
+    scale_fill_manual(values = c(iPSC = "#e0a19c", NPC = "#e14bd5", CN = "#ff0011"))
 }
 
 plot_Patowary <- function(gene_of_interest) {
@@ -91,6 +91,7 @@ plot_Patowary <- function(gene_of_interest) {
       axis.title.y = element_blank(),
       axis.text.y = element_text(size = 12)
     ) +
+    scale_fill_manual(values = c(CP_mean = "#9797ea", VZ_mean = "#08a0a2")) +
     coord_flip()
 }
 
@@ -130,6 +131,7 @@ plot_overlapped <- function(gene_of_interest) {
       axis.title.y = element_blank(),
       axis.text.y = element_text(size = 12)
     ) +
+    scale_fill_manual(values = c("SFARI" = "#e0a19c", "Patowary et al." = "#e14bd5")) +
     coord_flip()
 }
 
