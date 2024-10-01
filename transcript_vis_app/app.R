@@ -29,8 +29,8 @@ ui <- page_fillable(
   )
 )
 
-plot_ggtranscript <- function(gtf, gene_of_interest) {
-  exons <- gtf %>%
+plot_ggtranscript <- function(gene_of_interest) {
+  exons <- combined_gtf %>%
     filter(gene_name == {{ gene_of_interest }})
 
   exons %>%
@@ -59,38 +59,36 @@ plot_ggtranscript <- function(gtf, gene_of_interest) {
 plot_SFARI <- function(gene_of_interest) {
   pbid_abundance_gene <- pbid_abundance %>%
     filter(transcript_id %in% (combined_gtf %>% filter(gene_name == {{ gene_of_interest }} & dataset == "SFARI") %>% pull("transcript_id"))) %>%
-    pivot_longer(cols = c("CN", "NPC", "iPSC"), names_to = "time_point", values_to = "abundance")
+    pivot_longer(cols = c("iPSC", "NPC", "CN"), names_to = "time_point", values_to = "abundance")
 
-  pbid_abundance_gene$time_point <- factor(pbid_abundance_gene$time_point, levels = c("iPSC", "NPC", "CN"))
+  pbid_abundance_gene$time_point <- factor(pbid_abundance_gene$time_point, levels = c("CN", "NPC", "iPSC"))
 
   pbid_abundance_gene %>%
-    ggplot(aes(x = transcript_id, y = abundance, fill = time_point)) +
+    ggplot(aes(x = abundance, y = transcript_id, fill = time_point)) +
     geom_col(position = "dodge") +
-    xlab("SFARI") +
-    ylab("log2(CPM + 1)") +
+    xlab("log2(CPM + 1)") +
+    ylab("SFARI") +
     theme(
       axis.text.x = element_text(angle = 90, hjust = 1),
       axis.text.y = element_text(size = 12)
     ) +
-    coord_flip() +
-    scale_fill_manual(values = c(iPSC = "#e0a19c", NPC = "#e14bd5", CN = "#ff0011"))
+    scale_fill_manual(breaks = c("iPSC", "NPC", "CN"), values = c("#e0a19c", "#e14bd5", "#ff0011"))
 }
 
 plot_Patowary <- function(gene_of_interest) {
   talon_abundance %>%
     filter(transcript_id %in% (combined_gtf %>% filter(gene_name == {{ gene_of_interest }} & dataset == "Patowary et al.") %>% pull("transcript_id"))) %>%
     pivot_longer(cols = c("CP_mean", "VZ_mean"), names_to = "time_point", values_to = "abundance") %>%
-    ggplot(aes(x = transcript_id, y = abundance, fill = time_point)) +
+    ggplot(aes(x = abundance, y = transcript_id, fill = time_point)) +
     geom_col(position = "dodge") +
-    xlab("Patowary et al.") +
-    ylab("log2(CPM + 1)") +
+    xlab("log2(CPM + 1)") +
+    ylab("Patowary et al.") +
     scale_color_brewer(palette = "PuOr") +
     theme(
       axis.text.x = element_text(angle = 90, hjust = 1),
       axis.text.y = element_text(size = 12)
     ) +
-    scale_fill_manual(values = c(CP_mean = "#9797ea", VZ_mean = "#08a0a2")) +
-    coord_flip()
+    scale_fill_manual(breaks = c("CP_mean", "VZ_mean"), values = c("#9797ea", "#08a0a2"))
 }
 
 plot_overlapped <- function(gene_of_interest) {
@@ -120,16 +118,15 @@ plot_overlapped <- function(gene_of_interest) {
     ungroup()
 
   bind_rows(pbid_abundance_gene, talon_abundance_gene) %>%
-    ggplot(aes(x = transcript_id, y = mean_value, fill = dataset)) +
+    ggplot(aes(x = mean_value, y = transcript_id, fill = dataset)) +
     geom_col(position = "dodge") +
-    xlab("Overlapped") +
-    ylab("log2(CPM + 1)") +
+    xlab("log2(CPM + 1)") +
+    ylab("Overlapped") +
     theme(
       axis.text.x = element_text(angle = 90, hjust = 1),
       axis.text.y = element_text(size = 12)
     ) +
-    scale_fill_manual(values = c("SFARI" = "#f51c0c", "Patowary et al." = "#2908a2")) +
-    coord_flip()
+    scale_fill_manual(breaks = c("SFARI", "Patowary et al."), values = c("#f51c0c", "#2908a2"))
 }
 
 get_n_transcript_ratio <- function(gene_of_interest) {
@@ -161,7 +158,7 @@ plot_abundance <- function(gene_of_interest) {
 server <- function(input, output, session) {
   output$ggtranscript_plot <- renderPlot(
     {
-      plot_ggtranscript(combined_gtf, input$select_genes)
+      plot_ggtranscript(input$select_genes)
     },
     height = reactive({
       20 * sum(get_n_transcript_ratio(input$select_genes)) + 100
