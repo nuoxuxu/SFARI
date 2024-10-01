@@ -66,11 +66,10 @@ plot_SFARI <- function(gene_of_interest) {
   pbid_abundance_gene %>%
     ggplot(aes(x = transcript_id, y = abundance, fill = time_point)) +
     geom_col(position = "dodge") +
-    ylab("counts per million (CPM)") +
+    xlab("SFARI") +
+    ylab("log2(CPM + 1)") +
     theme(
       axis.text.x = element_text(angle = 90, hjust = 1),
-      axis.title.x = element_blank(),
-      axis.title.y = element_blank(),
       axis.text.y = element_text(size = 12)
     ) +
     coord_flip() +
@@ -83,12 +82,11 @@ plot_Patowary <- function(gene_of_interest) {
     pivot_longer(cols = c("CP_mean", "VZ_mean"), names_to = "time_point", values_to = "abundance") %>%
     ggplot(aes(x = transcript_id, y = abundance, fill = time_point)) +
     geom_col(position = "dodge") +
-    ylab("counts per million (CPM)") +
+    xlab("Patowary et al.") +
+    ylab("log2(CPM + 1)") +
     scale_color_brewer(palette = "PuOr") +
     theme(
       axis.text.x = element_text(angle = 90, hjust = 1),
-      axis.title.x = element_blank(),
-      axis.title.y = element_blank(),
       axis.text.y = element_text(size = 12)
     ) +
     scale_fill_manual(values = c(CP_mean = "#9797ea", VZ_mean = "#08a0a2")) +
@@ -124,14 +122,13 @@ plot_overlapped <- function(gene_of_interest) {
   bind_rows(pbid_abundance_gene, talon_abundance_gene) %>%
     ggplot(aes(x = transcript_id, y = mean_value, fill = dataset)) +
     geom_col(position = "dodge") +
-    ylab("counts per million (CPM)") +
+    xlab("Overlapped") +
+    ylab("log2(CPM + 1)") +
     theme(
       axis.text.x = element_text(angle = 90, hjust = 1),
-      axis.title.x = element_blank(),
-      axis.title.y = element_blank(),
       axis.text.y = element_text(size = 12)
     ) +
-    scale_fill_manual(values = c("SFARI" = "#e0a19c", "Patowary et al." = "#e14bd5")) +
+    scale_fill_manual(values = c("SFARI" = "#f51c0c", "Patowary et al." = "#2908a2")) +
     coord_flip()
 }
 
@@ -160,6 +157,7 @@ plot_abundance <- function(gene_of_interest) {
     plot_overlapped(gene_of_interest) / plot_Patowary(gene_of_interest) + plot_layout(heights = get_n_transcript_ratio(gene_of_interest) * 2)
   }
 }
+
 server <- function(input, output, session) {
   output$ggtranscript_plot <- renderPlot(
     {
