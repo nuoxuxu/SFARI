@@ -20,4 +20,4 @@ results/*
 **/__pycache__/
 
 transcript_vis_app/*.csv
-transcript_vis_app/*.dcf
+**.dcf
