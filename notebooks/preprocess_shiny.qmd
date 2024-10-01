@@ -310,6 +310,10 @@ pl.concat(
     .with_columns(
         pl.when(pl.col("associated_transcript")=="novel").then(pl.col("pbid")).otherwise(pl.col("associated_transcript"))
     ).drop("associated_transcript")\
+    .join(PBID_to_TALON_ID.rename({"transcript_id": "pbid"}), on="pbid", how="left")\
+    .with_columns(
+        pl.when(pl.col("ref_id").is_null()).then(pl.col("pbid")).otherwise(pl.col("ref_id"))
+    ).drop("ref_id")\
     .group_by("pbid").sum()\
     .with_columns(
         (cs.numeric() / cs.numeric().sum() * 1e6 + 1).log(base=2)
