@@ -1,0 +1,128 @@
+# Preparation
+
+## Import packages
+
+```{python}
+from pathlib import Path
+import polars as pl
+from src.single_cell import SingleCell
+from src.ryp import r, to_r
+import json
+import polars.selectors as cs
+```
+
+```{r}
+library(pheatmap)
+library(dplyr)
+library(pheatmap)
+library(RColorBrewer)
+library(stringr)
+```
+
+## Prepare salmon outputs from Illumina data 
+
+```{python}
+lr_bulk = SingleCell("results/long_read/pbid_filtered.h5ad")
+lr_bulk.var_names.to_pandas().to_csv("proc/pbid_list.txt", index=False, header=False)
+```
+
+```{bash}
+mamba activate patch_seq_spl
+seqkit grep -f proc/pbid_list.txt proc/SQANTI3_qc_corrected.fasta > proc/merged_collapsed_filtered.fasta
+```
+
+```{bash}
+sbatch scripts/submit_generateDecoyTranscriptome.sh
+sbatch scripts/submit_salmon_index.sh
+```
+
+```{python}
+sample_list = [str(file).removeprefix("data/illumina/SFARI_data/").rsplit("_", 2)[0] for file in Path("data/illumina/SFARI_data").iterdir() if str(file).endswith(".fastq.gz")]
+
+for sample in sample_list:
+    print(f"Processing {sample}")
+    with open(f"scripts/salmon_scripts/{sample}.sh", "w") as f:
+        f.write(f"""#!/bin/bash
+#SBATCH --job-name={sample}
+#SBATCH --output=slurm_logs/{sample}.out
+#SBATCH --time=0-5:0
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+mamba activate patch_seq_spl
+salmon quant -i proc/salmon_index -l A -1 data/illumina/SFARI_data/{sample}_R1_001.fastq.gz -2 data/illumina/SFARI_data/{sample}_R2_001.fastq.gz -p 30 --validateMappings -o proc/salmon_quants/{sample}_quant
+""")
+```
+
+```{bash}
+find scripts/salmon_scripts -type f -exec sbatch {} \;
+```
+
+```{python}
+Illumina_labels_to_PacBio = json.load(open("proc/Illumina_labels_to_PacBio.json", "r"))
+
+salmon_output = pl.concat(pl.read_csv(file, separator="\t").with_columns(sample=pl.lit(file.parent.name.rsplit("_", 3)[0])) for file in Path("proc/salmon_quants/")\
+    .glob("**/*.sf"))\
+    .pivot(
+        values="NumReads",
+        index="Name",
+        columns="sample"
+    )\
+    .rename(Illumina_labels_to_PacBio)\
+    .rename({"Name": "transcript_id"})\
+    [["transcript_id", "iPSC_1", "iPSC_2", "iPSC_3", "NPC_1_1", "NPC_1_3", "NPC_2_1", "NPC_2_2", "NPC_3_1", "NPC_3_3", "CN_1_2", "CN_1_3", "CN_2_1", "CN_2_2", "CN_3_1", "CN_3_2"]]\
+    .with_columns(
+        cs.numeric() / cs.numeric().sum() * 1e6
+    )
+```
+
+## Join dataframes
+
+```{python}
+pacbio = pl.concat([lr_bulk.var_names.to_frame(), pl.DataFrame(lr_bulk.X.toarray().T,schema=["iPSC_1", "iPSC_2", "iPSC_3", "NPC_1_1", "NPC_1_3", "NPC_2_1", "NPC_2_2", "NPC_3_1", "NPC_3_3", "CN_1_2", "CN_1_3", "CN_2_1", "CN_2_2", "CN_3_1", "CN_3_2"])], how="horizontal")\
+    .with_columns(cs.numeric() / cs.numeric().sum() * 1e6)
+```
+
+```{python}
+joined_transcript = salmon_output\
+    .rename({"transcript_id": "pbid"})\
+    .join(pacbio, on=["pbid"], how="left", suffix = "_pacbio")\
+    .filter(pl.col("pbid").is_in(lr_bulk.filter_var(pl.col("structural_category2")=="full-splice_match").var_names.to_numpy()))\
+    .drop("pbid")
+
+# joined_transcript = salmon_output\
+#     .rename({"transcript_id": "pbid"})\
+#     .join(pacbio, on=["pbid"], how="left", suffix = "_pacbio")\
+#     .drop("pbid")
+```
+
+```{python}
+to_r(joined_transcript, "joined")
+```
+
+```{r}
+data <- cor(joined)
+annotation <- data.frame(
+    row.names = rownames(data),
+    time_point = str_extract(str_remove(rownames(data), "_pacbio"), "^[^_]*"),
+    technology = c(rep("illumina", 15), rep("pacbio", 15))
+)
+
+pheatmap(
+    data,
+    color = colorRampPalette(brewer.pal(n = 7, name = "Reds"))(10),
+    cluster_rows = FALSE,
+    cluster_cols = FALSE,
+    annotation_col = annotation,
+    annotation_row = annotation,
+    show_rownames = FALSE,
+    show_colnames = FALSE,
+    display_numbers = TRUE,
+    number_color = "black",
+    fontsize_number = 6,
+    fontsize_row = 10,
+    fontsize_col = 10,
+    width = 10,
+    height = 10,
+    filename = "figures/correlation_matrix_transcript_salmon_quant.png"
+    )
+```
