@@ -21,3 +21,5 @@ results/*
 
 transcript_vis_app/*.csv
 **.dcf
+
+slurm_logs/*
