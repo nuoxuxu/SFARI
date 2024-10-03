@@ -5,6 +5,7 @@
 import polars as pl
 import polars.selectors as cs
 from src.ryp import r, to_r, to_py
+from src.single_cell import SingleCell
 ```
 
 ```{r}
@@ -33,6 +34,12 @@ colorVector <- c(
 # Prepare files for creating the IsoseqsSwitchList object
 
 Get filtered isoform count matrix
+
+```{python}
+lr_bulk = SingleCell("results/long_read/pbid_filtered.h5ad")
+
+```
+
 ```{python}
 #| label: Isoseq_Expression
 categories_to_show = ["full-splice_match", "incomplete-splice_match", "novel_in_catalog", "novel_not_in_catalog"]
@@ -93,6 +100,7 @@ pl.read_csv(
 ```
 
 Filter fasta file based on the filtered isoform count matrix
+
 ```{bash}
 #| label: merged_collapsed_for_IsoformSwitchAnalyzeR.fasta
 Isoseq_Expression["pbid"].to_pandas().to_csv("pbid_list.txt", index=False, header=False)

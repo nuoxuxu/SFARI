@@ -1,0 +1,18 @@
+# TransDecoder
+
+```{bash}
+sbatch -t 0-1:0 -N 1 -n 1 -J TransDecoder -o slurm_logs/TransDecoder.out --wrap="~/tools/TransDecoder-TransDecoder-v5.7.1/TransDecoder.LongOrfs -t proc/merged_collapsed_filtered.fasta -O proc/"
+```
+
+```{bash}
+update_blastdb.pl --source "ncbi" nr.gz*
+```
+
+```{bash}
+~/tools/ncbi-blast-2.16.0+/bin/blastp 
+```
+
+```{bash}
+~/tools/TransDecoder-TransDecoder-v5.7.1/TransDecoder.Predict \
+-db 
+```

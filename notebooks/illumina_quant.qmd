@@ -27,11 +27,6 @@ lr_bulk.var_names.to_pandas().to_csv("proc/pbid_list.txt", index=False, header=F
 ```
 
 ```{bash}
-mamba activate patch_seq_spl
-seqkit grep -f proc/pbid_list.txt proc/SQANTI3_qc_corrected.fasta > proc/merged_collapsed_filtered.fasta
-```
-
-```{bash}
 sbatch scripts/submit_generateDecoyTranscriptome.sh
 sbatch scripts/submit_salmon_index.sh
 ```
