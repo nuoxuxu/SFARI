@@ -1,7 +1,16 @@
 #!/bin/bash
 #SBATCH --job-name=sqanti3_qc
 #SBATCH --output=sqanti3_qc.out
-#SBATCH -t 1-0:0
+#SBATCH --time=0-5:0
 #SBATCH --nodes=1
+#SBATCH --ntasks=1
+
 conda activate SQANTI3.env
-python /home/s/shreejoy/nxu/tools/SQANTI3-5.2.2/sqanti3_qc.py --skipORF proc/merged_collapsed.filtered.gff "${GENOMIC_DATA_DIR}"/GENCODE/gencode.v33.annotation.sorted.gtf "${GENOMIC_DATA_DIR}"/GENCODE/GRCh38.primary_assembly.genome.fa
+echo "${CONDA_PREFIX}"
+python /home/s/shreejoy/nxu/tools/SQANTI3/sqanti3_qc.py \
+-t 40 \
+--skipORF \
+--output SQANTI3_qc \
+--CAGE_peak "${GENOMIC_DATA_DIR}"/Human_hg38_Gencode_v39/refTSS_v3.3_human_coordinate.hg38.sorted.bed \
+--polyA_motif_list "${GENOMIC_DATA_DIR}"/Human_hg38_Gencode_v39/polyA.list.txt \
+proc/merged_collapsed.filtered.gff "${GENOMIC_DATA_DIR}"/Human_hg38_Gencode_v39/gencode.v39.annotation.sorted.gtf "${GENOMIC_DATA_DIR}"/GENCODE/GRCh38.primary_assembly.genome.fa
