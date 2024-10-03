@@ -10266,7 +10266,17 @@ class SingleCell:
                 plt.close()
             raise
     
-    def aggregate_var(self, ID_column, path_to_gtf):
+    def aggregate_var(self, 
+                      path_to_gtf: str | Path,
+                      ID_column: str = "associated_gene", 
+                      ):
+        """
+        Aggregate reads for transcripts of the same gene.
+
+        Args:
+            path_to_gtf: Path to gtf file that contains the attribute 'gene_type'.
+            ID_column: the column in `var` that contains the gene name.
+        """
         
         agg_matrix = pl.concat([pl.DataFrame(self.X.toarray().T), self.var[ID_column].to_frame()], how = "horizontal")\
             .group_by(ID_column)\
@@ -10299,6 +10309,21 @@ class SingleCell:
             var = agg_matrix.drop(pl.selectors.starts_with("column_"))
         )          
         return gene_count_matrix
+
+    def CPM(self) -> SingleCell:
+        """
+        Calculate counts per million for each cell type.
+
+        Returns:
+            A new SingleCell object containing the CPMs.
+        """
+        X = self._X
+        library_size = X.sum(axis=1)
+        X = X / library_size[:, None] * 1e6
+        return SingleCell(X=X, obs=self._obs, var=self._var)
+
+    def to_frame(self) -> pl.DataFrame:
+        return pl.concat([self.var_names.to_frame(), pl.DataFrame(self._X.toarray(), schema = self.obs_names.to_list())], how="horizontal")
 
 class Pseudobulk:
     """
