@@ -1,4 +1,4 @@
-# Import packages
+# Preparation
 
 ```{python}
 #| label: import-python
@@ -18,7 +18,10 @@ library(scales)
 library(dplyr)
 ```
 
-# Visualization
+```{python}
+#| label: load-SingleCell-object
+lr_bulk = SingleCell("results/long_read/pbid_filtered.h5ad")
+```
 
 ```{r}
 #| label: color-vec
@@ -39,49 +42,17 @@ colorVector <- c(
 )
 ```
 
-## The number of detected genes
-
 ```{python}
-#| label: gene-count
-pacbio = pl.read_parquet("proc/gene_count_matrix.parquet")\
-    .select(pl.selectors.numeric())\
-    .sum(axis=0)\
-    .transpose(include_header=True)\
-    .rename({"column": "sample", "column_0": "total_count"})\
-    .with_columns(pl.lit("SFARI").alias("Study"))
-to_r(pacbio, "pacbio")
-```
-
-Note that loading the `Rdata` is quite slow. #TODO: Only load cts
-
-```{r}
-#| label: gene-count-plot
-load("/Users/xunuo/projects/Dev_Brain_IsoSeq/data/working/bulkTxome.Rdata")
-library_size <- cts %>%
-  dplyr::select(matches("(_CP$|_VZ$)")) %>% 
-  summarise_all(sum) %>% 
-  t()
-colnames(library_size) <- ("total_count")
-as_tibble(library_size, rownames = "sample") %>% 
-    mutate(Study = "Patowary et al., 2024") %>% 
-    rbind(pacbio) %>% 
-    ggplot(aes(x = sample, y = total_count, fill = Study)) +
-    geom_bar(stat = "identity", position = "dodge") +
-    theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
-    scale_y_continuous(labels = unit_format(unit = "M", scale = 1e-6)) +
-    xlab("Sample") +
-    ylab("Total read count")
-ggsave("figures/patowary_vs_SFARI_total_count.png")    
-```
-
-## Transcript-level analyses
-
-### Prepare dataframe
-
-```{python}
+#| label: structural_category_labels
 structural_category_labels = {"full-splice_match": "Known", "incomplete-splice_match": "ISM", "novel_in_catalog": "NIC", "novel_not_in_catalog": "NNC", "Other": "Other"}
-lr_bulk = SingleCell("results/long_read/pbid_filtered.h5ad")
+```
 
+# Start here
+
+## Prepare dataframe
+
+```{python}
+#| label: add-len-and-nexon
 len_and_nexon = pl.read_csv(
     "proc/merged_collapsed.sorted.gff", separator = "\t",
     comment_prefix = "##", has_header=False, 
@@ -112,10 +83,11 @@ to_r(df, "df")
 ```
 
 ```{r}
+#| label: reorder-structural-category
 df$structural_category2 <- factor(df$structural_category2, levels = c("Known", "ISM", "NIC", "NNC", "Other"))
 ```
 
-### Transcripts Identified by Novelty
+## Transcripts Identified by Novelty
 
 ```{python}
 summary_df = df\
@@ -145,7 +117,7 @@ summary_df %>%
 ggsave("figures/transcripts_identified_by_novelty.png", width=7, height=4)
 ```
 
-### Novelty vs abundance
+## Novelty vs abundance
 
 ```{r}
 df %>% 
@@ -163,7 +135,7 @@ df %>%
 ggsave("figures/novelty_vs_abundance.png",width=5.5,height=3)
 ```
 
-### Novelty vs number of unique samples
+## Novelty vs number of unique samples
 
 ```{r}
 df %>% 
@@ -195,7 +167,7 @@ df %>%
 df.filter(pl.col("counts") > 3).shape[0] / df.shape[0]
 ```
 
-### Transcript Novelty vs Length
+## Transcript Novelty vs Length
 
 ```{r}
 df %>%
@@ -211,7 +183,7 @@ df %>%
 ggsave("figures/novelty_vs_length.png", width=5.5, height=3, dpi = 300)
 ```
 
-### Exon number
+## Exon number
 
 ```{r}
 df %>%
