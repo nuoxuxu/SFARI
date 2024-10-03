@@ -31,21 +31,9 @@ for file in data/long_read/LUO26876.20240514/*/outputs/flnc.bam; do
 done
 ```
 
-Get PB ID count matrix
+Filter out transcripts affected by intra-priming and RT switching
 
-```python
-import polars as pl
-
-id_to_sample = pl.read_csv("proc/id_to_sample.txt", separator = "\t", has_header = False, new_columns = ["id", "sample"]).with_columns(
-    pl.col("id")
-    .map_elements(lambda s: s.split("/")[0], return_dtype = pl.String),
-    pl.col("sample")
-    .map_elements(lambda s: s.rsplit("/")[3].rsplit("_", 2)[0], return_dtype = pl.String)
-).to_pandas().set_index("id").to_dict()["sample"]
-
-read_stat = pl.read_csv("proc/merged_collapsed.read_stat.txt", separator = "\t").with_columns(
-    pl.col("id")
-    .map_elements(lambda s: s.split("/")[0], return_dtype = pl.String),
-    pl.lit(1).alias("count")
-).group_by("id", "pbid").agg(pl.sum("count")).sort("pbid", descending=False).pivot("id", index = "pbid", values = "count").fill_null(0).rename(id_to_sample)
+```bash
+mamba activate tama
+pigeon filter proc/merged_collapsed_classification.txt
 ```
