@@ -1,4 +1,4 @@
-# Import packages
+# Preparation
 
 ```{python}
 #| label: import-python
@@ -20,105 +20,21 @@ library(scales)
 library(dplyr)
 ```
 
-```{r}
-#| label: color-vec
-colorVector <- c(
-  "full-splice_match" = "#009E73",
-  "incomplete-splice_match"   = "#0072B2",
-  "novel_in_catalog"   = "#D55E00",
-  "novel_not_in_catalog"   = "#E69F00",
-  "Other" = "#000000"
-)
-```
-
-# Prepare files for creating the IsoseqsSwitchList object
+# Build IsoformSwitchList object
 
 Get filtered isoform count matrix
 
 ```{python}
+#| label: get-Isoseq_Expression
 lr_bulk = SingleCell("results/long_read/pbid_filtered.h5ad")
 
-```
+Isoseq_Expression = lr_bulk.to_frame().rename({"pbid": "isoform_id"})
 
-```{python}
-#| label: Isoseq_Expression
-categories_to_show = ["full-splice_match", "incomplete-splice_match", "novel_in_catalog", "novel_not_in_catalog"]
-classification = pl.read_parquet("proc/filtered_lite_classification.parquet").rename({"isoform": "pbid"})\
-    .with_columns(
-        pl.when(pl.col("structural_category").is_in(categories_to_show)).then(pl.col("structural_category")).otherwise(pl.lit("Other")).alias("structural_category2"))
-
-pbid_count_matrix = pl.read_parquet("proc/pbid_count_matrix.parquet").with_columns(
-    pl.col("pbid"),
-    pl.sum_horizontal(cs.numeric() !=0).alias("n_unique_samples"),
-    pl.sum_horizontal(cs.numeric()).alias("counts"))
-
-Isoseq_Expression = classification["pbid", "structural_category2"]\
-    .join(pbid_count_matrix, on = ["pbid"], how = "inner")\
-    .filter(
-        (pl.col("structural_category2").is_in(["full-splice_match"]).not_() & (pl.col("n_unique_samples") > 1) & (pl.col("counts") > 3)) | (pl.col("structural_category2").is_in(["full-splice_match"]))
-        )\
-    .drop(["structural_category2", "counts", "n_unique_samples"])\
-    ["pbid", "iPSC_1", "iPSC_2", "iPSC_3", "NPC_1_1", "NPC_1_3", "NPC_2_1", "NPC_2_2", "NPC_3_1", "NPC_3_3", "CN_1_2", "CN_1_3", "CN_2_1", "CN_2_2", "CN_3_1", "CN_3_2"]
-```
-
-```{python}
-summary_df = Isoseq_Expression\
-    .join(classification, on = ["pbid"], how = "inner")\
-    .group_by("structural_category2")\
-    .agg(pl.count().alias("count"))\
-    .with_columns(
-        (pl.col("count") / pl.col("count").sum() * 100).alias("percentage")
-    )
-to_r(summary_df, "summary_df")    
-```
-
-```{r}
-summary_df %>% 
-    ggplot(aes(x = structural_category2, y = percentage, fill = structural_category2)) +
-    geom_bar(stat = "identity") +
-    geom_text(aes(label = paste0(round(percentage, 1), "%")), vjust = 2, colour = "white", size = 5) +
-    theme_bw() +
-    theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 12)) +
-    labs(x = "Structural Category", y = "Percentage", title = "Transcripts Identified by Novelty") +
-    scale_fill_manual(values=colorVector)
-```
-
-Filter gtf file based on the filtered isoform count matrix
-```{python}
-#| label: merged_collapsed_for_IsoformSwitchAnalyzeR.gtf
-pl.read_csv(
-    "proc/merged_collapsed.sorted.gff", separator = "\t",
-    comment_prefix = "##", has_header=False, 
-    new_columns=["seqid", "source", "type", "start", "end", "score", "strand", "phase", "attributes"]).with_columns(
-        pl.col("attributes").str.extract(r'transcript_id "([^;]*)";').alias("pbid")
-    )\
-    .filter(
-        pl.col("pbid").is_in(Isoseq_Expression["pbid"])
-    )\
-    .drop("pbid")\
-    .write_csv("merged_collapsed_for_IsoformSwitchAnalyzeR.gtf", separator="\t", include_header=False, quote_style="never")
-```
-
-Filter fasta file based on the filtered isoform count matrix
-
-```{bash}
-#| label: merged_collapsed_for_IsoformSwitchAnalyzeR.fasta
-Isoseq_Expression["pbid"].to_pandas().to_csv("pbid_list.txt", index=False, header=False)
-seqkit grep -f pbid_list.txt merged_collapsed.filtered_corrected.fasta > merged_collapsed_for_IsoformSwitchAnalyzeR.fasta
-```
-
-```{python}
-#| label: rename-columns
-Isoseq_Expression = Isoseq_Expression\
-    .rename(
-        {"pbid": "isoform_id"}
-    )
 to_r(Isoseq_Expression, "Isoseq_Expression")
 ```
 
-Get myDesign, the design matrix
 ```{r}
-#| label: myDesign
+#| label: get-myDesign
 sampleID <- colnames(Isoseq_Expression)[c(-1)]
 time_point <- str_split(sampleID, "_", 2) %>% map_chr(~ .x[1])
 myDesign <- data.frame(
@@ -127,18 +43,32 @@ myDesign <- data.frame(
 )
 ```
 
-Create IsoseqsSwitchList object
+```{python}
+#| label: get-isoformExonAnnoation
+pl.read_csv(
+    "proc/merged_collapsed.sorted.gff", separator = "\t",
+    comment_prefix = "##", has_header=False, 
+    new_columns=["seqid", "source", "type", "start", "end", "score", "strand", "phase", "attributes"]).with_columns(
+        pl.col("attributes").str.extract(r'transcript_id "([^;]*)";').alias("pbid")
+    )\
+    .filter(
+        pl.col("pbid").is_in(Isoseq_Expression["isoform_id"])
+    )\
+    .drop("pbid")\
+    .write_csv("proc/isoformExonAnnoation.gtf", separator="\t", include_header=False, quote_style="never")
+```
+
 ```{r}
-#| label: IsoseqsSwitchList
+#| label: create-IsoseqsSwitchList
 IsoseqsSwitchList <- importRdata(
     isoformCountMatrix = Isoseq_Expression,
     designMatrix = myDesign,
-    isoformExonAnnoation = "merged_collapsed_for_IsoformSwitchAnalyzeR.gtf",
-    isoformNtFasta = "merged_collapsed_for_IsoformSwitchAnalyzeR.fasta",
+    isoformExonAnnoation = "proc/isoformExonAnnoation.gtf",
+    isoformNtFasta = "SQANTI3_qc_corrected.fasta",
     addAnnotatedORFs = FALSE,
     fixStringTieAnnotationProblem = FALSE
 )
-saveRDS(IsoseqsSwitchList, "IsoseqsSwitchList.rds")
+saveRDS(IsoseqsSwitchList, "results/long_read/IsoseqsSwitchList.rds")
 ```
 
 # Run isoformSwitchTestDEXSeq
@@ -251,4 +181,89 @@ pivot_tab <- as.data.frame(pivot_tab)
 rownames(pivot_tab) <- pivot_tab$structural_category3
 pivot_tab <- pivot_tab[, -1]
 chi2 <- chisq.test(pivot_tab)
+```
+
+## Analyzing Open Reading Frames
+
+```{r}
+library("BSgenome.Hsapiens.UCSC.hg38")
+bsg <- BSgenome.Hsapiens.UCSC.hg38
+```
+
+```{r}
+#| label: import-switchAnalyzeRlist
+IsoseqsSwitchList_part1 <- readRDS("proc/IsoseqsSwitchList_part1.rds")
+```
+
+```{r}
+#| label: addORFfromGTF
+# addORFfromGTF(
+#     IsoseqsSwitchList_part1,
+#     "/project/s/shreejoy/Genomic_references/GENCODE/gencode.v39.annotation.gtf",
+# )
+```
+
+```{bash}
+sbatch -t 0-2:0 -N 1 -n 1 -J analyzeORF -o slurm_logs/analyzeR.out --wrap="~/miniforge3/envs/patch_seq_spl/bin/Rscript scripts/analyzeORF.R"
+```
+
+```{r}
+IsoseqsSwitchList_part1_Analyzed <- readRDS("IsoseqsSwitchList_part1_Analyzed.rds")
+```
+
+```{bash}
+sbatch -t 0-2:0 -N 1 -n 1 -J analyzeSwitchConsequences -o slurm_logs/analyzeSwitchConsequences.out --wrap="~/miniforge3/envs/patch_seq_spl/bin/Rscript scripts/analyzeSwitchConsequences.R"
+```
+
+# Part 2
+
+```{r}
+IsoseqsSwitchList_part1_Analyzed <- readRDS("IsoseqsSwitchList_part1_Analyzed.rds")
+
+IsoseqsSwitchList_part1_Analyzed <- extractSequence(IsoseqsSwitchList_part1_Analyzed, bsg)
+
+IsoseqsSwitchList_part1_Analyzed <- analyzeAlternativeSplicing(IsoseqsSwitchList_part1_Analyzed)
+```
+
+```{r}
+saveRDS(IsoseqsSwitchList_part1_Analyzed, "IsoseqsSwitchList_part1_Analyzed_2.rds")
+```
+
+```{r}
+consequencesOfInterest <- c('intron_retention','NMD_status','ORF_seq_similarity')
+
+IsoseqsSwitchList_part1_Analyzed_Predicted <- analyzeSwitchConsequences(
+    IsoseqsSwitchList_part1_Analyzed,
+    consequencesToAnalyze = consequencesOfInterest,
+    dIFcutoff = 0.4, # very high cutoff for fast runtimes - you should use the default (0.1)
+    showProgress=FALSE
+)
+```
+
+```{r}
+IsoseqsSwitchList_part1_Analyzed_Predicted <- readRDS("IsoseqsSwitchList_part1_Analyzed_Predicted.rds")
+```
+
+```{r}
+extractSwitchOverlap(
+    IsoseqsSwitchList_part1_Analyzed_Predicted,
+    filterForConsequences=TRUE,
+    plotIsoforms = FALSE
+)
+```
+
+```{r}
+extractConsequenceEnrichment(
+    IsoseqsSwitchList_part1_Analyzed_Predicted,
+    consequencesToAnalyze='all',
+    analysisOppositeConsequence = TRUE,
+    localTheme = theme_bw(base_size = 14), # Increase font size in vignette
+    returnResult = FALSE # if TRUE returns a data.frame with the summary statistics
+)
+
+```
+
+
+```{r}
+extractConsequenceEnrichment
 ```
