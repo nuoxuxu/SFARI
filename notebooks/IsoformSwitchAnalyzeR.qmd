@@ -4,7 +4,7 @@
 #| label: import-python
 import polars as pl
 import polars.selectors as cs
-from src.ryp import r, to_r, to_py
+from src.ryp import r, to_r, to_py, set_config
 from src.single_cell import SingleCell
 ```
 
@@ -68,24 +68,22 @@ IsoseqsSwitchList <- importRdata(
     addAnnotatedORFs = FALSE,
     fixStringTieAnnotationProblem = FALSE
 )
-saveRDS(IsoseqsSwitchList, "results/long_read/IsoseqsSwitchList.rds")
 ```
 
-# Run isoformSwitchTestDEXSeq
+# IsoformSwitchAnalysis
 
 Run IsoformSwitchAnalyzeR prefilter because running DEXSeq is computationally expensive
 
 ```{r}
 #| label: preFilter
-IsoseqsSwitchList <- readRDS("IsoseqsSwitchList.rds")
 IsoseqsSwitchList <- preFilter(
-switchAnalyzeRlist         = IsoseqsSwitchList,
-geneExpressionCutoff       = 1, # default
-isoformExpressionCutoff    = 0, # default
-IFcutoff                   = 0.01, # default
-removeSingleIsoformGenes   = TRUE, # default
-reduceToSwitchingGenes     = FALSE, # default (we didn"t run DEXSeq yet)
-keepIsoformInAllConditions = TRUE # we only have 2 conditions so doesn"t matter
+    switchAnalyzeRlist         = IsoseqsSwitchList,
+    geneExpressionCutoff       = 1, # default
+    isoformExpressionCutoff    = 0, # default
+    IFcutoff                   = 0.01, # default
+    removeSingleIsoformGenes   = TRUE, # default
+    reduceToSwitchingGenes     = FALSE, # default (we didn"t run DEXSeq yet)
+    keepIsoformInAllConditions = TRUE # we only have 2 conditions so doesn"t matter
 )
 ```
 
@@ -95,23 +93,182 @@ IsoseqsSwitchList_part1 <- isoformSwitchTestDEXSeq(
     switchAnalyzeRlist = IsoseqsSwitchList,
     reduceToSwitchingGenes = FALSE
 )
-saveRDS(IsoseqsSwitchList_part1, "proc/IsoseqsSwitchList_part1.rds")
 ```
 
-# Start from here
-
-Get `isoformSwitchAnalysis` object to a Polars Dataframe
+```{r}
+#| label: analyzeORF
+library("BSgenome.Hsapiens.UCSC.hg38")
+bsg <- BSgenome.Hsapiens.UCSC.hg38
+IsoseqsSwitchList <- analyzeORF(IsoseqsSwitchList, bsg)
+```
 
 ```{r}
-#| label: read-IsoseqsSwitchList_part1.rds
-IsoseqsSwitchList_part1 <- readRDS("proc/IsoseqsSwitchList_part1.rds")
+#| label: extractSequence
+library("BSgenome.Hsapiens.UCSC.hg38")
+IsoseqsSwitchList <- extractSequence(IsoseqsSwitchList, bsg)
+```
+
+```{r}
+#| label: analyzeAlternativeSplicing
+IsoseqsSwitchList <- analyzeAlternativeSplicing(IsoseqsSwitchList)
+```
+
+# External sequence analysis
+
+## Coding potential
+
+```{r}
+#| label: get-pbid_list
+unique(IsoseqsSwitchList$isoformFeatures$isoform_id) %>%
+    writeLines("pbid_list.txt")
+```
+
+```{bash}
+#| label: seqkit
+seqkit grep -f pbid_list.txt SQANTI3_qc_corrected.fasta > cpc2.fasta
+```
+
+```{bash}
+#| label: run-CPC2
+cd ~/tools
+wget https://github.com/gao-lab/CPC2_standalone/archive/refs/tags/v1.0.1.tar.gz
+cd CPC2-beta
+export CPC_HOME="$PWD"
+cd libs/libsvm
+gzip -dc libsvm-3.18.tar.gz | tar xf -
+cd libsvm-3.18
+make clean && make
+cd $CPC_HOME && python ./bin/CPC2.py -i /scratch/s/shreejoy/nxu/SFARI/cpc2.fasta -o /scratch/s/shreejoy/nxu/SFARI/CPC2result.txt
+```
+
+```{r}
+#| label: analyzeCPC2
+IsoseqsSwitchList <- analyzeCPC2(
+    IsoseqsSwitchList,
+    "CPC2result.txt.txt",
+    removeNoncodinORFs = TRUE
+)
+```
+
+
+## Pfam domain analysis
+
+```{bash}
+#| label: pfam_scan.pl
+
+# Create environment
+mamba create -n pfam_scan perl perl-moose perl-ipc-run hmmer
+mamba activate pfam_scan
+
+# Getting Pfam_scan
+cd ~/tools
+wget http://ftp.ebi.ac.uk/pub/databases/Pfam/Tools/PfamScan.tar.gz
+tar -xvf PfamScan.tar.gz
+
+# Setting up Pfam flat files
+mkdir Pfam_flat_files
+cd Pfam_flat_files 
+wget http://ftp.ebi.ac.uk/pub/databases/Pfam/current_release/Pfam-A.hmm.dat.gz
+wget http://ftp.ebi.ac.uk/pub/databases/Pfam/current_release/Pfam-A.hmm.gz
+
+gunzip Pfam_*.gz
+formatdb -i Pfam-A.fasta -p T
+
+# Getting Pfam_scan modules in the perl search path
+export PERL5LIB=/home/s/shreejoy/nxu/tools/PfamScan:$PERL5LIB
+
+# Running Pfam_scan
+cd ${SCRATCH}/SFARI
+/home/s/shreejoy/nxu/tools/PfamScan/pfam_scan.pl -fasta isoformSwitchAnalyzeR_isoform_AA.fasta -dir /home/s/shreejoy/nxu/tools/Pfam_flat_files -cpu 30 -outfile pfam_scan_results.txt
+```
+
+```{r}
+#| label: analyzePfam
+analyzePFAM(
+    IsoseqsSwitchList,
+    pfam_scan_results.txt
+)
+```
+
+# Predict Isoform Switch consequences
+
+```{r}
+#| label: analyzeSwitchConsequences
+consequencesOfInterest <- c('intron_retention','coding_potential','NMD_status','domains_identified','ORF_seq_similarity')
+
+IsoseqsSwitchList <- analyzeSwitchConsequences(
+    IsoseqsSwitchList,
+    consequencesToAnalyze = consequencesOfInterest, 
+    dIFcutoff = 0.4, # very high cutoff for fast runtimes - you should use the default (0.1)
+    showProgress=FALSE
+)
+```
+
+# Visualization
+
+```{r}
+#| label: load-IsoseqsSwitchList
+IsoseqsSwitchList <- readRDS("results/long_read/IsoseqsSwitchList_part1_Analyzed_2.rds")
+```
+
+```{r}
+
+```
+
+## Add gene names
+
+```{python}
+to_r(lr_bulk.var["pbid", "associated_gene"], "pb_id_to_gene")
+```
+
+```{r}
+IsoseqsSwitchList$isoformFeatures <- IsoseqsSwitchList$isoformFeatures %>% 
+    dplyr::left_join(pb_id_to_gene, by = c("isoform_id" = "pbid")) %>% 
+    mutate(gene_name = associated_gene) %>% 
+    select(-associated_gene)
+```
+
+```{r}
+switchPlot(
+    IsoseqsSwitchList,
+    condition1 = "CN",
+    condition2 = "iPSC",
+    gene = "RER1"
+)
+```
+
+```{r}
+extractSplicingSummary(
+    IsoseqsSwitchList,
+    asFractionTotal = FALSE,
+    plotGenes=FALSE
+)
 ```
 
 ```{python}
-#| label: IsoseqsSwitchList_part1-to-polars
-isoformSwitchAnalysis = to_py("IsoseqsSwitchList_part1$isoformSwitchAnalysis")
+set_config(plot_width = 10, plot_height = 7)
+r("extractSplicingEnrichment(IsoseqsSwitchList)")
 ```
 
+```{python}
+set_config(plot_width = 12, plot_height = 7)
+r("extractSplicingEnrichmentComparison(IsoseqsSwitchList)")
+```
+
+```{python}
+set_config(plot_width = 12, plot_height = 7)
+r("extractSplicingGenomeWide(IsoseqsSwitchList)")
+```
+
+```{r}
+extractSplicingSummary(
+    IsoseqsSwitchList,
+    asFractionTotal = FALSE,
+    plotGenes=FALSE
+)
+```
+
+# Garbage
 ```{python}
 #| label: data-wrangling
 CN_vs_iPSC = isoformSwitchAnalysis\
@@ -183,66 +340,7 @@ pivot_tab <- pivot_tab[, -1]
 chi2 <- chisq.test(pivot_tab)
 ```
 
-## Analyzing Open Reading Frames
-
-```{r}
-library("BSgenome.Hsapiens.UCSC.hg38")
-bsg <- BSgenome.Hsapiens.UCSC.hg38
-```
-
-```{r}
-#| label: import-switchAnalyzeRlist
-IsoseqsSwitchList_part1 <- readRDS("proc/IsoseqsSwitchList_part1.rds")
-```
-
-```{r}
-#| label: addORFfromGTF
-# addORFfromGTF(
-#     IsoseqsSwitchList_part1,
-#     "/project/s/shreejoy/Genomic_references/GENCODE/gencode.v39.annotation.gtf",
-# )
-```
-
-```{bash}
-sbatch -t 0-2:0 -N 1 -n 1 -J analyzeORF -o slurm_logs/analyzeR.out --wrap="~/miniforge3/envs/patch_seq_spl/bin/Rscript scripts/analyzeORF.R"
-```
-
-```{r}
-IsoseqsSwitchList_part1_Analyzed <- readRDS("IsoseqsSwitchList_part1_Analyzed.rds")
-```
-
-```{bash}
-sbatch -t 0-2:0 -N 1 -n 1 -J analyzeSwitchConsequences -o slurm_logs/analyzeSwitchConsequences.out --wrap="~/miniforge3/envs/patch_seq_spl/bin/Rscript scripts/analyzeSwitchConsequences.R"
-```
-
 # Part 2
-
-```{r}
-IsoseqsSwitchList_part1_Analyzed <- readRDS("IsoseqsSwitchList_part1_Analyzed.rds")
-
-IsoseqsSwitchList_part1_Analyzed <- extractSequence(IsoseqsSwitchList_part1_Analyzed, bsg)
-
-IsoseqsSwitchList_part1_Analyzed <- analyzeAlternativeSplicing(IsoseqsSwitchList_part1_Analyzed)
-```
-
-```{r}
-saveRDS(IsoseqsSwitchList_part1_Analyzed, "IsoseqsSwitchList_part1_Analyzed_2.rds")
-```
-
-```{r}
-consequencesOfInterest <- c('intron_retention','NMD_status','ORF_seq_similarity')
-
-IsoseqsSwitchList_part1_Analyzed_Predicted <- analyzeSwitchConsequences(
-    IsoseqsSwitchList_part1_Analyzed,
-    consequencesToAnalyze = consequencesOfInterest,
-    dIFcutoff = 0.4, # very high cutoff for fast runtimes - you should use the default (0.1)
-    showProgress=FALSE
-)
-```
-
-```{r}
-IsoseqsSwitchList_part1_Analyzed_Predicted <- readRDS("IsoseqsSwitchList_part1_Analyzed_Predicted.rds")
-```
 
 ```{r}
 extractSwitchOverlap(
@@ -263,7 +361,27 @@ extractConsequenceEnrichment(
 
 ```
 
+```{r}
+extractSwitchSummary
+```
+
+```{r}
+analyzeSwitchConsequences(IsoseqsSwitchList)
+```
+
+```{r}
+extractConsequenceSummary()
+```
 
 ```{r}
 extractConsequenceEnrichment
 ```
+
+
+# To-dos
+- Merge the isoformSwitchAnalysis table withc consequences of the switches
+- Add gene names to the isoformSwitchAnalysis table
+- Figure out how the consequences are calculated
+- Add the switchplot to shinyapp
+- Find examples of mutually exclusive events (MES)
+- Prioritize calculating mRNA-level features
