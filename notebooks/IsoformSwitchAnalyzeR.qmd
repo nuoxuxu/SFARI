@@ -68,6 +68,7 @@ IsoseqsSwitchList <- importRdata(
     addAnnotatedORFs = FALSE,
     fixStringTieAnnotationProblem = FALSE
 )
+saveRDS(IsoseqsSwitchList, "results/long_read/IsoseqsSwitchList.rds")
 ```
 
 # IsoformSwitchAnalysis
@@ -76,7 +77,7 @@ Run IsoformSwitchAnalyzeR prefilter because running DEXSeq is computationally ex
 
 ```{r}
 #| label: preFilter
-IsoseqsSwitchList <- preFilter(
+IsoseqsSwitchList_filtered <- preFilter(
     switchAnalyzeRlist         = IsoseqsSwitchList,
     geneExpressionCutoff       = 1, # default
     isoformExpressionCutoff    = 0, # default
@@ -85,11 +86,12 @@ IsoseqsSwitchList <- preFilter(
     reduceToSwitchingGenes     = FALSE, # default (we didn"t run DEXSeq yet)
     keepIsoformInAllConditions = TRUE # we only have 2 conditions so doesn"t matter
 )
+saveRDS(IsoseqsSwitchList_filtered, "results/long_read/IsoseqsSwitchList_filtered.rds")
 ```
 
 ```{r}
 #| label: isoformSwitchTestDEXSeq
-IsoseqsSwitchList_part1 <- isoformSwitchTestDEXSeq(
+IsoseqsSwitchList <- isoformSwitchTestDEXSeq(
     switchAnalyzeRlist = IsoseqsSwitchList,
     reduceToSwitchingGenes = FALSE
 )
@@ -111,6 +113,13 @@ IsoseqsSwitchList <- extractSequence(IsoseqsSwitchList, bsg)
 ```{r}
 #| label: analyzeAlternativeSplicing
 IsoseqsSwitchList <- analyzeAlternativeSplicing(IsoseqsSwitchList)
+```
+
+For downstream analyses, we need all isoforms to be labeled with alternative splicing consequences
+
+```{bash}
+#| label: full-analyzeAlternativeSplicing
+sbatch -t 0-6:0 -N 1 -n 1 -J full_analyzeAlternativeSplicing -o slurm_logs/full_analyzeAlternativeSplicing.out --wrap="/home/s/shreejoy/nxu/miniforge3/envs/patch_seq_spl/bin/Rscript scripts/full_analyzeAlternativeSplicing.R"
 ```
 
 # External sequence analysis
@@ -168,18 +177,19 @@ tar -xvf PfamScan.tar.gz
 # Setting up Pfam flat files
 mkdir Pfam_flat_files
 cd Pfam_flat_files 
-wget http://ftp.ebi.ac.uk/pub/databases/Pfam/current_release/Pfam-A.hmm.dat.gz
-wget http://ftp.ebi.ac.uk/pub/databases/Pfam/current_release/Pfam-A.hmm.gz
+wget http://ftp.ebi.ac.uk/pub/databases/Pfam/current_release/Pfam-A.hmm.dat.gz http://ftp.ebi.ac.uk/pub/databases/Pfam/current_release/Pfam-A.hmm.gz http://ftp.ebi.ac.uk/pub/databases/Pfam/current_release/active_site.dat.gz
 
 gunzip Pfam_*.gz
-formatdb -i Pfam-A.fasta -p T
+hmmpress Pfam-A.hmm
 
 # Getting Pfam_scan modules in the perl search path
 export PERL5LIB=/home/s/shreejoy/nxu/tools/PfamScan:$PERL5LIB
 
 # Running Pfam_scan
 cd ${SCRATCH}/SFARI
-/home/s/shreejoy/nxu/tools/PfamScan/pfam_scan.pl -fasta isoformSwitchAnalyzeR_isoform_AA.fasta -dir /home/s/shreejoy/nxu/tools/Pfam_flat_files -cpu 30 -outfile pfam_scan_results.txt
+/home/s/shreejoy/nxu/tools/PfamScan/pfam_scan.pl -fasta isoformSwitchAnalyzeR_isoform_AA.fasta -dir /home/s/shreejoy/nxu/tools/Pfam_flat_files -cpu 40 -outfile pfam_scan_results.txt
+
+sbatch scripts/pfam_scan.sh
 ```
 
 ```{r}
@@ -209,10 +219,11 @@ IsoseqsSwitchList <- analyzeSwitchConsequences(
 ```{r}
 #| label: load-IsoseqsSwitchList
 IsoseqsSwitchList <- readRDS("results/long_read/IsoseqsSwitchList_part1_Analyzed_2.rds")
+
 ```
 
 ```{r}
-
+IsoseqsSwitchList_part2 <- readRDS("IsoseqsSwitchList_part2.rds")
 ```
 
 ## Add gene names
@@ -233,7 +244,7 @@ switchPlot(
     IsoseqsSwitchList,
     condition1 = "CN",
     condition2 = "iPSC",
-    gene = "RER1"
+    gene = "SCN2A"
 )
 ```
 
@@ -344,7 +355,7 @@ chi2 <- chisq.test(pivot_tab)
 
 ```{r}
 extractSwitchOverlap(
-    IsoseqsSwitchList_part1_Analyzed_Predicted,
+    IsoseqsSwitchList,
     filterForConsequences=TRUE,
     plotIsoforms = FALSE
 )
@@ -352,7 +363,7 @@ extractSwitchOverlap(
 
 ```{r}
 extractConsequenceEnrichment(
-    IsoseqsSwitchList_part1_Analyzed_Predicted,
+    IsoseqsSwitchList_part1_Analyzed_2,
     consequencesToAnalyze='all',
     analysisOppositeConsequence = TRUE,
     localTheme = theme_bw(base_size = 14), # Increase font size in vignette
@@ -374,12 +385,12 @@ extractConsequenceSummary()
 ```
 
 ```{r}
-extractConsequenceEnrichment
+extractConsequenceEnrichment(IsoseqsSwitchList)
 ```
 
 
 # To-dos
-- Merge the isoformSwitchAnalysis table withc consequences of the switches
+- Merge the isoformSwitchAnalysis table with consequences of the switches
 - Add gene names to the isoformSwitchAnalysis table
 - Figure out how the consequences are calculated
 - Add the switchplot to shinyapp
