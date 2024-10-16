@@ -6,6 +6,7 @@ import polars as pl
 import polars.selectors as cs
 from src.ryp import r, to_r, to_py, set_config
 from src.single_cell import SingleCell
+from src.utils import read_gtf
 ```
 
 ```{r}
@@ -97,29 +98,60 @@ IsoseqsSwitchList <- isoformSwitchTestDEXSeq(
 )
 ```
 
-```{r}
-#| label: analyzeORF
-library("BSgenome.Hsapiens.UCSC.hg38")
-bsg <- BSgenome.Hsapiens.UCSC.hg38
-IsoseqsSwitchList <- analyzeORF(IsoseqsSwitchList, bsg)
-```
 
-```{r}
-#| label: extractSequence
-library("BSgenome.Hsapiens.UCSC.hg38")
-IsoseqsSwitchList <- extractSequence(IsoseqsSwitchList, bsg)
-```
-
-```{r}
-#| label: analyzeAlternativeSplicing
-IsoseqsSwitchList <- analyzeAlternativeSplicing(IsoseqsSwitchList)
-```
+# Analyze Alternative Splicing
 
 For downstream analyses, we need all isoforms to be labeled with alternative splicing consequences
 
 ```{bash}
-#| label: full-analyzeAlternativeSplicing
+#| label: analyzeAlternativeSplicing
 sbatch -t 0-6:0 -N 1 -n 1 -J full_analyzeAlternativeSplicing -o slurm_logs/full_analyzeAlternativeSplicing.out --wrap="/home/s/shreejoy/nxu/miniforge3/envs/patch_seq_spl/bin/Rscript scripts/full_analyzeAlternativeSplicing.R"
+```
+
+# Analyze Open Reading Frames
+
+```{python}
+#| label: write-addORFfromGTF.gtf
+gencode_v39 = read_gtf("/project/s/shreejoy/Genomic_references/GENCODE/gencode.v39.annotation.gtf", attributes = ["transcript_id", "gene_id", "gene_name", "gene_type", "transcript_type"])\
+    .filter(pl.col("feature").is_in(["exon", "CDS"]))
+
+pbid_to_transcript_id = lr_bulk\
+    .filter_var(pl.col("structural_category") == "full-splice_match")\
+    .var["pbid", "associated_transcript"]\
+    .rename({"associated_transcript": "transcript_id"})\
+    .cast({"transcript_id": pl.String})
+
+pbid_to_transcript_id\
+    .join(gencode_v39, on = "transcript_id", how = "inner")\
+    .with_columns(
+        gene_id = pl.col("pbid").cast(pl.String).map_elements(lambda x: x.rsplit(".", 1)[0], return_dtype=pl.String)
+    )\
+    .with_columns(
+        attributes = pl.lit('gene_name "') + pl.col("gene_name") + pl.lit('"; transcript_id "') + pl.col("pbid") + pl.lit('"; gene_id "') + pl.col("gene_id") + pl.lit('"; gene_type "') + pl.col("gene_type") + pl.lit('"; transcript_type "') + pl.col("transcript_type") + pl.lit('";')
+    )\
+    .select("seqname","source","feature","start","end","score","strand","frame","attributes")\
+    .write_csv("addORFfromGTF.gtf", quote_style = "never", separator = "\t", include_header = False)
+```
+
+```{r}
+#| label: analyze-known-isoforms-orf
+IsoseqsSwitchList <- addORFfromGTF(
+    IsoseqsSwitchList,
+    overwriteExistingORF=TRUE,
+    "addORFfromGTF.gtf")
+```
+
+```{r}
+#| label: analyze-novel-isoforms-orf
+library("BSgenome.Hsapiens.UCSC.hg38")
+bsg <- BSgenome.Hsapiens.UCSC.hg38
+
+IsoseqsSwitchList <- analyzeNovelIsoformORF(
+    IsoseqsSwitchList,
+    TRUE,
+    bsg,
+    minORFlength = 0
+)
 ```
 
 # External sequence analysis
@@ -129,12 +161,12 @@ sbatch -t 0-6:0 -N 1 -n 1 -J full_analyzeAlternativeSplicing -o slurm_logs/full_
 ```{r}
 #| label: get-pbid_list
 unique(IsoseqsSwitchList$isoformFeatures$isoform_id) %>%
-    writeLines("pbid_list.txt")
+    writeLines("full_pbid_list.txt")
 ```
 
 ```{bash}
 #| label: seqkit
-seqkit grep -f pbid_list.txt SQANTI3_qc_corrected.fasta > cpc2.fasta
+seqkit grep -f full_pbid_list.txt SQANTI3_qc_corrected.fasta > full_cpc2.fasta
 ```
 
 ```{bash}
@@ -147,18 +179,21 @@ cd libs/libsvm
 gzip -dc libsvm-3.18.tar.gz | tar xf -
 cd libsvm-3.18
 make clean && make
-cd $CPC_HOME && python ./bin/CPC2.py -i /scratch/s/shreejoy/nxu/SFARI/cpc2.fasta -o /scratch/s/shreejoy/nxu/SFARI/CPC2result.txt
+cd $CPC_HOME && python ./bin/CPC2.py -i /scratch/s/shreejoy/nxu/SFARI/cpc2.fasta -o /scratch/s/shreejoy/nxu/SFARI/full_CPC2result.txt
 ```
 
 ```{r}
 #| label: analyzeCPC2
 IsoseqsSwitchList <- analyzeCPC2(
     IsoseqsSwitchList,
-    "CPC2result.txt.txt",
+    "full_CPC2result.txt",
     removeNoncodinORFs = TRUE
 )
 ```
 
+```{r}
+saveRDS(IsoseqsSwitchList, "results/long_read/IsoseqsSwitchList.rds")
+```
 
 ## Pfam domain analysis
 
@@ -187,16 +222,16 @@ export PERL5LIB=/home/s/shreejoy/nxu/tools/PfamScan:$PERL5LIB
 
 # Running Pfam_scan
 cd ${SCRATCH}/SFARI
-/home/s/shreejoy/nxu/tools/PfamScan/pfam_scan.pl -fasta isoformSwitchAnalyzeR_isoform_AA.fasta -dir /home/s/shreejoy/nxu/tools/Pfam_flat_files -cpu 40 -outfile pfam_scan_results.txt
+/home/s/shreejoy/nxu/tools/PfamScan/pfam_scan.pl -fasta full_AA.fasta -dir /home/s/shreejoy/nxu/tools/Pfam_flat_files -cpu 40 -outfile pfam_scan_results.txt
 
 sbatch scripts/pfam_scan.sh
 ```
 
 ```{r}
 #| label: analyzePfam
-analyzePFAM(
+IsoseqsSwitchList <- analyzePFAM(
     IsoseqsSwitchList,
-    pfam_scan_results.txt
+    "pfam_scan_results.txt"
 )
 ```
 
@@ -209,7 +244,7 @@ consequencesOfInterest <- c('intron_retention','coding_potential','NMD_status','
 IsoseqsSwitchList <- analyzeSwitchConsequences(
     IsoseqsSwitchList,
     consequencesToAnalyze = consequencesOfInterest, 
-    dIFcutoff = 0.4, # very high cutoff for fast runtimes - you should use the default (0.1)
+    dIFcutoff = 0.1, # very high cutoff for fast runtimes - you should use the default (0.1)
     showProgress=FALSE
 )
 ```
@@ -218,12 +253,7 @@ IsoseqsSwitchList <- analyzeSwitchConsequences(
 
 ```{r}
 #| label: load-IsoseqsSwitchList
-IsoseqsSwitchList <- readRDS("results/long_read/IsoseqsSwitchList_part1_Analyzed_2.rds")
-
-```
-
-```{r}
-IsoseqsSwitchList_part2 <- readRDS("IsoseqsSwitchList_part2.rds")
+IsoseqsSwitchList <- readRDS("results/long_read/full_analyzeAlternativeSplicing.rds")
 ```
 
 ## Add gene names
@@ -244,7 +274,9 @@ switchPlot(
     IsoseqsSwitchList,
     condition1 = "CN",
     condition2 = "iPSC",
-    gene = "SCN2A"
+    isoform_id = c("PB.44.412", "PB.44.700"),
+    IFcutoff = 0,
+    dIFcutoff = 0
 )
 ```
 
@@ -381,13 +413,16 @@ analyzeSwitchConsequences(IsoseqsSwitchList)
 ```
 
 ```{r}
-extractConsequenceSummary()
+extractConsequenceSummary(IsoseqsSwitchList)
 ```
 
 ```{r}
 extractConsequenceEnrichment(IsoseqsSwitchList)
 ```
 
+```{r}
+addORFfromGTF(IsoseqsSwitchList)
+```
 
 # To-dos
 - Merge the isoformSwitchAnalysis table with consequences of the switches
@@ -396,3 +431,4 @@ extractConsequenceEnrichment(IsoseqsSwitchList)
 - Add the switchplot to shinyapp
 - Find examples of mutually exclusive events (MES)
 - Prioritize calculating mRNA-level features
+- Find examples of isoform switches for each consequence in SplicingEnrichment.png
