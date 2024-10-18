@@ -34,7 +34,7 @@ from src.single_cell import SingleCell
 ```
 
 ```{python}
-data = pl.read_csv("output_file.tsv", has_header=True, separator="\t")
+data = pl.read_csv("results/long_read/percolator.tsv", has_header=True, separator="\t")
 
 data = data\
     .with_columns(
