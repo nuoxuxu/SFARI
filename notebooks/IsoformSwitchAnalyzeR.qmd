@@ -78,7 +78,7 @@ Run IsoformSwitchAnalyzeR prefilter because running DEXSeq is computationally ex
 
 ```{r}
 #| label: preFilter
-IsoseqsSwitchList_filtered <- preFilter(
+preFilter(
     switchAnalyzeRlist         = IsoseqsSwitchList,
     geneExpressionCutoff       = 1, # default
     isoformExpressionCutoff    = 0, # default
@@ -87,7 +87,6 @@ IsoseqsSwitchList_filtered <- preFilter(
     reduceToSwitchingGenes     = FALSE, # default (we didn"t run DEXSeq yet)
     keepIsoformInAllConditions = TRUE # we only have 2 conditions so doesn"t matter
 )
-saveRDS(IsoseqsSwitchList_filtered, "results/long_read/IsoseqsSwitchList_filtered.rds")
 ```
 
 ```{r}
@@ -191,10 +190,6 @@ IsoseqsSwitchList <- analyzeCPC2(
 )
 ```
 
-```{r}
-saveRDS(IsoseqsSwitchList, "results/long_read/IsoseqsSwitchList.rds")
-```
-
 ## Pfam domain analysis
 
 ```{bash}
@@ -231,7 +226,7 @@ sbatch scripts/pfam_scan.sh
 #| label: analyzePfam
 IsoseqsSwitchList <- analyzePFAM(
     IsoseqsSwitchList,
-    "pfam_scan_results.txt"
+    "results/long_read/pfam_scan_results.txt"
 )
 ```
 
@@ -249,11 +244,66 @@ IsoseqsSwitchList <- analyzeSwitchConsequences(
 )
 ```
 
+# Add IsoseqsSwitchList annotations to lr_bulk
+
+## Add ORF information to lr_bulk
+
+```{python}
+orfAnalysis = to_py("IsoseqsSwitchList$orfAnalysis")
+
+lr_bulk.var = lr_bulk.var\
+    .join(orfAnalysis.rename({"isoform_id": "pbid"}), on = "pbid", how = "inner").drop(["index", "ORF_length", "CDS_length", "CDS_start", "CDS_end", "CDS_genomic_start", "CDS_genomic_end", "predicted_NMD", "min_sample_cov", "min_cov", "min_cov_pos", "sd_cov", "FL", "n_indels", "n_indels_junc", "iso_exp", "gene_exp", "ratio_exp", "ratio_TSS", "fl_assoc", "cell_barcodes"])
+```
+
+## Add coding potential to lr_bulk
+
+```{python}
+codingPotential = isoformFeatures\
+    .filter(
+        (pl.col("condition_1") == "CN") & (pl.col("condition_2") == "iPSC")\
+    )\
+    .select("isoform_id", "codingPotentialValue", "codingPotential")\
+    .rename({"isoform_id": "pbid"})
+
+lr_bulk.var = lr_bulk.var\
+    .join(codingPotential, on = "pbid", how = "inner")
+```
+
+```{python}
+gencode_v39 = read_gtf(f"{os.getenv("GENOMIC_DATA_DIR")}GENCODE/gencode.v39.annotation.gtf", attributes = ["transcript_id", "transcript_type"])\
+    .filter(pl.col("feature") == "transcript")
+
+lr_bulk.var = lr_bulk.var\
+    .cast({"associated_transcript": pl.String})\
+    .join(gencode_v39["transcript_id", "transcript_type"].rename({"transcript_id": "associated_transcript"}), on = "associated_transcript", how = "left")
+```
+
+## Add isoformSwitchAnalysis to lr_bulk
+
+```{python}
+isoformSwitchAnalysis = to_py("IsoseqsSwitchList$isoformSwitchAnalysis").drop("index")
+```
+
+```{python}
+isoformSwitchAnalysis\
+    .filter((pl.col("condition_1")=="CN") & (pl.col("condition_2")=="iPSC"))
+```  
+
+# Proteomics data
+
+```{python}
+data = pl.read_csv("tc_1154_F1A_JM10561.csv")
+```
+
+```{python}
+data["protein"].cast(pl.List(pl.String))
+```
+
 # Visualization
 
 ```{r}
 #| label: load-IsoseqsSwitchList
-IsoseqsSwitchList <- readRDS("results/long_read/full_analyzeAlternativeSplicing.rds")
+IsoseqsSwitchList <- readRDS("results/long_read/IsoseqsSwitchList.rds")
 ```
 
 ## Add gene names
