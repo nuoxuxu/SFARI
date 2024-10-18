@@ -1,4 +1,22 @@
+# Generate protein search database
 
 ```{bash}
-~/tools/comet.linux.exe
+sbatch scripts/submit_comet.sh
+```
+
+```{bash}
+ls data/tc-1154/*.pin | xargs -I {} tail -n +2 {} > pooled.pin
+```
+
+```{bash}
+percolator pooled.pin > pooled.tsv
+```
+
+```{python}
+import polars as pl
+```
+
+
+```{python}
+data = pl.read_csv("pooled.tsv", has_header=True, delimiter="\t")
 ```
