@@ -317,6 +317,7 @@ extractSplicingSummary(
 ```
 
 # Garbage
+
 ```{python}
 #| label: data-wrangling
 CN_vs_iPSC = isoformSwitchAnalysis\
@@ -388,45 +389,31 @@ pivot_tab <- pivot_tab[, -1]
 chi2 <- chisq.test(pivot_tab)
 ```
 
-# Part 2
+# Start here
 
 ```{r}
-extractSwitchOverlap(
+IsoseqsSwitchList <- readRDS("results/long_read/IsoseqsSwitchList_part_final.rds")
+```
+
+```{r}
+#| label: analyzeSwitchConsequences
+consequencesOfInterest <- c('intron_retention','coding_potential','NMD_status','domains_identified','ORF_seq_similarity')
+
+IsoseqsSwitchList <- analyzeSwitchConsequences(
     IsoseqsSwitchList,
-    filterForConsequences=TRUE,
-    plotIsoforms = FALSE
+    consequencesToAnalyze = consequencesOfInterest, 
+    dIFcutoff = 0.1, # very high cutoff for fast runtimes - you should use the default (0.1)
+    showProgress=FALSE
 )
+saveRDS(IsoseqsSwitchList, "results/long_read/IsoseqsSwitchList_part_final_Analyzed.rds")
 ```
 
-```{r}
-extractConsequenceEnrichment(
-    IsoseqsSwitchList_part1_Analyzed_2,
-    consequencesToAnalyze='all',
-    analysisOppositeConsequence = TRUE,
-    localTheme = theme_bw(base_size = 14), # Increase font size in vignette
-    returnResult = FALSE # if TRUE returns a data.frame with the summary statistics
-)
-
-```
-
-```{r}
-extractSwitchSummary
-```
-
-```{r}
-analyzeSwitchConsequences(IsoseqsSwitchList)
-```
-
-```{r}
-extractConsequenceSummary(IsoseqsSwitchList)
-```
-
-```{r}
-extractConsequenceEnrichment(IsoseqsSwitchList)
-```
-
-```{r}
-addORFfromGTF(IsoseqsSwitchList)
+```{python}
+IsoseqsSwitchList = to_py("IsoseqsSwitchList")
+for key, value in IsoseqsSwitchList.items():
+    globals()[key] = value
+del key
+del value    
 ```
 
 # To-dos
