@@ -22,8 +22,12 @@ awk '{
         }
     }
     printf "\n";
-}' OFS="\t" pooled.pin > output_file.tsv
+}' OFS="\t" pooled.pin > results/long_read/percolator.tsv
 
+```
+
+```{bash}
+scp niagara:/scratch/s/shreejoy/nxu/SFARI/results/long_read/percolator.tsv results/long_read/percolator.tsv
 ```
 
 # Data wrangling
