@@ -32,12 +32,14 @@ lr_bulk = SingleCell("results/long_read/pbid_filtered.h5ad")
 Isoseq_Expression = lr_bulk.to_frame().rename({"pbid": "isoform_id"})
 
 to_r(Isoseq_Expression, "Isoseq_Expression")
+Isoseq_Expression.write_csv("results/long_read/Isoseq_Expression.csv")
 ```
 
 ```{r}
 #| label: get-myDesign
 sampleID <- colnames(Isoseq_Expression)[c(-1)]
 time_point <- str_split(sampleID, "_", 2) %>% map_chr(~ .x[1])
+time_point <- factor(time_point, levels = c("iPSC", "NPC", "CN"))
 myDesign <- data.frame(
     sampleID = sampleID,
     condition = time_point
@@ -97,6 +99,9 @@ IsoseqsSwitchList <- isoformSwitchTestDEXSeq(
 )
 ```
 
+```{bash}
+sbatch -J isoformSwitchTestDEXSeq -o slurm_logs/isoformSwitchTestDEXSeq.out -t 0-4:0 -N 1 -n 1 --wrap="/home/s/shreejoy/nxu/miniforge3/envs/patch_seq_spl/bin/Rscript scripts/isoformSwitchTestDEXSeq.R"
+```
 
 # Analyze Alternative Splicing
 
