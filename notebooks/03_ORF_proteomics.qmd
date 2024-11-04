@@ -1,0 +1,243 @@
+# ORF analysis
+
+## Run Transdecoder on full_nt.fasta
+
+Run transdecoder to generate ORFs
+
+```{bash}
+#| label: run-transdecoder
+
+cd ~/tools
+wget https://data.broadinstitute.org/Trinity/CTAT_SINGULARITY/MISC/TransDecoder/transdecoder.v5.7.1.simg
+
+cd ${SCRATCH}/SFARI
+module load apptainer
+apptainer shell -B="/scratch/s/shreejoy/nxu/SFARI:/scratch/s/shreejoy/nxu/SFARI" ~/tools/transdecoder.v5.7.1.simg
+
+TransDecoder.LongOrfs -S -t full_nt.fasta
+
+makeblastdb -dbtype prot -in uniprotkb_proteome_UP000005640_AND_revi_2024_10_07.fasta
+
+blastp -query full_nt.fasta.transdecoder_dir/longest_orfs.pep \
+    -db uniprotkb_proteome_UP000005640_AND_revi_2024_10_07.fasta -max_target_seqs 1 \
+    -outfmt 6 -evalue 1e-5 -num_threads 40 > blastp.outfmt6
+
+hmmsearch --cpu 40 -E 1e-10 --domtblout pfam.domtblout Pfam-A.hmm full_nt.fasta.transdecoder_dir/longest_orfs.pep
+
+TransDecoder.Predict --single_best_only -t full_nt.fasta --retain_pfam_hits pfam.domtblout --retain_blastp_hits blastp.outfmt6
+
+/usr/local/bin/util/cdna_alignment_orf_to_genome_orf.pl \
+     full_nt.fasta.transdecoder.gff3 \
+     proc/merged_collapsed.filtered.gff3 \
+     full_nt.fasta > full_nt.fasta.transdecoder.genome.gff3
+```
+
+## Reformat transdecoder.genome.gff3
+
+Reformat the GFF3 file to include gene_id and transcript_id
+
+```{python}
+#| label: reformat-gff3
+
+GFF3 = read_gff("full_nt.fasta.transdecoder.genome.gff3", attributes=["Parent"])
+
+GFF3 = GFF3\
+    .with_columns(
+        pl.when(pl.col("type")=="mRNA").then(pl.col("Parent").str.split("^").map_elements(lambda s: s[0])).otherwise(pl.col("Parent").str.extract("^(.*)\.[^.]+$"))
+    )\
+    .with_columns(
+        pl.when(pl.col("type")!= "mRNA").then(pl.col("Parent").str.extract("^(.*)\.[^.]+$")).otherwise(pl.col("Parent")).alias("gene_id"),
+        pl.when(pl.col("type")=="mRNA").then(None).otherwise(pl.col("Parent")).alias("transcript_id")
+    ).drop("Parent").drop_nulls("seqid")
+
+GFF3\
+    .with_columns(
+        attributes = pl.when(pl.col("type")=="mRNA").then(pl.lit('gene_id "') + pl.col("gene_id") + pl.lit('";')).otherwise(pl.lit('gene_id "') + pl.col("gene_id") + pl.lit('";') + pl.lit('transcript_id "') + pl.col("transcript_id") + pl.lit('";'))
+    )\
+    .select(["seqid", "source", "type", "start", "end", "score", "strand", "phase", "attributes"])\
+    .write_csv("full_nt.fasta.transdecoder.genome_updated.gff3", quote_style = "never", separator = "\t", include_header = False)
+```
+
+## Add transdecoder predictions to lr_bulk
+
+```{python}
+#| label: import-python
+import polars as pl
+from src.single_cell import SingleCell
+import polars.selectors as cs
+```
+
+```{python}
+#| label: import-lr_bulk
+lr_bulk = SingleCell("results/long_read/pbid_filtered.h5ad")
+```
+
+### Add longest_orfs.pep to lr_bulk
+
+```{bash}
+#| label: get-longest_orfs_header
+grep "^>" full_nt.fasta.transdecoder_dir/longest_orfs.cds > longest_orfs_header.txt
+```
+
+longest_orfs_header contains PB IDs that contain ORFs that are at least 100 aa in length.
+
+```{python}
+#| label: parse-longest_orfs_header
+longest_orfs_header = pl.read_csv("longest_orfs_header.txt", separator = " ", new_columns = ["pbid", "ORF_type", "len"])\
+    .with_columns(
+        pl.col("pbid").str.replace(">", "").str.extract(r"^(.*)\.[^.]*$")
+    ).unique("pbid")
+```
+
+```{python}
+lr_bulk.var = lr_bulk.var\
+    .join(longest_orfs_header["pbid", "ORF_type"], on = "pbid", how = "left")\
+    .with_columns(
+        contains_orf = pl.when(pl.col("ORF_type").is_not_null()).then(True).otherwise(False)
+    ).drop("ORF_type")
+```
+
+### Add transdecoder results to lr_bulk
+
+[Tranddecoder filtering criteria](https://github.com/TransDecoder/TransDecoder/wiki#transdecoder-find-coding-regions-within-transcripts)
+
+An ORF is only included at this stage if the coding score is greatest when the ORF is scored in the 1st reading frame as compared to scores in the other 2 forward reading frames.
+
+```{bash}
+#| label: get-transdecoder-results-header
+grep "^>" full_nt.fasta.transdecoder.pep > transdecoder_header.txt
+```
+
+```{python}
+transdecoder_res = pl.read_csv("transdecoder_header.txt", separator=r" ", has_header=False)\
+    .select(["column_1", "column_5", "column_6", "column_7", "column_8"])\
+    .with_columns(
+        pl.col("column_1").str.replace(">", "").str.extract(r"^(.*)\.[^.]*$").alias("pbid"),
+        pl.col("column_5").str.replace("type:", "").alias("type"),
+        pl.col("column_6").str.replace("\(\+\),", "").str.splitn(",", 2).struct.rename_fields(["score", "PFAM"]).alias("fields"),
+        pl.col("column_7").str.replace("len:", "").cast(pl.Int32).alias("len")
+        ).unnest("fields")\
+    .select(~cs.starts_with("column"))\
+    .with_columns(
+        pl.col("score").str.replace("score=", "").cast(pl.Float32),
+        pl.col("PFAM").str.contains("sp\\|").alias("is_uniprot")
+    )\
+    .rename({"type": "orf_type"})
+```
+
+```{python}
+lr_bulk.var = lr_bulk.var\
+    .join(transdecoder_res["pbid", "orf_type", "is_uniprot"], on = "pbid", how = "left")
+```
+
+# Proteomics analysis
+
+## Prepare comet search database
+
+```{python}
+#| label: write-novel_transcripts-to-be-included-in-comet
+lr_bulk.var\
+    .filter(
+        pl.col("orf_type").is_not_null() & pl.col("structural_category2").is_in(["novel_not_in_catalog", "novel_in_catalog"])
+    )["pbid"]\
+    .to_frame()\
+    .write_csv("novel_transcripts.txt", include_header=False)
+```
+
+106,968 novel transcripts that contain ORFs that are predicted by transdecoder.
+
+```{bash}
+#| label: get-novel_transcripts-sequences
+mamba activate patch_seq_spl
+
+sed '/^>/ s/^\([^\.]*\.[^\.]*\.[^\.]*\)\..*$/\1/' full_nt.fasta.transdecoder.pep > full_nt.fasta.transdecoder_clean.pep
+
+seqtk subseq full_nt.fasta.transdecoder_clean.pep novel_transcripts.txt > novel_transcripts.fasta
+```
+
+```{bash}
+#| label: get-gencode-v39-proteome
+wget https://ftp.ensembl.org/pub/release-105/fasta/homo_sapiens/pep/Homo_sapiens.GRCh38.pep.all.fa.gz
+
+gunzip Homo_sapiens.GRCh38.pep.all.fa.gz
+```
+
+```{bash}
+#| label: combine-two-fastas
+sed '/^>/ s/^>\(.*transcript:\)\([^ ]*\)\(.*\)/>\2/' Homo_sapiens.GRCh38.pep.all.fa > Homo_sapiens.GRCh38.pep.all_clean.fa
+
+cat Homo_sapiens.GRCh38.pep.all_clean.fa >> novel_transcripts.fasta
+```
+
+224,877 transcripts in the final search database.
+
+## Run comet
+
+```{bash}
+#| label: submit-comit-job
+sbatch scripts/submit_comet.sh
+```
+
+## Run percolator
+
+```{bash}
+#| label: pool-comet-searches
+ls data/tc-1154/*.pin | xargs -I {} tail -n +2 {} > pooled.pin
+```
+
+Add column names to pooled.pin
+
+```{bash}
+#| label: run-percolator
+percolator pooled.pin > pooled.tsv
+```
+
+```{bash}
+#| label: wrangle-percolator-results
+awk '{
+    for (i = 1; i <= NF; i++) {
+        if (i <= 5) {
+            printf "%s\t", $i;
+        } else {
+            printf "%s%s", $i, (i < NF ? "," : "");
+        }
+    }
+    printf "\n";
+}' OFS="\t" pooled.tsv > results/long_read/percolator.tsv
+
+```
+
+## Post-analysis
+
+In `percolator_res`, each row is a unique combination of `PSMId` and `proteinIds`. 
+
+```{python}
+#| label: get-percolator-results
+percolator_res = pl.read_csv("results/long_read/percolator.tsv", has_header=True, separator="\t")
+
+percolator_res = percolator_res\
+    .with_columns(
+       proteinIds = percolator_res["proteinIds"].map_elements(lambda s: s.split(","))
+    ).explode("proteinIds")\
+    .filter(
+        pl.col("q-value") < 0.05
+    )
+```
+
+```{python}
+#| label: annotate-validated-transcripts
+proteinIds = percolator_res["proteinIds"].unique()
+
+lr_bulk.var = lr_bulk.var\
+    .with_columns(
+        validated_protemics = pl.when(pl.col("structural_category2").is_in(["full-splice_match"])).then(pl.col("associated_transcript").is_in(proteinIds)).otherwise(pl.col("pbid").is_in(proteinIds))
+    )
+```
+
+
+```{python}
+#| label: visualize
+import seaborn as sns
+
+
+```
