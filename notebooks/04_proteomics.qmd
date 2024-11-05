@@ -1,0 +1,218 @@
+# Proteomics analysis
+
+## Prepare comet search database
+
+```{python}
+#| label: write-novel_transcripts-to-be-included-in-comet
+
+lr_bulk.var\
+    .filter(
+        pl.col("orf_type").is_not_null() & pl.col("structural_category2").is_in(["novel_not_in_catalog", "novel_in_catalog"])
+    )["pbid"]\
+    .to_frame()\
+    .write_csv("novel_transcripts.txt", include_header=False)
+```
+
+106,968 novel transcripts that contain ORFs that are predicted by transdecoder.
+
+```{bash}
+#| label: get-novel_transcripts-sequences
+mamba activate patch_seq_spl
+
+sed '/^>/ s/^\([^\.]*\.[^\.]*\.[^\.]*\)\..*$/\1/' full_nt.fasta.transdecoder.pep > full_nt.fasta.transdecoder_clean.pep
+
+seqtk subseq full_nt.fasta.transdecoder_clean.pep novel_transcripts.txt > novel_transcripts.fasta
+```
+
+```{bash}
+#| label: get-gencode-v39-proteome
+wget https://ftp.ensembl.org/pub/release-105/fasta/homo_sapiens/pep/Homo_sapiens.GRCh38.pep.all.fa.gz
+
+gunzip Homo_sapiens.GRCh38.pep.all.fa.gz
+```
+
+```{bash}
+#| label: combine-two-fastas
+sed '/^>/ s/^>\(.*transcript:\)\([^ ]*\)\(.*\)/>\2/' Homo_sapiens.GRCh38.pep.all.fa > Homo_sapiens.GRCh38.pep.all_clean.fa
+
+cat Homo_sapiens.GRCh38.pep.all_clean.fa >> novel_transcripts.fasta
+```
+
+224,877 transcripts in the final search database.
+
+## Run comet
+
+```{bash}
+#| label: submit-comit-job
+sbatch scripts/submit_comet.sh
+```
+
+## Run percolator
+
+```{bash}
+#| label: pool-comet-searches
+ls data/tc-1154/*.pin | xargs -I {} tail -n +2 {} > pooled.pin
+```
+
+Add column names to pooled.pin
+
+```{bash}
+#| label: run-percolator
+percolator pooled.pin > pooled.tsv
+```
+
+```{bash}
+#| label: wrangle-percolator-results
+awk '{
+    for (i = 1; i <= NF; i++) {
+        if (i <= 5) {
+            printf "%s\t", $i;
+        } else {
+            printf "%s%s", $i, (i < NF ? "," : "");
+        }
+    }
+    printf "\n";
+}' OFS="\t" pooled.tsv > results/long_read/percolator.tsv
+
+```
+
+## Post-analysis
+
+In `percolator_res`, each row is a unique combination of `PSMId` and `proteinIds`. 
+
+```{python}
+#| label: get-percolator-results
+percolator_res = pl.read_csv("results/long_read/percolator.tsv", has_header=True, separator="\t")
+
+percolator_res = percolator_res\
+    .with_columns(
+       proteinIds = percolator_res["proteinIds"].map_elements(lambda s: s.split(","))
+    ).explode("proteinIds")\
+    .filter(
+        pl.col("q-value") < 0.05
+    )
+```
+
+```{python}
+#| label: annotate-validated-transcripts
+proteinIds = percolator_res["proteinIds"].unique()
+
+lr_bulk.var = lr_bulk.var\
+    .with_columns(
+        validated_protemics = pl.when(pl.col("structural_category2").is_in(["full-splice_match", "incomplete-splice_match"])).then(pl.col("associated_transcript").is_in(proteinIds)).otherwise(pl.col("pbid").is_in(proteinIds))
+    )
+```
+
+
+```{python}
+#| label: prepare-visualize
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+temp = lr_bulk.var["structural_category2", "contains_orf", "orf_type", "is_uniprot", "validated_protemics"]\
+    .with_columns(
+        orf_type = pl.when(pl.col("orf_type")=="complete").then(True).otherwise(False)
+    )\
+    .rename({"orf_type": "complete_orf"})\
+    .group_by("structural_category2")\
+    .sum()\
+    .unpivot(index="structural_category2")
+```
+
+```{python}
+#| label: seasborn-visualize
+fig, ax = plt.subplots()
+sns.barplot(temp, x="structural_category2", y="value", hue="variable", ax=ax)
+ax.set_xticklabels(ax.get_xticklabels(), rotation=90, ha='right')
+ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+```
+
+## Percentage of transcripts included in search database
+
+```{python}
+import os
+from src.utils import read_gtf
+
+genome_v39 = read_gtf("".join([os.getenv("GENOMIC_DATA_DIR"), "GENCODE/gencode.v39.annotation.gtf"]), attributes=["transcript_id", "transcript_type"])\
+    .filter(
+        pl.col("transcript_type")=="protein_coding",
+        pl.col("feature")=="transcript"
+    )
+```
+
+```{python}
+pep_v39 = pl.read_csv("Homo_sapiens.GRCh38.pep.all.header.txt", separator=" ", columns=range(8), new_columns=["pep_id", "pep", "chr", "gene_id", "transcript_id", "gene_biotype", "transcript_biotype", "gene_symbol"])\
+    .with_columns(
+        pl.col("pep_id").str.replace(">", ""),
+        pl.col("chr").str.replace("chromosome:GRCh38:", ""),
+        pl.col("gene_id").str.replace("gene:", ""),
+        pl.col("transcript_id").str.replace("transcript:", ""),
+        pl.col("gene_biotype").str.replace("gene_biotype:", ""),
+        pl.col("transcript_biotype").str.replace("transcript_biotype:", ""),
+        pl.col("gene_symbol").str.replace("gene_symbol:", "")
+    )
+```
+
+```{python}
+genome_v39\
+    .join(pep_v39["transcript_id", "pep_id"], how="left", on="transcript_id")\
+    .filter(pl.col("pep_id").is_null())
+```
+```{python}
+comet_database_header = pl.read_csv("comet_database_header.txt", new_columns=["pbid"])\
+    .with_columns(
+        pl.col("pbid").str.replace(">", "")
+    )
+```
+
+### WHat is the percentage of ENST IDs included in the comet search database?
+
+```{python}
+comet_database_header.filter(pl.col("pbid").str.contains("ENST"))
+```
+
+```{python}
+lr_bulk.var\
+    .cast({"associated_transcript": pl.String})\
+    .filter(
+        pl.col("associated_transcript").str.contains("ENST"),
+        pl.col("associated_transcript").is_in(pep_v39["transcript_id"])
+    )
+```
+
+```{python}
+lr_bulk.var\
+    .cast({"associated_transcript": pl.String})\
+    .filter(
+        pl.col("associated_transcript").str.contains("ENST"),
+        pl.col("associated_transcript").is_in(pep_v39["transcript_id"]).not_()
+    )
+```
+
+117,909 ENST IDs in total
+
+```{python}
+lr_bulk.var["associated_transcript"].is_in(comet_database_header.filter(pl.col("pbid").str.contains("ENST"))).sum()
+```
+
+77,628 (65%) ENST IDs are included in the comet search database.
+
+WHat is the percentage of novel PB IDs included in the comet search database?
+
+```{python}
+lr_bulk.var\
+    .filter(
+        pl.col("structural_category2").is_in(["novel_not_in_catalog", "novel_in_catalog"])
+    )
+```
+
+115,478 novel PB IDs in total
+
+```{python}
+lr_bulk.var\
+    .filter(
+        pl.col("orf_type").is_not_null() & pl.col("structural_category2").is_in(["novel_not_in_catalog", "novel_in_catalog"])
+    )
+```
+
+106,968 novel PB IDs (92%) that are included in the comet search database. Only including PB IDs that passed the transdecoder filtering criteria, could be incomplete.
