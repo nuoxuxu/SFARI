@@ -1,19 +1,55 @@
-# Proteomics analysis
-
-## Prepare comet search database
+# Prepare comet search database
 
 ```{python}
-#| label: write-novel_transcripts-to-be-included-in-comet
+#| label: import-python
+import polars as pl
+from src.single_cell import SingleCell
+```
+
+```{python}
+#| label: import-lr_bulk
+lr_bulk = SingleCell("results/long_read/pbid_filtered_analyzed.h5ad")
+```
+
+```{bash}
+grep "^>" Homo_sapiens.GRCh38.pep.all_clean.fa > Homo_sapiens.GRCh38.pep.all_clean.txt
+```
+
+```{python}
+#| label: add-is_in_pep_list
+pep_list = pl.read_csv("Homo_sapiens.GRCh38.pep.all_clean.txt", new_columns=["ensembl_ID"])\
+    .with_columns(
+        pl.col("ensembl_ID").str.replace(">", "")
+    )
+
+lr_bulk.var = lr_bulk.var\
+    .with_columns(
+        is_in_pep_list = pl.col("associated_transcript").is_in(pep_list)
+    )
+```
+
+```{python}
+#| label: add-CPAT_label
+CPAT_res = pl.read_csv("full_CPC2result.txt", separator="\t")\
+    .rename({"#ID": "pbid", "label": "CPAT_label"})
+
+lr_bulk.var = lr_bulk.var\
+    .join(CPAT_res["pbid", "CPAT_label"], how="left", on="pbid")
+```
+
+```{python}
+#| label: write-novel_transcripts
 
 lr_bulk.var\
     .filter(
-        pl.col("orf_type").is_not_null() & pl.col("structural_category2").is_in(["novel_not_in_catalog", "novel_in_catalog"])
+        pl.col("structural_category2").is_in(["novel_not_in_catalog", "novel_in_catalog"]),
+        pl.col("CPAT_label")=="coding"
     )["pbid"]\
     .to_frame()\
     .write_csv("novel_transcripts.txt", include_header=False)
 ```
 
-106,968 novel transcripts that contain ORFs that are predicted by transdecoder.
+99,822 novel transcripts code proteins as predicted by CPAT.
 
 ```{bash}
 #| label: get-novel_transcripts-sequences
@@ -38,45 +74,33 @@ sed '/^>/ s/^>\(.*transcript:\)\([^ ]*\)\(.*\)/>\2/' Homo_sapiens.GRCh38.pep.all
 cat Homo_sapiens.GRCh38.pep.all_clean.fa >> novel_transcripts.fasta
 ```
 
-224,877 transcripts in the final search database.
+217,518 transcripts in the final search database.
 
-## Run comet
+# Run comet
 
 ```{bash}
 #| label: submit-comit-job
 sbatch scripts/submit_comet.sh
 ```
 
-## Run percolator
+# Run percolator
 
 ```{bash}
-#| label: pool-comet-searches
-ls data/tc-1154/*.pin | xargs -I {} tail -n +2 {} > pooled.pin
+#| label: submit_percolator
+sbatch scripts/submit_percolator.sh
 ```
 
-Add column names to pooled.pin
+# Post-analysis
 
-```{bash}
-#| label: run-percolator
-percolator pooled.pin > pooled.tsv
+```{python}
+import polars as pl
+from src.single_cell import SingleCell
+from src.ryp import r, to_r
 ```
 
-```{bash}
-#| label: wrangle-percolator-results
-awk '{
-    for (i = 1; i <= NF; i++) {
-        if (i <= 5) {
-            printf "%s\t", $i;
-        } else {
-            printf "%s%s", $i, (i < NF ? "," : "");
-        }
-    }
-    printf "\n";
-}' OFS="\t" pooled.tsv > results/long_read/percolator.tsv
-
+```{python}
+lr_bulk = SingleCell("results/long_read/pbid_filtered_analyzed.h5ad")
 ```
-
-## Post-analysis
 
 In `percolator_res`, each row is a unique combination of `PSMId` and `proteinIds`. 
 
@@ -95,39 +119,54 @@ percolator_res = percolator_res\
 
 ```{python}
 #| label: annotate-validated-transcripts
-proteinIds = percolator_res["proteinIds"].unique()
 
-lr_bulk.var = lr_bulk.var\
-    .with_columns(
-        validated_protemics = pl.when(pl.col("structural_category2").is_in(["full-splice_match", "incomplete-splice_match"])).then(pl.col("associated_transcript").is_in(proteinIds)).otherwise(pl.col("pbid").is_in(proteinIds))
-    )
-```
-
-
-```{python}
-#| label: prepare-visualize
-import seaborn as sns
-import matplotlib.pyplot as plt
-
-temp = lr_bulk.var["structural_category2", "contains_orf", "orf_type", "is_uniprot", "validated_protemics"]\
-    .with_columns(
-        orf_type = pl.when(pl.col("orf_type")=="complete").then(True).otherwise(False)
+PSMId_mapped_to_novel_transcripts_uniquely = percolator_res\
+    .with_columns(is_known = pl.col("proteinIds").str.starts_with("ENST"))\
+    .group_by("PSMId")\
+    .agg(
+        pl.col("is_known").sum()
     )\
-    .rename({"orf_type": "complete_orf"})\
+    .filter(
+        pl.col("is_known")==0
+    )\
+    .select("PSMId")
+
+validated_pbids = percolator_res\
+    .filter(
+        pl.col("PSMId").is_in(PSMId_mapped_to_novel_transcripts_uniquely)
+    )\
+    .select("proteinIds").unique()
+
+temp = lr_bulk.var\
+    .with_columns(
+        validated_protemics = pl.when(pl.col("structural_category2").is_in(["full-splice_match", "incomplete-splice_match"])).then(pl.col("associated_transcript").is_in(percolator_res["proteinIds"].unique())).otherwise(pl.col("pbid").is_in(validated_pbids))
+    )\
+    .select(["structural_category2", "CPAT_label", "coding", "validated_protemics"])\
+    .with_columns(
+        CPAT_label = pl.when(pl.col("CPAT_label")=="coding").then(True).otherwise(False),
+    )\
+    .rename({"coding": "TransDecoder_predicted"})\
     .group_by("structural_category2")\
     .sum()\
     .unpivot(index="structural_category2")
+
+temp = temp.vstack(temp.group_by("structural_category2").sum().with_columns(variable=pl.lit("total")))\
+    .cast({"variable": pl.Enum(["total", "CPAT_label", "TransDecoder_predicted", "validated_protemics"])})
 ```
 
+
 ```{python}
-#| label: seasborn-visualize
+#| label: seaborn-visualize
+import seaborn as sns
+import matplotlib.pyplot as plt
+
 fig, ax = plt.subplots()
 sns.barplot(temp, x="structural_category2", y="value", hue="variable", ax=ax)
 ax.set_xticklabels(ax.get_xticklabels(), rotation=90, ha='right')
 ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
 ```
 
-## Percentage of transcripts included in search database
+# Percentage of transcripts included in search database
 
 ```{python}
 import os
@@ -165,7 +204,7 @@ comet_database_header = pl.read_csv("comet_database_header.txt", new_columns=["p
     )
 ```
 
-### WHat is the percentage of ENST IDs included in the comet search database?
+## WHat is the percentage of ENST IDs included in the comet search database?
 
 ```{python}
 comet_database_header.filter(pl.col("pbid").str.contains("ENST"))
