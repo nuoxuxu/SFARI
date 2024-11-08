@@ -136,7 +136,7 @@ Add TransDecoder predictions (CDS_start, CDS_end, CDS_genomic_start, CDS_genomic
 #| label: add-CDS-genomic-coordinates
 
 lr_bulk.var = lr_bulk.var\
-    .join(transdecoder_bed["pbid", "thickStart", "thickEnd", "ORF_type"], how="left", on="pbid")\
+    .join(transdecoder_bed["pbid", "thickStart", "thickEnd"], how="left", on="pbid")\
     .with_columns(
         CDS_start = pl.col("thickStart") + 1,
         CDS_end = pl.col("thickEnd")
@@ -145,7 +145,7 @@ lr_bulk.var = lr_bulk.var\
         CDS_length = pl.col("CDS_end") - pl.col("CDS_start") + 1,
         CDS_genomic_start = pl.col("TSS") + pl.col("CDS_start") - 1,
         CDS_genomic_end = pl.col("TTS") + pl.col("CDS_end") - 1
-    ).drop(["thickStart", "thickEnd", "ORF_type", "TSS", "TTS"])\
+    ).drop(["thickStart", "thickEnd", "TSS", "TTS"])\
     .cast({"associated_transcript": pl.String})\
     .join(genome_v39["transcript_id", "transcript_type"].rename({"transcript_id": "associated_transcript"}), how="left", on="associated_transcript")
 ```
