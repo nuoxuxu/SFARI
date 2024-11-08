@@ -60,78 +60,38 @@ GFF3\
 
 ```{python}
 #| label: import-python
+
 import polars as pl
 from src.single_cell import SingleCell
 import polars.selectors as cs
+from src.utils import read_gtf
 ```
 
 ```{python}
 #| label: import-lr_bulk
+
 lr_bulk = SingleCell("results/long_read/pbid_filtered.h5ad")
 ```
 
-## Add longest_orfs.pep to lr_bulk
-
-```{bash}
-#| label: get-longest_orfs_header
-grep "^>" full_nt.fasta.transdecoder_dir/longest_orfs.cds > longest_orfs_header.txt
-```
-
-longest_orfs_header contains PB IDs that contain ORFs that are at least 100 aa in length.
-
 ```{python}
-#| label: parse-longest_orfs_header
-longest_orfs_header = pl.read_csv("longest_orfs_header.txt", separator = " ", new_columns = ["pbid", "ORF_type", "len"])\
+#| label: add-pbid_with_at_least_one_orf
+
+pbid_with_at_least_one_orf = pl.read_csv("full_nt.fasta.transdecoder_dir/longest_orfs.cds.scores", separator="\t")\
     .with_columns(
-        pl.col("pbid").str.replace(">", "").str.extract(r"^(.*)\.[^.]*$")
-    ).unique("pbid")
-```
-
-```{python}
-lr_bulk.var = lr_bulk.var\
-    .join(longest_orfs_header["pbid", "ORF_type"], on = "pbid", how = "left")\
-    .with_columns(
-        contains_orf = pl.when(pl.col("ORF_type").is_not_null()).then(True).otherwise(False)
-    ).drop("ORF_type")
-```
-
-## Add transdecoder results to lr_bulk
-
-[Tranddecoder filtering criteria](https://github.com/TransDecoder/TransDecoder/wiki#transdecoder-find-coding-regions-within-transcripts)
-
-An ORF is only included at this stage if the coding score is greatest when the ORF is scored in the 1st reading frame as compared to scores in the other 2 forward reading frames.
-
-```{bash}
-#| label: get-transdecoder-results-header
-grep "^>" full_nt.fasta.transdecoder.pep > transdecoder_header.txt
-```
-
-```{python}
-transdecoder_res = pl.read_csv("transdecoder_header.txt", separator=r" ", has_header=False)\
-    .select(["column_1", "column_5", "column_6", "column_7", "column_8"])\
-    .with_columns(
-        pl.col("column_1").str.replace(">", "").str.extract(r"^(.*)\.[^.]*$").alias("pbid"),
-        pl.col("column_5").str.replace("type:", "").alias("type"),
-        pl.col("column_6").str.replace("\(\+\),", "").str.splitn(",", 2).struct.rename_fields(["score", "PFAM"]).alias("fields"),
-        pl.col("column_7").str.replace("len:", "").cast(pl.Int32).alias("len")
-        ).unnest("fields")\
-    .select(~cs.starts_with("column"))\
-    .with_columns(
-        pl.col("score").str.replace("score=", "").cast(pl.Float32),
-        pl.col("PFAM").str.contains("sp\\|").alias("is_uniprot")
+        pbid = pl.col("#acc").str.extract(r"^(.*)\.[^.]*$")
     )\
-    .rename({"type": "orf_type"})
-```
+    .unique(["pbid"])["pbid"]
 
-```{python}
 lr_bulk.var = lr_bulk.var\
-    .join(transdecoder_res["pbid", "orf_type", "is_uniprot"], on = "pbid", how = "left")
+    .with_columns(
+        at_least_one_orf = pl.col("pbid").is_in(pbid_with_at_least_one_orf)
+    )
 ```
 
-# Add ORF coordinates to classification.txt
-
 ```{python}
-transdecoder_bed = pl.read_csv("full_nt.fasta.transdecoder.bed", separator="\t", comment_prefix="track name=", new_columns=["chrom", "chromStart", "chromEnd", "name", "score", "strand", "thickStart", "thickEnd", "itemRgb", "blockCount", "blockSizes", "blockStarts"])\
+#| label: get-transdecoder_bed
+
+transdecoder_bed = pl.read_csv("full_nt.fasta.transdecoder.bed", separator="\t", comment_prefix="track name=", new_columns=["pbid", "chromStart", "chromEnd", "name", "score", "strand", "thickStart", "thickEnd", "itemRgb", "blockCount", "blockSizes", "blockStarts"])\
     .with_columns(
         ORF_type = pl.col("name").str.extract(r"ORF_type:([^_]+)"),
         is_uniprot = pl.col("name").str.contains("sp\\|")
@@ -139,54 +99,112 @@ transdecoder_bed = pl.read_csv("full_nt.fasta.transdecoder.bed", separator="\t",
 ```
 
 ```{python}
-genome_v39 = read_gtf("".join([os.getenv("GENOMIC_DATA_DIR"), "GENCODE/gencode.v39.annotation.gtf"]), attributes=["transcript_id", "transcript_type"])\
-    .filter(pl.col("feature")=="transcript")
+#| label: add-validatable-orf
+
+lr_bulk.var = lr_bulk.var\
+    .with_columns(
+        validatable_orf = pl.col("pbid").is_in(transdecoder_bed.filter(pl.col("is_uniprot"))["pbid"])
+    )
 ```
 
-Add TransDecoder predictions (CDS_start, CDS_end, coding, CDS_length) and GENCODE annotation (transcript_type) to lr_bulk.var
+```{python}
+#| label: add-orf_type
+
+lr_bulk.var = lr_bulk.var\
+    .join(
+        transdecoder_bed["pbid", "ORF_type"], how="left", on="pbid"
+    )
+```
+
+Add GENCODE TSS and TTS
 
 ```{python}
+#| label: add-TSS-TTS
+
+genome_v39 = read_gtf("".join([os.getenv("GENOMIC_DATA_DIR"), "GENCODE/gencode.v39.annotation.gtf"]), attributes=["transcript_id", "transcript_type"])\
+    .filter(pl.col("feature")=="transcript")
+
 lr_bulk.var = lr_bulk.var\
-    .join(transdecoder_bed.rename({"chrom": "pbid"})["pbid", "thickStart", "thickEnd", "ORF_type", "is_uniprot"], how="left", on="pbid")\
+    .cast({"associated_transcript": pl.String})\
+    .join(genome_v39["start", "end", "transcript_id"].rename({"transcript_id": "associated_transcript"}), how="left", on="associated_transcript")\
+    .rename({"start": "TSS", "end": "TTS"})
+```
+
+Add TransDecoder predictions (CDS_start, CDS_end, CDS_genomic_start, CDS_genomic_end, coding, CDS_length) and GENCODE annotation (transcript_type) to lr_bulk.var
+
+```{python}
+#| label: add-CDS-genomic-coordinates
+
+lr_bulk.var = lr_bulk.var\
+    .join(transdecoder_bed["pbid", "thickStart", "thickEnd", "ORF_type"], how="left", on="pbid")\
     .with_columns(
-        CDS_start = pl.col("thickStart"),
-        CDS_end = pl.col("thickEnd"),
-        coding = pl.when((pl.col("ORF_type")=="complete") & (pl.col("is_uniprot"))).then(True).otherwise(False)
+        CDS_start = pl.col("thickStart") + 1,
+        CDS_end = pl.col("thickEnd")
     )\
     .with_columns(
-        CDS_length = pl.col("CDS_end") - pl.col("CDS_start")
-    ).drop(["thickStart", "thickEnd", "ORF_type"])\
+        CDS_length = pl.col("CDS_end") - pl.col("CDS_start") + 1,
+        CDS_genomic_start = pl.col("TSS") + pl.col("CDS_start") - 1,
+        CDS_genomic_end = pl.col("TTS") + pl.col("CDS_end") - 1
+    ).drop(["thickStart", "thickEnd", "ORF_type", "TSS", "TTS"])\
     .cast({"associated_transcript": pl.String})\
     .join(genome_v39["transcript_id", "transcript_type"].rename({"transcript_id": "associated_transcript"}), how="left", on="associated_transcript")
 ```
 
 ```{python}
-lr_bulk.var\
+lr_bulk.save("results/long_read/pbid_filtered_analyzed.h5ad", overwrite=True)
+```
+
+# Do TransDecoder-predicted CDS genomic coordinates match GENCODE annotation?
+
+```{python}
+#| label: get-CDS-coordinates
+CDS_coord = lr_bulk.var\
     .filter(
-        pl.col("coding"),
-        pl.col("structural_category").is_in(["full-splice_match", "incomplete-splice_match"])
+        pl.col("structural_category")=="full-splice_match", 
+        pl.col("transcript_type")=="protein_coding"
     )\
-    .group_by("transcript_type")\
-    .count()
+    .select(["pbid", "associated_transcript", "strand", "CDS_genomic_start", "CDS_genomic_end"])\
+    .rename({"associated_transcript": "transcript_id"})
 ```
 
 ```{python}
-lr_bulk.var\
+CDS_v39 = read_gtf("".join([os.getenv("GENOMIC_DATA_DIR"), "GENCODE/gencode.v39.annotation.gtf"]), attributes=["transcript_id", "transcript_type"])\
     .filter(
-        pl.col("transcript_type") == "protein_coding",
-        pl.col("structural_category") == "full-splice_match"
+        pl.col("feature").is_in(["start_codon", "stop_codon"]),
+        pl.col("transcript_type")=="protein_coding"
     )\
-    .group_by("coding")\
-    .count()
+    .with_columns(
+        coord = pl.when(pl.col("feature")=="start_codon").then(pl.col("start")).otherwise(pl.col("end"))
+    )\
+    .filter(
+        pl.col("frame")=="0"
+    )
+
+CDS_v39 = CDS_v39\
+    .join(
+        CDS_v39.pivot("feature", index="transcript_id", values="coord"),
+        how="left",
+        on="transcript_id"
+    )\
+    .drop_nulls()\
+    .unique(["transcript_id"])\
+    .with_columns(
+        CDS_genomic_start = pl.when(pl.col("strand")=="+").then(pl.col("start_codon")).otherwise(pl.col("stop_codon")),
+        CDS_genomic_end = pl.when(pl.col("strand")=="-").then(pl.col("start_codon")).otherwise(pl.col("stop_codon"))
+    )\
+    .select(["transcript_id", "CDS_genomic_start", "CDS_genomic_end"])
 ```
 
 ```{python}
 inspect = lr_bulk.var\
     .filter(
-        pl.col("transcript_type") == "protein_coding",
-        pl.col("structural_category") == "full-splice_match",
-        pl.col("coding").not_()
-    )
+        pl.col("structural_category")=="full-splice_match",
+        pl.col("transcript_type")=="protein_coding"
+    )\
+    .select(["associated_transcript", "strand", "CDS_genomic_start", "CDS_genomic_end"])\
+    .drop_nulls()\
+    .rename({"associated_transcript": "transcript_id"})\
+    .join(CDS_v39, how="left", on="transcript_id")
 ```
 
 # Validate TransDecoder-predicted ORFs

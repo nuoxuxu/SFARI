@@ -1,17 +1,16 @@
 # Prepare comet search database
 
+## Get annotated transcript from Homo_sapiens.GRCh38.pep.all_clean.fa
 ```{python}
 #| label: import-python
 import polars as pl
 from src.single_cell import SingleCell
-```
 
-```{python}
-#| label: import-lr_bulk
 lr_bulk = SingleCell("results/long_read/pbid_filtered_analyzed.h5ad")
 ```
 
 ```{bash}
+
 grep "^>" Homo_sapiens.GRCh38.pep.all_clean.fa > Homo_sapiens.GRCh38.pep.all_clean.txt
 ```
 
@@ -76,6 +75,98 @@ cat Homo_sapiens.GRCh38.pep.all_clean.fa >> novel_transcripts.fasta
 
 217,518 transcripts in the final search database.
 
+## Get annotated transcripts from TransDecoder-predicted aa sequence
+
+Instead of combining `Homo_sapiens.GRCh38.pep.all_clean.fa` with aa sequences for novel transcripts from `full_nt.fasta.transdecoder.pep`, just use `full_nt.fasta.transdecoder.pep` as a whole as the search database for comet.
+
+```{python}
+#| label: import-python
+import polars as pl
+from src.single_cell import SingleCell
+
+lr_bulk = SingleCell("results/long_read/pbid_filtered_analyzed.h5ad")
+```
+
+```{bash}
+#| label: submit-comet
+sbatch scripts/submit_come_2.sh
+```
+
+```{bash}
+#| label: submit-percolator
+sbatch scripts/submit_percolator_2.sh
+```
+
+```{python}
+#| label: get-percolator-results
+percolator_res = pl.read_csv("results/long_read/percolator_2.tsv", has_header=True, separator="\t")
+
+percolator_res = percolator_res\
+    .with_columns(
+       proteinIds = percolator_res["proteinIds"].map_elements(lambda s: s.split(","))
+    ).explode("proteinIds")\
+    .filter(
+        pl.col("q-value") < 0.05
+    )
+```
+
+```{python}
+CPAT_res = pl.read_csv("full_CPC2result.txt", separator="\t")\
+    .rename({"#ID": "pbid", "label": "CPAT_label"})
+
+known_transcripts = lr_bulk.var.cast({"associated_transcript": pl.String}).filter(pl.col("associated_transcript").str.starts_with("ENST"))["pbid"].unique()
+
+PSMId_mapped_to_novel_transcripts_uniquely = percolator_res\
+    .with_columns(is_known = pl.col("proteinIds").is_in(known_transcripts))\
+    .group_by("PSMId")\
+    .agg(
+        pl.col("is_known").sum()
+    )\
+    .filter(
+        pl.col("is_known")==0
+    )\
+    .select("PSMId")
+
+validated_pbids = percolator_res\
+    .filter(
+        pl.col("PSMId").is_in(PSMId_mapped_to_novel_transcripts_uniquely)
+    )\
+    .select("proteinIds").unique()
+
+lr_bulk.var = lr_bulk.var\
+    .join(CPAT_res["pbid", "CPAT_label"], how="left", on="pbid")\
+    .with_columns(
+        in_any_PSMs = pl.col("associated_transcript").is_in(percolator_res["proteinIds"].unique()) | pl.col("pbid").is_in(percolator_res["proteinIds"].unique()),
+        in_novel_only_PSMs = pl.col("pbid").is_in(validated_pbids)
+    )\
+    .with_columns(
+        CPAT_label = pl.when(pl.col("CPAT_label")=="coding").then(True).otherwise(False),
+        validated_proteomics = pl.when(pl.col("structural_category2").is_in(["novel_not_in_catalog", "novel_in_catalog"]))\
+            .then(pl.col("in_novel_only_PSMs")).otherwise(pl.col("in_any_PSMs"))
+    )
+```
+
+```{python}
+#| label: visualize-prep
+temp = lr_bulk.var\
+    .select(["structural_category2", "CPAT_label", "coding", "validated_proteomics"])\
+    .rename({"coding": "TransDecoder_predicted"})\
+    .group_by("structural_category2")\
+    .sum()\
+    .unpivot(index="structural_category2")
+
+temp = temp.vstack(temp.group_by("structural_category2").sum().with_columns(variable=pl.lit("total")))\
+    .cast({"variable": pl.Enum(["total", "CPAT_label", "TransDecoder_predicted", "validated_proteomics"])})
+```
+
+```{python}
+#| label: seaborn-visualize
+fig, ax = plt.subplots()
+sns.barplot(temp, x="structural_category2", y="value", hue="variable", ax=ax)
+ax.set_xticklabels(ax.get_xticklabels(), rotation=90, ha='right')
+ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+```
+
 # Run comet
 
 ```{bash}
@@ -93,12 +184,14 @@ sbatch scripts/submit_percolator.sh
 # Post-analysis
 
 ```{python}
+#| label: import-python
 import polars as pl
 from src.single_cell import SingleCell
 from src.ryp import r, to_r
-```
+import polars.selectors as cs
+import seaborn as sns
+import matplotlib.pyplot as plt
 
-```{python}
 lr_bulk = SingleCell("results/long_read/pbid_filtered_analyzed.h5ad")
 ```
 
@@ -119,6 +212,8 @@ percolator_res = percolator_res\
 
 ```{python}
 #| label: annotate-validated-transcripts
+CPAT_res = pl.read_csv("full_CPC2result.txt", separator="\t")\
+    .rename({"#ID": "pbid", "label": "CPAT_label"})
 
 PSMId_mapped_to_novel_transcripts_uniquely = percolator_res\
     .with_columns(is_known = pl.col("proteinIds").str.starts_with("ENST"))\
@@ -137,33 +232,118 @@ validated_pbids = percolator_res\
     )\
     .select("proteinIds").unique()
 
-temp = lr_bulk.var\
+lr_bulk.var = lr_bulk.var\
+    .join(CPAT_res["pbid", "CPAT_label"], how="left", on="pbid")\
     .with_columns(
-        validated_protemics = pl.when(pl.col("structural_category2").is_in(["full-splice_match", "incomplete-splice_match"])).then(pl.col("associated_transcript").is_in(percolator_res["proteinIds"].unique())).otherwise(pl.col("pbid").is_in(validated_pbids))
+        in_any_PSMs = pl.col("associated_transcript").is_in(percolator_res["proteinIds"].unique()) | pl.col("pbid").is_in(percolator_res["proteinIds"].unique()),
+        in_novel_only_PSMs = pl.col("pbid").is_in(validated_pbids),
+        total = pl.lit(True)
     )\
-    .select(["structural_category2", "CPAT_label", "coding", "validated_protemics"])\
     .with_columns(
         CPAT_label = pl.when(pl.col("CPAT_label")=="coding").then(True).otherwise(False),
-    )\
-    .rename({"coding": "TransDecoder_predicted"})\
-    .group_by("structural_category2")\
-    .sum()\
-    .unpivot(index="structural_category2")
-
-temp = temp.vstack(temp.group_by("structural_category2").sum().with_columns(variable=pl.lit("total")))\
-    .cast({"variable": pl.Enum(["total", "CPAT_label", "TransDecoder_predicted", "validated_protemics"])})
+        validated_proteomics = pl.when(pl.col("structural_category2").is_in(["novel_not_in_catalog", "novel_in_catalog"]))\
+            .then(pl.col("in_novel_only_PSMs")).otherwise(pl.col("in_any_PSMs"))
+    )
 ```
 
+```{python}
+#| label: visualize-prep
+temp = lr_bulk.var\
+    .with_columns(
+        protein_coding = pl.when(pl.col("structural_category").is_in(["full-splice_match", "incomplete-splice_match"])).then(pl.col("transcript_type")=="protein_coding").otherwise(pl.col("at_least_one_orf")),
+        validatable_orf = pl.col("validatable_orf") & (pl.col("ORF_type_right")=="complete")
+    )\
+    .select(["structural_category2", "total", "protein_coding", "validatable_orf", "validated_proteomics"])\
+    .group_by("structural_category2")\
+    .sum()\
+    .unpivot(index="structural_category2")\
+    .cast({"variable": pl.Enum(["total", "protein_coding", "validatable_orf", "validated_proteomics"])})
+```
 
 ```{python}
 #| label: seaborn-visualize
-import seaborn as sns
-import matplotlib.pyplot as plt
-
 fig, ax = plt.subplots()
 sns.barplot(temp, x="structural_category2", y="value", hue="variable", ax=ax)
 ax.set_xticklabels(ax.get_xticklabels(), rotation=90, ha='right')
 ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+```
+
+Abuandance of novel transcripts validated by proteomics
+
+```{python}
+novel_bulk = lr_bulk\
+    .filter_var(
+        pl.col("structural_category2").is_in(["novel_not_in_catalog", "novel_in_catalog"])
+    )
+
+temp = novel_bulk\
+    .CPM()\
+    .to_frame()\
+    .drop("pbid")\
+    .with_columns(
+        (cs.all() + 1).log(2)
+    )\
+    .mean_horizontal()\
+    .to_frame()\
+    .hstack(
+        novel_bulk.var\
+            .with_columns(
+                in_any_PSMs = pl.when(pl.col("in_any_PSMs") & pl.col("in_novel_only_PSMs").not_()).then(True).otherwise(False)
+            )\
+            .select(
+                ["in_any_PSMs", "in_novel_only_PSMs"]
+            )
+    )\
+    .with_columns(
+        transcriptomics_only = pl.col("in_any_PSMs").not_() & pl.col("in_novel_only_PSMs").not_()
+    )
+
+temp = temp\
+    .unpivot(on=["in_any_PSMs", "in_novel_only_PSMs", "transcriptomics_only"], index="mean").filter(pl.col("value"))\
+    .cast({"variable": pl.Enum(["transcriptomics_only", "in_any_PSMs", "in_novel_only_PSMs"])})
+
+to_r(temp, "temp")    
+```
+
+```{r}
+library(dplyr)
+library(ggplot2)
+
+temp %>% 
+    ggplot(aes(x=mean, fill=variable)) +
+    geom_histogram(position=position_fill(), alpha=.75, bins=10) +
+    labs(x="log2(CPM + 1)", y="Proportion of transcripts validated by MS/MS") + 
+    ggtitle("Novel transcripts")
+```
+
+Abundance of known transcripts validated by proteomics
+
+```{python}
+known_bulk = lr_bulk\
+    .filter_var(
+        pl.col("structural_category2").is_in(["full-splice_match"])
+    )
+
+temp = known_bulk\
+    .CPM()\
+    .to_frame()\
+    .drop("pbid")\
+    .with_columns(
+        (cs.all() + 1).log(2)
+    )\
+    .mean_horizontal()\
+    .to_frame()\
+    .hstack(known_bulk.var.select(["validated_proteomics"]))
+
+to_r(temp, "temp")    
+```
+
+```{r}
+temp %>% 
+    ggplot(aes(x=mean, fill=validated_proteomics)) +
+    geom_histogram(position=position_fill(), alpha=.75, bins=10) +
+    labs(x="log2(CPM + 1)", y="Proportion of transcripts validated by MS/MS") + 
+    ggtitle("Known transcripts")
 ```
 
 # Percentage of transcripts included in search database
