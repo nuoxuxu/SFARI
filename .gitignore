@@ -6,8 +6,10 @@ envs/
 garbage/
 results/*
 
-# snakemake
+# Workflow managers
 .snakemake
+.nextflow
+conf/
 
 # macOS
 .DS_Store
@@ -23,3 +25,5 @@ transcript_vis_app/*.csv
 **.dcf
 
 slurm_logs/*
+
+**/.ipynb_checkpoints/
