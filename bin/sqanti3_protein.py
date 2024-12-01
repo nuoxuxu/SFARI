@@ -49,9 +49,9 @@ except ImportError:
 
 
 # so gloria can run cupcake and gtf tools on mac
-# cupcake_dir = '/Users/gloriasheynkman/Documents/research_drive/bioinfo_tools/cDNA_Cupcake/'
-# if cupcake_dir not in sys.path:
-#     sys.path.append('/Users/gloriasheynkman/Documents/research_drive/bioinfo_tools/cDNA_Cupcake/')
+cupcake_dir = '/home/s/shreejoy/nxu/tools/cDNA_Cupcake'
+if cupcake_dir not in sys.path:
+    sys.path.append('/home/s/shreejoy/nxu/tools/cDNA_Cupcake')
 from cupcake.tofu.compare_junctions import compare_junctions
 from cupcake.io.GFF import collapseGFFReader, write_collapseGFF_format
 GTF2GENEPRED_PROG = "gtfToGenePred"
@@ -61,6 +61,7 @@ GTF2GENEPRED_PROG = os.path.join(utilitiesPath,"gtfToGenePred")
 GFFREAD_PROG = "gffread"
 
 # importing functions from original sqanti3
+sys.path.append("/home/s/shreejoy/nxu/tools/SQANTI3")
 from sqanti3_qc import myQueryTranscripts, genePredReader, myQueryProteins, associationOverlapping
 
 
