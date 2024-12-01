@@ -15,7 +15,7 @@ def main():
     id_to_sample = pl.read_csv(params.id_to_sample, separator = "\t", has_header = False, new_columns = ["id", "sample"])\
         .with_columns(
             pl.col("id").map_elements(lambda s: s.split("/")[0], return_dtype = pl.String),
-            pl.col("sample").map_elements(lambda s: s.rsplit("/")[3].rsplit("_", 2)[0], return_dtype = pl.String)
+            pl.col("sample").map_elements(lambda s: s.rsplit("/")[9].rsplit("_", 2)[0], return_dtype = pl.String)
         )\
         .to_pandas().set_index("id").to_dict()["sample"]
 

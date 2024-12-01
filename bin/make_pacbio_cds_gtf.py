@@ -41,6 +41,12 @@ def ceiling_cpm(cpm):
     else:
         return cpm
 
+# sample_gtf = "filtered_SFARI.gtf"
+# agg_orfs ="/scratch/s/shreejoy/nxu/SFARI/results/long_read/SFARI_orf_refined.tsv"
+# refined_orfs = "SFARI_best_orf.tsv"
+# pb_gene = "pb_gene.txt"
+# output_cds = "SFARI_cds.gtf"
+
 def make_pacbio_cds_gtf(sample_gtf, agg_orfs, refined_orfs, pb_gene, output_cds):
     """
     sample_gtf : filename
@@ -51,9 +57,9 @@ def make_pacbio_cds_gtf(sample_gtf, agg_orfs, refined_orfs, pb_gene, output_cds)
     """
     # import gtf, only exon info.
     # only move forward with representative pb isoform (for same-protein groups)
-    gtf = gtfparse.read_gtf(sample_gtf)
+    gtf = gtfparse.read_gtf(sample_gtf, result_type="pandas")
 
-    gtf = gtf[['seqname', 'feature', 'start', 'end', 'strand', 'gene_id']]
+    gtf = gtf[['seqname', 'feature', 'start', 'end', 'strand', 'transcript_id']]
     gtf = gtf[gtf['feature'] == 'exon']
     gtf.columns = ['chr', 'feat', 'start', 'end', 'strand', 'acc']
     # only move forward with "base accession" (representative pb)
@@ -94,7 +100,7 @@ def make_pacbio_cds_gtf(sample_gtf, agg_orfs, refined_orfs, pb_gene, output_cds)
     pb_gene = pd.read_table(pb_gene)
     pb_gene = pd.Series(pb_gene.gene.values, index=pb_gene.pb_acc).to_dict()
 
-
+    num_err = 0
     with open(output_cds, 'w') as ofile:
         for i, row in ranges.iterrows():
             acc, orf_start, orf_end, cpm = row
@@ -106,8 +112,12 @@ def make_pacbio_cds_gtf(sample_gtf, agg_orfs, refined_orfs, pb_gene, output_cds)
                 chr, strand, coords, blens, cblens = infos
                 # NOTE - uncomment to do chr22-oly test 
                 # if chr != 'chr22': continue
-                i1, delta1 = get_first_block_index(orf_start, cblens)
-                i2, delta2 = get_first_block_index(orf_end, cblens)
+                try:
+                    i1, delta1 = get_first_block_index(orf_start, cblens)
+                    i2, delta2 = get_first_block_index(orf_end, cblens)
+                except TypeError:
+                    num_err += 1
+                    continue
                 if strand == '+':
                     orf_coords = make_coords_trimmed_to_orf_range(i1, delta1, i2, delta2, coords)
                 elif strand == '-':
@@ -119,6 +129,7 @@ def make_pacbio_cds_gtf(sample_gtf, agg_orfs, refined_orfs, pb_gene, output_cds)
                     ofile.write('\t'.join([chr, 'hg38_canon', 'exon', str(start), str(end), '.', strand, '.', out_acc]) + '\n')
                 for [start, end] in orf_coords:
                     ofile.write('\t'.join([chr, 'hg38_canon', 'CDS', str(start), str(end), '.', strand, '.', out_acc]) + '\n')
+    print("Number of errors: ", num_err)
 
 
 

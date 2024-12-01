@@ -167,7 +167,6 @@ def main():
     pacbio = pacbio[['pb_accs', 'base_acc', 'coding_score','orf_calling_confidence','upstream_atgs','orf_score','gene','FL', 'CPM']]
     pacbio.to_csv(f'{name}_orf_refined.tsv', sep = '\t', index = False) 
     logging.info('Refine Database Complete')
-    logging.info('************************')
     
     
 if __name__ == '__main__':
