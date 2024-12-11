@@ -3,6 +3,7 @@ import polars as pl
 from src.single_cell import SingleCell
 from scipy.sparse import csr_array
 import argparse
+import numpy as np
 
 def main():
     parser = argparse.ArgumentParser(description='Get single_cell object from long read data')
@@ -10,6 +11,8 @@ def main():
     parser.add_argument('--classification', action='store', dest='classification', type=str, required=True)
     parser.add_argument('--read_stat', action='store', dest='read_stat', type=str, required=True)
     parser.add_argument('--output', action='store', dest='output', type=str, required=True)
+    parser.add_argument('--min_reads', action='store', dest='min_reads', type=float, default=5)
+    parser.add_argument('--min_n_sample', action='store', dest='min_n_sample', type=int, default=2)    
     params = parser.parse_args()
 
     id_to_sample = pl.read_csv(params.id_to_sample, separator = "\t", has_header = False, new_columns = ["id", "sample"])\
@@ -18,14 +21,8 @@ def main():
             pl.col("sample").map_elements(lambda s: s.rsplit("/")[9].rsplit("_", 2)[0], return_dtype = pl.String)
         )\
         .to_pandas().set_index("id").to_dict()["sample"]
-
-    categories_to_show = ["full-splice_match", "incomplete-splice_match", "novel_in_catalog", "novel_not_in_catalog"]
     
-    classification = pl.read_csv(params.classification, separator="\t", null_values=["NA"])\
-        .rename({"isoform": "pbid"})\
-        .with_columns(
-            pl.when(pl.col("structural_category").is_in(categories_to_show)).then(pl.col("structural_category")).otherwise(pl.lit("Other")).alias("structural_category2")
-            )
+    classification = pl.read_csv(params.classification, separator="\t", null_values=["NA"])
 
     read_stat = pl.read_csv(params.read_stat, separator = "\t")\
         .with_columns(
@@ -72,6 +69,8 @@ def main():
         .with_columns(
             pl.col(col).cast(pl.Float64) for col in lr_bulk.var.columns if (lr_bulk.var.select(pl.col(col).null_count() == 4897888)).to_numpy()[0]
         )
+
+    lr_bulk = lr_bulk[:, np.where(np.sum(lr_bulk.X > params.min_reads, axis = 0) > params.min_n_sample)[0]]
 
     # Save SingleCell object
     lr_bulk.save(params.output)
