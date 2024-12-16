@@ -159,17 +159,21 @@ process pigeonClassify {
 }
 
 process pigeonFilter {
+    publishDir "nextflow_results", mode: 'copy'
     
     input:
     path classification
+    path junctions
     path isoform_gff
 
     output:
     
-    path "*.filtered_lite_classification.txt", emit: filtered_classification
-    path "*.filtered_lite_junctions.txt"
-    path "*.filtered_lite_reasons.txt"
-    path "*.filtered_lite.gff"
+    path "merged_collapsed_classification.filtered_lite_classification.txt", emit: filtered_classification
+    path "merged_collapsed_classification.filtered_lite_junctions.txt"
+    path "merged_collapsed.sorted.filtered_lite.gff", emit: filtered_gff
+    path "merged_collapsed_classification.filtered_lite_reasons.txt"
+    path "merged_collapsed_classification.filtered.summary.txt"
+    path "merged_collapsed_classification.filtered.report.json"
 
     script:
     """
@@ -186,6 +190,7 @@ process pigeonFilter {
 }
 
 process getSingleCellObject {
+    publishDir "nextflow_results", mode: 'copy'
     label "short_slurm_job"
     input:
     path id_to_sample
@@ -210,101 +215,31 @@ process getSingleCellObject {
     """
 }
 
-process writePbidList {
-
-    input:
-    path filtered_h5ad_file
-
-    output:
-    path "pbid_list.txt"
-
-    script:
-    """
-    #!/home/s/shreejoy/nxu/miniforge3/envs/patch_seq_spl/bin/python
-    from src.single_cell import SingleCell
-
-    lr_bulk = SingleCell("${filtered_h5ad_file}")
-    lr_bulk.var["pbid"].to_frame().write_csv("pbid_list.txt", include_header=False)
-    """
-
-    stub:
-    """
-    touch pbid_list.txt
-    """
-}
-
-process cleanSampleFasta {
-
-    input:
-    path sample_fasta
-
-    output:
-    path "cleaned.fasta"
-
-    script:
-    """
-    while IFS= read -r line; do
-        if [[ \$line == ">"* ]]; then
-            # Extract the part before the first "|"
-            echo "\${line%%|*}" >> "cleaned.fasta"
-        else
-            # Write the line unchanged
-            echo "\$line" >> "cleaned.fasta"
-        fi
-    done < "$sample_fasta"
-    """
-    stub:
-    """
-    touch cleaned.fasta
-    """
-}
-
 process filterSampleFasta {
+    publishDir "nextflow_results", mode: 'copy'
+    input:
+    path h5ad_file
+    path filtered_gff
+    path reference_fasta
+
+    output:
+    path "transcripts_filtered.fasta"
+
+    script:
+    """
+    ~/miniforge3/envs/SQANTI3.env/bin/gffread -w transcripts.fasta -g $reference_fasta $filtered_gff
+
+    get_pbid_list.py \\
+        --h5ad_file $h5ad_file \\
+        --output pbid_list.txt
+
+    ~/miniforge3/envs/patch_seq_spl/bin/seqkit grep -f pbid_list.txt transcripts.fasta > transcripts_filtered.fasta
+    """
     
-    input:
-    path pbid_list
-    path cleaned_fasta
-
-    output:
-    path "cleaned_filtered.fasta"
-
-    script:
-    """
-    ~/miniforge3/envs/patch_seq_spl/bin/seqkit grep -f $pbid_list $cleaned_fasta > "cleaned_filtered.fasta"
-    """
     stub:
     """
-    touch cleaned_filtered.fasta
-    """
-}
+    touch "transcripts_filtered.fasta"
 
-process filterSampleGTF {
-    label "short_slurm_job"
-    input:
-    path isoform_gff
-    path filtered_h5ad_file
-
-    output:
-    path "filtered_SFARI.gtf"
-
-    script:
-    """
-    #!/home/s/shreejoy/nxu/miniforge3/envs/patch_seq_spl/bin/python
-    import polars as pl
-    from src.single_cell import SingleCell
-    from src.utils import read_gtf
-
-    lr_bulk = SingleCell('${filtered_h5ad_file}')
-    gtf = read_gtf('${isoform_gff}')
-
-    gtf\\
-        .filter(pl.col("transcript_id").is_in(lr_bulk.var["pbid"]))\\
-        .drop("transcript_id")\\
-        .write_csv("filtered_SFARI.gtf", separator="\\t", quote_style="never", include_header=False)
-    """
-    stub:
-    """
-    touch filtered_SFARI.gtf
     """
 }
 
@@ -516,10 +451,11 @@ process makePacbioCDSGTF {
 
 process TransDecoderLongOrfs {
     label "short_slurm_job"
+    publishDir "nextflow_results", mode: 'copy'
+
     input:
 
     path filtered_sample_fasta
-    path protein_fasta
 
     output:
     path "${filtered_sample_fasta}.transdecoder_dir/", emit: longest_orfs_dir
@@ -538,6 +474,7 @@ process TransDecoderLongOrfs {
 
 process blastpTransDecoder {
     label "short_slurm_job"
+    publishDir "nextflow_results", mode: 'copy'
 
     input:
 
@@ -553,7 +490,7 @@ process blastpTransDecoder {
 
     blastp -query "$longest_orfs" \\
         -db $protein_fasta -max_target_seqs 1 \\
-        -outfmt 6 -evalue 1e-5 -num_threads 40 > blastp.outfmt6
+        -outfmt 6 -evalue 1e-5 -num_threads $task.cpus > blastp.outfmt6
     """
     stub:
     """
@@ -563,6 +500,7 @@ process blastpTransDecoder {
 
 process hmmSearch {
     label "short_slurm_job"
+    publishDir "nextflow_results", mode: 'copy'
 
     input:
     path longest_orfs
@@ -572,9 +510,12 @@ process hmmSearch {
     path "pfam.domtblout", emit : domtblout
 
     script:
+    // """
+    // hmmsearch --cpu $task.cpus -E 1e-10 --domtblout pfam.domtblout $hmmfile $longest_orfs
+    // """
     """
-    hmmsearch --cpu $task.cpus -E 1e-10 --domtblout pfam.domtblout $hmmfile $longest_orfs
-    """
+    touch pfam.domtblout
+    """    
 
     stub:
     """
@@ -584,6 +525,7 @@ process hmmSearch {
 
 process transDecoderPredict {
     label "short_slurm_job"
+    publishDir "nextflow_results", mode: 'copy'
     
     input:
     path longest_orfs_dir
@@ -598,8 +540,11 @@ process transDecoderPredict {
     path "${filtered_sample_fasta}.transdecoder.bed"
 
     script:
+    // """
+    // TransDecoder.Predict --single_best_only -t $filtered_sample_fasta --retain_pfam_hits $domtblout --retain_blastp_hits $blastpout
+    // """
     """
-    TransDecoder.Predict --single_best_only -t $filtered_sample_fasta --retain_pfam_hits $domtblout --retain_blastp_hits $blastpout
+    TransDecoder.Predict --single_best_only -t $filtered_sample_fasta --retain_pfam_hits /gpfs/fs0/scratch/s/shreejoy/nxu/SFARI/pfam.domtblout --retain_blastp_hits $blastpout
     """
 
     stub:
@@ -612,13 +557,16 @@ process transDecoderPredict {
 }
 
 process cdnaAlignmentOrfToGenome {
+    label "short_slurm_job"
+    publishDir "nextflow_results", mode: 'copy'
+
     input:
     path transdecoder_gff3
     path filtered_sample_gtf
     path filtered_sample_fasta
 
     output:
-    path "SFARI.transdecoder.genome.gff3"
+    path "${filtered_sample_fasta}.transdecoder.genome.gff3"
 
     script:
     """
@@ -627,7 +575,7 @@ process cdnaAlignmentOrfToGenome {
     /usr/local/bin/util/cdna_alignment_orf_to_genome_orf.pl \\
         $transdecoder_gff3 \\
         transcripts.gff3 \\
-        $filtered_sample_fasta > "SFARI.transdecoder.genome.gff3"
+        $filtered_sample_fasta > "${filtered_sample_fasta}.transdecoder.genome.gff3"
     """
 
     // stub:
@@ -1263,43 +1211,41 @@ workflow {
     isoseqCollapse(mergeBamFiles.out)
     pigeonPrepare(isoseqCollapse.out.isoform_gff, params.annotation_gtf, params.reference_fasta)
     pigeonClassify(pigeonPrepare.out.sorted_isoform_gff, pigeonPrepare.out.sorted_isoform_gff_pgi, pigeonPrepare.out.sorted_annotation, pigeonPrepare.out.sorted_annotation_gtf_pgi, params.reference_fasta, pigeonPrepare.out.reference_fasta_pgi)
-    pigeonFilter(pigeonClassify.out.classification, isoseqCollapse.out.isoform_gff)
+    pigeonFilter(pigeonClassify.out.classification, pigeonClassify.out.junctions, pigeonPrepare.out.sorted_isoform_gff)
     getSingleCellObject(getIDToSample.out, pigeonFilter.out.filtered_classification, isoseqCollapse.out.read_stat)
-    writePbidList(getSingleCellObject.out)
-    cleanSampleFasta(isoseqCollapse.out.sample_fasta)
-    filterSampleFasta(writePbidList.out, cleanSampleFasta.out)
-    filterSampleGTF(isoseqCollapse.out.isoform_gff, getSingleCellObject.out)
-    CPAT(filterSampleFasta.out)
-    getPBGene(getSingleCellObject.out)
-    orf_calling(
-        CPAT.out.orf_coord, CPAT.out.orf_fasta, params.annotation_gtf, 
-        filterSampleGTF.out, getPBGene.out, pigeonFilter.out.filtered_classification, filterSampleFasta.out)
-    TransDecoderLongOrfs(filterSampleFasta.out, params.protein_fasta)
+    filterSampleFasta(getSingleCellObject.out, pigeonFilter.out.filtered_gff, params.reference_fasta)
+    // filterSampleGTF(isoseqCollapse.out.isoform_gff, getSingleCellObject.out)
+    // CPAT(filterSampleFasta.out)
+    // getPBGene(getSingleCellObject.out)
+    // orf_calling(
+    //     CPAT.out.orf_coord, CPAT.out.orf_fasta, params.annotation_gtf, 
+    //     filterSampleGTF.out, getPBGene.out, pigeonFilter.out.filtered_classification, filterSampleFasta.out)
+    TransDecoderLongOrfs(filterSampleFasta.out)
     blastpTransDecoder(TransDecoderLongOrfs.out.longest_orfs_pep, params.protein_fasta)
     hmmSearch(TransDecoderLongOrfs.out.longest_orfs_pep, params.hmmfile)
-    Channel.fromPath("/scratch/s/shreejoy/nxu/SFARI/results/long_read/pfam.domtblout").set { domtblout_stub }
+    // Channel.fromPath("/scratch/s/shreejoy/nxu/SFARI/results/long_read/pfam.domtblout").set { domtblout_stub }
     transDecoderPredict(TransDecoderLongOrfs.out.longest_orfs_dir, filterSampleFasta.out, hmmSearch.out, blastpTransDecoder.out)
-    cdnaAlignmentOrfToGenome(transDecoderPredict.out.transdecoder_gff3, filterSampleGTF.out, filterSampleFasta.out)
-    reformatTransDecoderGFF3(cdnaAlignmentOrfToGenome.out)
-    refineOrfDatabase(orf_calling.out, filterSampleFasta.out)
-    makePacbioCDSGTF(filterSampleGTF.out, refineOrfDatabase.out.refined_tsv, orf_calling.out, getPBGene.out)
-    generateReferenceTables(params.annotation_gtf, params.transcripts_fasta)
-    transcriptomeSummary(params.sq_out, generateReferenceTables.out.ensg_gene, generateReferenceTables.out.enst_isoname)
-    renameCDSToExon(makePacbioCDSGTF.out, params.annotation_gtf)
-    SQANTIProtein(renameCDSToExon.out.sample_transcript_exon_only, renameCDSToExon.out.sample_cds_renamed, renameCDSToExon.out.ref_transcript_exon_only, renameCDSToExon.out.ref_cds_renamed, orf_calling.out)
-    fivePrimeUtr(params.annotation_gtf, makePacbioCDSGTF.out, SQANTIProtein.out)
-    proteinClassification(fivePrimeUtr.out, orf_calling.out, refineOrfDatabase.out.refined_tsv, generateReferenceTables.out.ensg_gene)
-    proteinGeneRename(proteinClassification.out.pr_genes, makePacbioCDSGTF.out, refineOrfDatabase.out.refined_fasta, refineOrfDatabase.out.refined_tsv)
-    filterProtein(params.annotation_gtf, proteinClassification.out.protein_classification_unfiltered, proteinGeneRename.out.pr_renamed_refined_fasta, proteinGeneRename.out.pr_renamed_refined_cds)
-    makeGencodeDatabase(params.gencode_translation_fasta, generateReferenceTables.out.protein_coding_genes)
-    makeHybridDatabase(proteinClassification.out.protein_classification_unfiltered, generateReferenceTables.out.gene_lens, filterProtein.out.filtered_protein_fasta, makeGencodeDatabase.out.gc_fasta, proteinGeneRename.out.pr_renamed_refined_info, filterProtein.out.filtered_cds)
-    massSpecRawConvert(Channel.fromPath("/scratch/s/shreejoy/nxu/SFARI/data/tc-1154/*.raw")).collect().set { massSpecFiles }
-    Channel.value("${projectDir}/assets/NO_TOML_FILE").set { toml_file }
-    metamorpheusWithGencodeDatabase(makeGencodeDatabase.out.gc_fasta, massSpecFiles, toml_file)
+    cdnaAlignmentOrfToGenome(transDecoderPredict.out.transdecoder_gff3, pigeonFilter.out.filtered_gff, filterSampleFasta.out)
+    // reformatTransDecoderGFF3(cdnaAlignmentOrfToGenome.out)
+    // refineOrfDatabase(orf_calling.out, filterSampleFasta.out)
+    // makePacbioCDSGTF(filterSampleGTF.out, refineOrfDatabase.out.refined_tsv, orf_calling.out, getPBGene.out)
+    // generateReferenceTables(params.annotation_gtf, params.transcripts_fasta)
+    // transcriptomeSummary(params.sq_out, generateReferenceTables.out.ensg_gene, generateReferenceTables.out.enst_isoname)
+    // renameCDSToExon(makePacbioCDSGTF.out, params.annotation_gtf)
+    // SQANTIProtein(renameCDSToExon.out.sample_transcript_exon_only, renameCDSToExon.out.sample_cds_renamed, renameCDSToExon.out.ref_transcript_exon_only, renameCDSToExon.out.ref_cds_renamed, orf_calling.out)
+    // fivePrimeUtr(params.annotation_gtf, makePacbioCDSGTF.out, SQANTIProtein.out)
+    // proteinClassification(fivePrimeUtr.out, orf_calling.out, refineOrfDatabase.out.refined_tsv, generateReferenceTables.out.ensg_gene)
+    // proteinGeneRename(proteinClassification.out.pr_genes, makePacbioCDSGTF.out, refineOrfDatabase.out.refined_fasta, refineOrfDatabase.out.refined_tsv)
+    // filterProtein(params.annotation_gtf, proteinClassification.out.protein_classification_unfiltered, proteinGeneRename.out.pr_renamed_refined_fasta, proteinGeneRename.out.pr_renamed_refined_cds)
+    // makeGencodeDatabase(params.gencode_translation_fasta, generateReferenceTables.out.protein_coding_genes)
+    // makeHybridDatabase(proteinClassification.out.protein_classification_unfiltered, generateReferenceTables.out.gene_lens, filterProtein.out.filtered_protein_fasta, makeGencodeDatabase.out.gc_fasta, proteinGeneRename.out.pr_renamed_refined_info, filterProtein.out.filtered_cds)
+    // massSpecRawConvert(Channel.fromPath("/scratch/s/shreejoy/nxu/SFARI/data/tc-1154/*.raw")).collect().set { massSpecFiles }
+    // Channel.value("${projectDir}/assets/NO_TOML_FILE").set { toml_file }
+    // metamorpheusWithGencodeDatabase(makeGencodeDatabase.out.gc_fasta, massSpecFiles, toml_file)
     // metamorpheusWithUniprotDatabase(params.protein_fasta, massSpecFiles, toml_file)
-    peptideAnalysis(metamorpheusWithGencodeDatabase.out.gencode_peptides, generateReferenceTables.out.gene_isoname, proteinGeneRename.out.pr_renamed_refined_fasta, filterProtein.out.filtered_protein_fasta, makeHybridDatabase.out.hybrid_fasta, transcriptomeSummary.out)
-    gencodeTrackVisualization(params.annotation_gtf)
-    proteinTrackVisualization(proteinGeneRename.out.pr_renamed_refined_cds, filterProtein.out.filtered_cds, makeHybridDatabase.out.high_confidence_cds)
+    // peptideAnalysis(metamorpheusWithGencodeDatabase.out.gencode_peptides, generateReferenceTables.out.gene_isoname, proteinGeneRename.out.pr_renamed_refined_fasta, filterProtein.out.filtered_protein_fasta, makeHybridDatabase.out.hybrid_fasta, transcriptomeSummary.out)
+    // gencodeTrackVisualization(params.annotation_gtf)
+    // proteinTrackVisualization(proteinGeneRename.out.pr_renamed_refined_cds, filterProtein.out.filtered_cds, makeHybridDatabase.out.high_confidence_cds)
     // Channel.fromPath(params.outdir + "/*/outputs/flnc.report.csv").collect().set { flncReports }
     // collectPolyATailLength(flncReports, isoseqCollapse.out.read_stat)
 }
