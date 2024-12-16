@@ -10,6 +10,8 @@ results/*
 .snakemake
 .nextflow
 conf/
+work/
+.nextflow.log*
 
 # macOS
 .DS_Store
