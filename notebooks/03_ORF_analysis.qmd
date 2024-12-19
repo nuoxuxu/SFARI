@@ -1,0 +1,372 @@
+# Run Transdecoder on full_nt.fasta
+
+Run transdecoder to generate ORFs
+
+```{bash}
+#| label: run-transdecoder
+
+cd ~/tools
+wget https://data.broadinstitute.org/Trinity/CTAT_SINGULARITY/MISC/TransDecoder/transdecoder.v5.7.1.simg
+
+cd ${SCRATCH}/SFARI
+module load apptainer
+apptainer shell -B="/scratch/s/shreejoy/nxu/SFARI:/scratch/s/shreejoy/nxu/SFARI" ~/tools/transdecoder.v5.7.1.simg
+
+TransDecoder.LongOrfs -S -t full_nt.fasta
+
+makeblastdb -dbtype prot -in uniprotkb_proteome_UP000005640_AND_revi_2024_10_07.fasta
+
+blastp -query full_nt.fasta.transdecoder_dir/longest_orfs.pep \
+    -db uniprotkb_proteome_UP000005640_AND_revi_2024_10_07.fasta -max_target_seqs 1 \
+    -outfmt 6 -evalue 1e-5 -num_threads 40 > blastp.outfmt6
+
+hmmsearch --cpu 40 -E 1e-10 --domtblout pfam.domtblout Pfam-A.hmm full_nt.fasta.transdecoder_dir/longest_orfs.pep
+
+TransDecoder.Predict --single_best_only -t full_nt.fasta --retain_pfam_hits pfam.domtblout --retain_blastp_hits blastp.outfmt6
+
+/usr/local/bin/util/cdna_alignment_orf_to_genome_orf.pl \
+     full_nt.fasta.transdecoder.gff3 \
+     proc/merged_collapsed.filtered.gff3 \
+     full_nt.fasta > full_nt.fasta.transdecoder.genome.gff3
+```
+
+# Reformat transdecoder.genome.gff3
+
+Reformat the GFF3 file to include gene_id and transcript_id
+
+```{python}
+#| label: reformat-gff3
+
+GFF3 = read_gff("full_nt.fasta.transdecoder.genome.gff3", attributes=["Parent"])
+
+GFF3 = GFF3\
+    .with_columns(
+        pl.when(pl.col("type")=="mRNA").then(pl.col("Parent").str.split("^").map_elements(lambda s: s[0])).otherwise(pl.col("Parent").str.extract("^(.*)\.[^.]+$"))
+    )\
+    .with_columns(
+        pl.when(pl.col("type")!= "mRNA").then(pl.col("Parent").str.extract("^(.*)\.[^.]+$")).otherwise(pl.col("Parent")).alias("gene_id"),
+        pl.when(pl.col("type")=="mRNA").then(None).otherwise(pl.col("Parent")).alias("transcript_id")
+    ).drop("Parent").drop_nulls("seqid")
+
+GFF3\
+    .with_columns(
+        attributes = pl.when(pl.col("type")=="mRNA").then(pl.lit('gene_id "') + pl.col("gene_id") + pl.lit('";')).otherwise(pl.lit('gene_id "') + pl.col("gene_id") + pl.lit('";') + pl.lit('transcript_id "') + pl.col("transcript_id") + pl.lit('";'))
+    )\
+    .select(["seqid", "source", "type", "start", "end", "score", "strand", "phase", "attributes"])\
+    .write_csv("full_nt.fasta.transdecoder.genome_updated.gff3", quote_style = "never", separator = "\t", include_header = False)
+```
+
+# Add transdecoder predictions to lr_bulk
+
+```{python}
+#| label: import-python
+
+import polars as pl
+from src.single_cell import SingleCell
+import polars.selectors as cs
+from src.utils import read_gtf
+```
+
+```{python}
+#| label: import-lr_bulk
+
+lr_bulk = SingleCell("results/long_read/pbid_filtered.h5ad")
+```
+
+```{python}
+#| label: add-pbid_with_at_least_one_orf
+
+pbid_with_at_least_one_orf = pl.read_csv("full_nt.fasta.transdecoder_dir/longest_orfs.cds.scores", separator="\t")\
+    .with_columns(
+        pbid = pl.col("#acc").str.extract(r"^(.*)\.[^.]*$")
+    )\
+    .unique(["pbid"])["pbid"]
+
+lr_bulk.var = lr_bulk.var\
+    .with_columns(
+        at_least_one_orf = pl.col("pbid").is_in(pbid_with_at_least_one_orf)
+    )
+```
+
+```{python}
+#| label: get-transdecoder_bed
+
+transdecoder_bed = pl.read_csv("full_nt.fasta.transdecoder.bed", separator="\t", comment_prefix="track name=", new_columns=["pbid", "chromStart", "chromEnd", "name", "score", "strand", "thickStart", "thickEnd", "itemRgb", "blockCount", "blockSizes", "blockStarts"])\
+    .with_columns(
+        ORF_type = pl.col("name").str.extract(r"ORF_type:([^_]+)"),
+        is_uniprot = pl.col("name").str.contains("sp\\|")
+    )
+```
+
+```{python}
+#| label: add-validatable-orf
+
+lr_bulk.var = lr_bulk.var\
+    .with_columns(
+        validatable_orf = pl.col("pbid").is_in(transdecoder_bed.filter(pl.col("is_uniprot"))["pbid"])
+    )
+```
+
+```{python}
+#| label: add-orf_type
+
+lr_bulk.var = lr_bulk.var\
+    .join(
+        transdecoder_bed["pbid", "ORF_type"], how="left", on="pbid"
+    )
+```
+
+Add GENCODE TSS and TTS
+
+```{python}
+#| label: add-TSS-TTS
+
+genome_v39 = read_gtf("".join([os.getenv("GENOMIC_DATA_DIR"), "GENCODE/gencode.v39.annotation.gtf"]), attributes=["transcript_id", "transcript_type"])\
+    .filter(pl.col("feature")=="transcript")
+
+lr_bulk.var = lr_bulk.var\
+    .cast({"associated_transcript": pl.String})\
+    .join(genome_v39["start", "end", "transcript_id"].rename({"transcript_id": "associated_transcript"}), how="left", on="associated_transcript")\
+    .rename({"start": "TSS", "end": "TTS"})
+```
+
+Add TransDecoder predictions (CDS_start, CDS_end, CDS_genomic_start, CDS_genomic_end, coding, CDS_length) and GENCODE annotation (transcript_type) to lr_bulk.var
+
+```{python}
+#| label: add-CDS-genomic-coordinates
+
+lr_bulk.var = lr_bulk.var\
+    .join(transdecoder_bed["pbid", "thickStart", "thickEnd"], how="left", on="pbid")\
+    .with_columns(
+        CDS_start = pl.col("thickStart") + 1,
+        CDS_end = pl.col("thickEnd")
+    )\
+    .with_columns(
+        CDS_length = pl.col("CDS_end") - pl.col("CDS_start") + 1,
+        CDS_genomic_start = pl.col("TSS") + pl.col("CDS_start") - 1,
+        CDS_genomic_end = pl.col("TTS") + pl.col("CDS_end") - 1
+    ).drop(["thickStart", "thickEnd", "TSS", "TTS"])\
+    .cast({"associated_transcript": pl.String})\
+    .join(genome_v39["transcript_id", "transcript_type"].rename({"transcript_id": "associated_transcript"}), how="left", on="associated_transcript")
+```
+
+```{python}
+lr_bulk.save("results/long_read/pbid_filtered_analyzed.h5ad", overwrite=True)
+```
+
+# Do TransDecoder-predicted CDS genomic coordinates match GENCODE annotation?
+
+```{python}
+#| label: get-CDS-coordinates
+CDS_coord = lr_bulk.var\
+    .filter(
+        pl.col("structural_category")=="full-splice_match", 
+        pl.col("transcript_type")=="protein_coding"
+    )\
+    .select(["pbid", "associated_transcript", "strand", "CDS_genomic_start", "CDS_genomic_end"])\
+    .rename({"associated_transcript": "transcript_id"})
+```
+
+```{python}
+CDS_v39 = read_gtf("".join([os.getenv("GENOMIC_DATA_DIR"), "GENCODE/gencode.v39.annotation.gtf"]), attributes=["transcript_id", "transcript_type"])\
+    .filter(
+        pl.col("feature").is_in(["start_codon", "stop_codon"]),
+        pl.col("transcript_type")=="protein_coding"
+    )\
+    .with_columns(
+        coord = pl.when(pl.col("feature")=="start_codon").then(pl.col("start")).otherwise(pl.col("end"))
+    )\
+    .filter(
+        pl.col("frame")=="0"
+    )
+
+CDS_v39 = CDS_v39\
+    .join(
+        CDS_v39.pivot("feature", index="transcript_id", values="coord"),
+        how="left",
+        on="transcript_id"
+    )\
+    .drop_nulls()\
+    .unique(["transcript_id"])\
+    .with_columns(
+        CDS_genomic_start = pl.when(pl.col("strand")=="+").then(pl.col("start_codon")).otherwise(pl.col("stop_codon")),
+        CDS_genomic_end = pl.when(pl.col("strand")=="-").then(pl.col("start_codon")).otherwise(pl.col("stop_codon"))
+    )\
+    .select(["transcript_id", "CDS_genomic_start", "CDS_genomic_end"])
+```
+
+```{python}
+inspect = lr_bulk.var\
+    .filter(
+        pl.col("structural_category")=="full-splice_match",
+        pl.col("transcript_type")=="protein_coding"
+    )\
+    .select(["associated_transcript", "strand", "CDS_genomic_start", "CDS_genomic_end"])\
+    .drop_nulls()\
+    .rename({"associated_transcript": "transcript_id"})\
+    .join(CDS_v39, how="left", on="transcript_id")
+```
+
+# Validate TransDecoder-predicted ORFs
+
+Get unique combinations of uniprot IDs and PB IDs
+
+```{python}
+#| label: get-uniprot-matches
+
+uniprot_matches = pl.read_csv("transdecoder_header.txt", separator=r" ", has_header=False)\
+    .select(["column_1", "column_5", "column_6", "column_7", "column_8"])\
+    .with_columns(
+        pl.col("column_1").str.replace(">", "").str.extract(r"^(.*)\.[^.]*$").alias("pbid"),
+        pl.col("column_5").str.replace("type:", "").alias("type"),
+        pl.col("column_6").str.replace("\(\+\),", "").str.splitn(",", 2).struct.rename_fields(["score", "PFAM"]).alias("fields"),
+        pl.col("column_7").str.replace("len:", "").cast(pl.Int32).alias("len")
+        ).unnest("fields")\
+    .select(~cs.starts_with("column"))\
+    .with_columns(
+        score = pl.col("score").str.replace("score=", "").cast(pl.Float32)
+    )\
+    .filter(pl.col("type")=="complete")\
+    .with_columns(
+        pl.col("PFAM").str.split(",")
+    ).explode("PFAM")\
+    .filter(
+        pl.col("PFAM").str.contains("^sp\\|") | pl.col("PFAM").is_null()
+    )\
+    .with_columns(
+        pl.col("PFAM").str.splitn("|", 5).struct.rename_fields(["sp", "uniprot_id", "UniProtKB_AC-ID", "pident", "evalue"]).alias("fields")
+    ).unnest("fields")\
+    .drop("sp")\
+    .cast({"pident": pl.Float32, "evalue": pl.Float32}).drop("PFAM")\
+    .filter(pl.col("UniProtKB_AC-ID").is_not_null())
+```
+
+Some PB IDs have multiple rows but they all map to the same gene name.
+
+```{python}
+#| label: mapping-from-pbid-to-uniprot-is-unique
+
+uniprot_matches\
+    .filter(
+        pl.col("pbid").is_in(uniprot_matches.group_by("pbid").count().filter(pl.col("count")>1)["pbid"])
+    )\
+    .group_by("pbid")\
+    .agg(
+        pl.col("UniProtKB_AC-ID").unique()
+    )\
+    .filter(
+        pl.col("UniProtKB_AC-ID").map_elements(lambda s: len(s)) > 1
+    )
+```
+
+```{python}
+#| label: import-python
+
+from src.id_mapping import submit_id_mapping, get_mapping_results
+from src.utils import read_gtf
+import os
+```
+
+```{python}
+#| label: submit_id_mapping
+
+job_id = submit_id_mapping("UniProtKB_AC-ID", "Ensembl", uniprot_matches.drop_nulls("UniProtKB_AC-ID")["UniProtKB_AC-ID"].unique().to_list())
+```
+
+UniProtKB_AC-ID → Ensembl is one-to-many. Needs to remove Ensembl IDs that are not in the main chromosomes.
+
+```{python}
+#| label: get_mapping_results
+
+gencode_v47 = read_gtf("".join([os.getenv("GENOMIC_DATA_DIR"), "GENCODE/gencode.v47.annotation.gtf"]), attributes=["gene_id"]).filter(pl.col("feature")=="transcript")
+
+id_mapping = get_mapping_results(job_id)
+
+id_mapping = pl.DataFrame(id_mapping["results"])\
+    .filter(pl.col("to").is_in(gencode_v47["gene_id"]))\
+    .with_columns(
+        pl.col("to").str.split(".").map_elements(lambda s: s[0])
+    )\
+    .rename({"to": "gencode_v47", "from": "UniProtKB_AC-ID"})
+```
+
+The mapping from gene names to Ensembl IDs is mostly one-to-one. It's one-to-many for some genes of uncommon types. As a result, removes the gene names that map to multiple Ensembl IDs.
+
+```{python}
+#| label: get-pbid-to-gencode-v39
+
+gencode_v39 = read_gtf("".join([os.getenv("GENOMIC_DATA_DIR"), "GENCODE/gencode.v39.annotation.gtf"]), attributes=["gene_name", "gene_id", "gene_type"])\
+    .filter(pl.col("feature")=="gene")\
+    .with_columns(
+        pl.col("gene_id").str.split(".").map_elements(lambda s: s[0])
+    )\
+    .select(["gene_name", "gene_id"])
+
+gencode_v39 = gencode_v39.filter(pl.col("gene_name").is_in(gencode_v39.group_by(["gene_name"]).count().filter(pl.col("count")==1)["gene_name"]))
+
+pbid_to_gencode_v39 = lr_bulk.var\
+    .cast({"associated_gene": pl.String})\
+    .join(gencode_v39.rename({"gene_name": "associated_gene"}), how="left", on="associated_gene")\
+    .filter(pl.col("gene_id").is_not_null())\
+    .select(["pbid", "gene_id", "structural_category"])\
+    .rename({"gene_id": "gencode_v39"})
+```
+
+```{python}
+#| label: get-temp-for-visualization
+
+from src.ryp import r, to_r, to_py
+
+temp = uniprot_matches\
+    .join(pbid_to_gencode_v39, how = "left", on = "pbid")\
+    .join(id_mapping, how = "left", on = "UniProtKB_AC-ID")\
+    .drop_nulls()\
+    .with_columns(
+        is_equal = pl.col("gencode_v39") == pl.col("gencode_v47")
+    )\
+    .group_by("pbid")\
+    .agg(
+        pl.col("is_equal").map_elements(lambda x: x.sum()),
+        pl.col("structural_category").map_elements(lambda x: x[0])
+    )\
+    .with_columns(
+        pl.col("is_equal") > 0
+    )\
+    .select(["structural_category", "is_equal"])
+
+to_r(temp, "assocaited_gene_Gene_Name")
+```
+
+```{r}
+#| label: visualization
+
+library(dplyr)
+library(ggplot2)
+
+assocaited_gene_Gene_Name %>%
+    ggplot(aes(x = structural_category, fill = is_equal)) +
+    geom_bar(position = "fill") +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+```{python}
+#| label: BLASTP bitscore distribution
+import polars as pl
+from src.utils import read_outfmt
+import matplotlib.pyplot as plt
+from src.single_cell import SingleCell
+
+lr_bulk = SingleCell("results/long_read/pbid_filtered.h5ad")
+
+blastp_res = read_outfmt("blastp.outfmt6")\
+    .with_columns(
+        pl.col("qseqid").str.extract(r"^(.*)\.[^.]*$").alias("pbid")
+    )\
+    .join(lr_bulk.var["pbid", "structural_category2"], how="left", on="pbid")\
+    .filter(pl.col("structural_category2")=="full-splice_match")
+
+plt.hist(blastp_res["bitscore"], bins=100)
+plt.xlabel("bitscore")
+plt.ylabel("count")
+plt.title("BLASTP bitscore distribution for FSM transcripts")
+```
