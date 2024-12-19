@@ -13,7 +13,7 @@ params.comet_params = "/scratch/s/shreejoy/nxu/SFARI/data/comet.params"
 
 params.human_hexamer = "$projectDir/data/Human_Hexamer.tsv"
 params.human_logit_model = "$projectDir/data/Human_logitModel.RData"
-params.protein_fasta = "$projectDir/data/uniprotkb_proteome_UP000005640_AND_revi_2024_10_07.fasta"
+params.protein_fasta = "/project/s/shreejoy/Genomic_references/UniProt/UP000005640_9606.fasta"
 params.sq_out = "/scratch/s/shreejoy/nxu/SFARI/proc/SQANTI3_qc_classification.txt"
 params.hmmfile = "$projectDir/data/Pfam-A.hmm"
 params.name = "SFARI"
@@ -57,11 +57,6 @@ process mergeBamFiles {
     """
     ~/miniforge3/envs/SQANTI3.env/bin/samtools merge bam* -o merged.bam -@ $task.cpus
     """
-
-    stub: 
-    """
-    touch merged.bam
-    """
 }
 
 process isoseqCollapse {
@@ -83,17 +78,6 @@ process isoseqCollapse {
     """
     ~/miniforge3/envs/isoseq/bin/isoseq collapse -j $task.cpus $merged_bam merged_collapsed.gff
     """
-
-    stub:
-    """
-    touch merged_collapsed.abundance.txt
-    touch merged_collapsed.fasta
-    touch merged_collapsed.flnc_count.txt
-    touch merged_collapsed.gff
-    touch merged_collapsed.group.txt
-    touch merged_collapsed.read_stat.txt
-    touch merged_collapsed.report.json
-    """
 }
 
 process pigeonPrepare {
@@ -112,15 +96,6 @@ process pigeonPrepare {
     script:
     """
     ~/miniforge3/envs/SQANTI3.env/bin/pigeon prepare $isoform_gff $annotation_gtf $reference_fasta
-    """
-
-    stub:
-    """
-    touch merged_collapsed.sorted.gff
-    touch merged_collapsed.sorted.gff.pgi
-    touch gencode.v39.annotation.sorted.gtf
-    touch gencode.v39.annotation.sorted.gtf.pgi
-    touch GRCh38.primary_assembly.genome.fa.fai
     """
 }
 
@@ -145,14 +120,6 @@ process pigeonClassify {
     """
     ~/miniforge3/envs/SQANTI3.env/bin/pigeon classify $sorted_isoform_gff $sorted_annotation $reference_fasta
     """
-
-    stub:
-    """
-    touch merged_collapsed_classification.txt
-    touch merged_collapsed_junctions.txt
-    touch merged_collapsed.report.json
-    touch merged_collapsed.summary.txt
-    """
 }
 
 process pigeonFilter {
@@ -176,18 +143,10 @@ process pigeonFilter {
     """
     ~/miniforge3/envs/SQANTI3.env/bin/pigeon filter $classification --isoforms $isoform_gff
     """
-
-    stub:
-    """
-    touch merged_collapsed.filtered_lite_classification.txt
-    touch merged_collapsed.filtered_lite_junctions.txt
-    touch merged_collapsed.filtered_lite_reasons.txt
-    touch merged_collapsed.sorted.filtered_lite.gff
-    """
 }
 
 process getSingleCellObject {
-    publishDir "nextflow_results", mode: 'copy'
+
     label "short_slurm_job"
     input:
     path id_to_sample
@@ -204,11 +163,6 @@ process getSingleCellObject {
         --classification $classification \\
         --read_stat $read_stat \\
         --output pbid.h5ad
-    """
-
-    stub:
-    """
-    touch pbid.h5ad
     """
 }
 
@@ -232,12 +186,6 @@ process filterSampleFasta {
 
     ~/miniforge3/envs/patch_seq_spl/bin/seqkit grep -f pbid_list.txt transcripts.fasta > transcripts_filtered.fasta
     """
-    
-    stub:
-    """
-    touch "transcripts_filtered.fasta"
-
-    """
 }
 
 process TransDecoderLongOrfs {
@@ -256,11 +204,6 @@ process TransDecoderLongOrfs {
     script:
     """
     TransDecoder.LongOrfs -S -t $filtered_sample_fasta
-    """
-    stub:
-    """
-    mkdir -p ${filtered_sample_fasta}.transdecoder_dir/
-    touch ${filtered_sample_fasta}.transdecoder_dir/longest_orfs.pep
     """
 }
 
@@ -284,9 +227,10 @@ process blastpTransDecoder {
         -db $protein_fasta -max_target_seqs 1 \\
         -outfmt 6 -evalue 1e-5 -num_threads $task.cpus > blastp.outfmt6
     """
+
     stub:
     """
-    touch blastp.outfmt6
+    touch "blastp.outfmt6"
     """
 }
 
@@ -314,7 +258,6 @@ process hmmSearch {
 
 process transDecoderPredict {
     label "short_slurm_job"
-    publishDir "nextflow_results", mode: 'copy'
     
     input:
     path longest_orfs_dir
@@ -330,16 +273,16 @@ process transDecoderPredict {
 
     script:
     """
-    rm -rf "${filtered_sample_fasta}.transdecoder_dir/__checkpoints_TDpredict"
-    TransDecoder.Predict --single_best_only -t $filtered_sample_fasta --retain_pfam_hits $$domtblout --retain_blastp_hits $blastpout
+    rm -rf ${filtered_sample_fasta}.transdecoder_dir/__checkpoints_TDpredict
+    TransDecoder.Predict --single_best_only -t ${filtered_sample_fasta} --retain_pfam_hits $domtblout --retain_blastp_hits $blastpout
     """
 
     stub:
     """
-    touch ${filtered_sample_fasta}.transdecoder.pep
-    touch ${filtered_sample_fasta}.transdecoder.cds
-    touch ${filtered_sample_fasta}.transdecoder.gff3
-    touch ${filtered_sample_fasta}.transdecoder.bed
+    touch "${filtered_sample_fasta}.transdecoder.pep"
+    touch "${filtered_sample_fasta}.transdecoder.cds"
+    touch "${filtered_sample_fasta}.transdecoder.gff3"
+    touch "${filtered_sample_fasta}.transdecoder.bed"
     """
 }
 
@@ -353,7 +296,7 @@ process cdnaAlignmentOrfToGenome {
     path filtered_sample_fasta
 
     output:
-    path "${filtered_sample_fasta}.transdecoder.genome.gff3"
+    path "${filtered_sample_fasta}.transdecoder.genome.gff3", emit: genome_gff3
 
     script:
     """
@@ -365,18 +308,66 @@ process cdnaAlignmentOrfToGenome {
         $filtered_sample_fasta > "${filtered_sample_fasta}.transdecoder.genome.gff3"
     """
 
-    // stub:
-    // """
-    // /usr/local/bin/util/gtf_to_alignment_gff3.pl $filtered_sample_gtf > transcripts.gff3
-
-    // /usr/local/bin/util/cdna_alignment_orf_to_genome_orf.pl \\
-    //     "/gpfs/fs0/scratch/s/shreejoy/nxu/SFARI/proc/cleaned_filtered.fasta.transdecoder.gff3" \\
-    //     transcripts.gff3 \\
-    //     $filtered_sample_fasta > "SFARI.transdecoder.genome.gff3"
-    // """
     stub:
     """
-    touch SFARI.transdecoder.genome.gff3
+    cp -r /gpfs/fs0/scratch/s/shreejoy/nxu/SFARI/nextflow_results/transcripts_filtered.fasta.transdecoder_dir ./
+
+    /usr/local/bin/util/gtf_to_alignment_gff3.pl $filtered_sample_gtf > transcripts.gff3
+
+    /usr/local/bin/util/cdna_alignment_orf_to_genome_orf.pl \\
+        /gpfs/fs0/scratch/s/shreejoy/nxu/SFARI/nextflow_results/transcripts_filtered.fasta.transdecoder.gff3 \\
+        transcripts.gff3 \\
+        $filtered_sample_fasta > "${filtered_sample_fasta}.transdecoder.genome.gff3"
+    """
+}
+
+process convertGenomeGff3toGtf {
+    publishDir "nextflow_results", mode: 'copy'
+    input:
+    path genome_gff3
+
+    output:
+    path "${genome_gff3}.gtf"
+
+    script:
+    """
+    reformat_transdecoder_gff3.py \\
+        --genome_gff3 $genome_gff3 \\
+        --output ${genome_gff3}.gtf
+    """
+
+}
+
+process convertGenomeGff3ForGenomeKit {
+    publishDir "nextflow_results", mode: 'copy'
+
+    input:
+    path genome_gff3
+
+    output:
+    path "genomekit.gff3"
+
+    script:
+    """
+    convert_genome_gff3_for_GenomeKit.py \\
+        --genome_gff3 $genome_gff3 \\
+        --output genomekit.gff3
+    """
+}
+
+process generateGenomeKitDB {
+    conda "/home/s/shreejoy/nxu/miniforge3/envs/genomekit"
+
+    input:
+    path genomekit_gff3
+
+    output:
+    path "SFARI.v22.dganno"
+
+    script:
+    """
+    python -c 'import genome_kit as gk ; gk.GenomeAnnotation.build_gencode("$genomekit_gff3", "SFARI", gk.Genome("hg38.p13"))'
+    cp SFARI.v22.dganno \$GENOMEKIT_DATA_DIR/
     """
 }
 
@@ -401,6 +392,8 @@ process collectPolyATailLength {
     """
 }
 
+// Running addORFPredictions.py from the command line gives out segementation fault error
+
 process addORFPredictions {
 
     conda "/home/s/shreejoy/nxu/miniforge3/envs/SQANTI3.env"
@@ -411,43 +404,68 @@ process addORFPredictions {
     path transdecoder_gff3
 
     output:
-    path "pbid_orf.h5ad"
+    path "pbid_orf.h5ad", emit: h5ad_file_orf
 
     script:
     """
     addORFPredictions.py \\
-        --h5ad_object $h5ad_object \\
+        --h5ad_file $h5ad_object \\
         --longest_orfs_gff3 $longest_orfs_gff3 \\
         --pred_orfs_gff3 $transdecoder_gff3 \\
         --output "pbid_orf.h5ad"
     """
+
+    stub:
+    """
+    touch "pbid_orf.h5ad"
+    """
 }
 
 process makePacBioDatabase {
+
     conda "/home/s/shreejoy/nxu/miniforge3/envs/SQANTI3.env"
 
     input:
     path h5ad_file_orf
+    path genome_gff3
     path gencode_fasta
-    path filtered_sample_fasta
 
     output:
     path "PacBio_db.fasta"
 
     script:
     """
-    get_novel_transcripts_txt.py \\
-        --h5ad_file $h5ad_file_orf \\
-        --output novel_transcripts.txt
+    filter_genome_gff3.py \\
+        --h5ad_file_orf $h5ad_file_orf \\
+        --genome_gff3 $genome_gff3 \\
+        --output novel_transcripts.gff3
 
-    !~/miniforge3/envs/patch_seq_spl/bin/seqkit grep -f novel_transcripts.txt $filtered_sample_fasta > PacBio_db.fasta
+    apptainer run \\
+        -B \${PWD},\${GENOMIC_DATA_DIR} \\
+        \${NXF_SINGULARITY_CACHEDIR}/agat_1.0.0--pl5321hdfd78af_0.sif \\
+        agat_sp_extract_sequences.pl -g nextflow_results/novel_transcripts.gff3 -f \${GENOMIC_DATA_DIR}GENCODE/GRCh38.primary_assembly.genome.fa -t cds -p -o PacBio_db.fasta
+
+    cat $gencode_fasta >> PacBio_db.fasta
+    """
+
+    stub:
+    """
+    filter_genome_gff3.py \\
+        --h5ad_file_orf /scratch/s/shreejoy/nxu/SFARI/nextflow_results/pbid_orf.h5ad \\
+        --genome_gff3 $genome_gff3 \\
+        --output novel_transcripts.gff3
+
+    apptainer run \\
+        -B \${PWD},\${GENOMIC_DATA_DIR} \\
+        \${NXF_SINGULARITY_CACHEDIR}/agat_1.0.0--pl5321hdfd78af_0.sif \\
+        agat_sp_extract_sequences.pl -g novel_transcripts.gff3 -f \${GENOMIC_DATA_DIR}GENCODE/GRCh38.primary_assembly.genome.fa -t cds -p -o PacBio_db.fasta
 
     cat $gencode_fasta >> PacBio_db.fasta
     """
 }
 
 process cometSearch {
-    label "short_slurm_job"
+    // label "short_slurm_job"
     input:
     path comet_params
     path search_database
@@ -458,13 +476,13 @@ process cometSearch {
 
     script:
     """
-    ~/tools/comet.linux.exe -P $comet_params -D $search_database "file*.mzXML"
+    ~/tools/comet.linux.exe -P$comet_params -D$search_database file*.mzXML
     """
 }
 
 process runPercolator {
     publishDir "nextflow_results", mode: 'copy'
-    label "short_slurm_job"
+    // label "short_slurm_job"
     conda "/home/s/shreejoy/nxu/miniforge3/envs/patch_seq_spl"
     
     input:
@@ -475,13 +493,85 @@ process runPercolator {
 
     script:
     """
-    ls "file*.pin" | xargs -I {} tail -n +2 {} > pooled.pin
+    ls file*.pin | xargs -I {} tail -n +2 {} > pooled.pin
     
-    echo "\$(head -1 file1.pin)" | cat - pooled.pin > temp && mv -f temp pooled.pin
+    echo "\$(head -1 file1.pin)" | cat - pooled.pin > pooled2.pin
+
+    rm pooled.pin
     
-    percolator pooled.pin > percolator.tsv
+    percolator pooled2.pin > percolator.tsv
+
+    rm pooled2.pin
+
+    awk '{
+        for (i = 1; i <= NF; i++) {
+            if (i <= 5) {
+                printf "%s\\t", \$i;
+            } else {
+                printf "%s%s", \$i, (i < NF ? "," : "");
+            }
+        }
+        printf "\\n";
+    }' OFS="\\t" percolator.tsv > percolator_res.tsv
+
+    mv percolator_res.tsv percolator.tsv
     """
 }
+
+process addPeptideSupport{
+    publishDir "nextflow_results", mode: 'copy'
+
+    input:
+    path h5ad_file_orf
+    path percolator_tsv
+
+    output:
+    path "pbid_orf_peptide.h5ad"
+
+    script:
+    """
+    add_peptide_support.py \\
+        --h5ad_file $h5ad_file_orf \\
+        --peptide_file $percolator_tsv \\
+        --output "pbid_orf_peptide.h5ad"
+    """
+
+}
+
+process prepareIsoformSwitchAnalysis {
+    label "short_slurm_job"
+    publishDir "nextflow_results", mode: 'copy'
+    conda "/home/s/shreejoy/nxu/miniforge3/envs/patch_seq_spl"
+
+    input:
+    path h5ad_file
+    path filtered_gff
+    path filtered_sample_fasta
+
+    output:
+    path "IsoseqsSwitchList.rds"
+
+    script:
+    """
+    IsoformSwitchAnalyzeR.py \\
+        --h5ad_file $h5ad_file \\
+        --filtered_gff $filtered_gff \\
+        --fasta_file $filtered_sample_fasta \\
+        --rds_file "IsoseqsSwitchList.rds"
+    """
+}
+
+// For sample_gff3 rename CDS to exon and remove CDS
+// process prepareOrfClassify {
+//     input:
+//     path genome_gff3
+//     path annotation_gtf
+//     path reference_fasta
+
+//     output:
+    
+
+// }
 
 workflow {
     getIDToSample(params.datadir + "long_read/LUO26876.20240514/*/outputs/flnc.bam")
@@ -498,9 +588,15 @@ workflow {
     hmmSearch(TransDecoderLongOrfs.out.longest_orfs_pep, params.hmmfile)
     transDecoderPredict(TransDecoderLongOrfs.out.longest_orfs_dir, filterSampleFasta.out, hmmSearch.out, blastpTransDecoder.out)
     cdnaAlignmentOrfToGenome(transDecoderPredict.out.transdecoder_gff3, pigeonFilter.out.filtered_gff, filterSampleFasta.out)
-    Channel.fromPath(params.datadir + "data/tc-1154/*.mzXML").collect().set { mzXMLiles }
-    cometSearch(params.comet_params, mzXMLiles)
+    convertGenomeGff3ForGenomeKit(cdnaAlignmentOrfToGenome.out.genome_gff3)
+    generateGenomeKitDB(convertGenomeGff3ForGenomeKit.out)
+    addORFPredictions(getSingleCellObject.out, TransDecoderLongOrfs.out.longest_orfs_gff3, transDecoderPredict.out.transdecoder_gff3)
+    convertGenomeGff3toGtf(cdnaAlignmentOrfToGenome.out.genome_gff3)
+    makePacBioDatabase(addORFPredictions.out.h5ad_file_orf, cdnaAlignmentOrfToGenome.out.genome_gff3, params.gencode_translation_fasta)
+    Channel.fromPath(params.datadir + "tc-1154/*.mzXML").collect().set { mzXMLiles }
+    cometSearch(params.comet_params, makePacBioDatabase.out, mzXMLiles)
     runPercolator(cometSearch.out)
+    prepareIsoformSwitchAnalysis(getSingleCellObject.out, pigeonFilter.out.filtered_gff, filterSampleFasta.out)
     // Channel.fromPath(params.datadir + "/*/outputs/flnc.report.csv").collect().set { flncReports }
     // collectPolyATailLength(flncReports, isoseqCollapse.out.read_stat)
 }
