@@ -6896,8 +6896,28 @@ def get_positions_bim_or_pvar(bim_or_pvar_file, new_bim_or_pvar_file, dbSNP, *,
         run(f'rm "{new_prefix}.tmp2.pgen" "{new_prefix}.tmp2.pvar" '
             f'"{new_prefix}.tmp2.psam" "{new_prefix}.tmp2.log"')
 
-def read_gtf(file, attributes=["transcript_id"]):
-    return pl.read_csv(file, separator="\t", comment_prefix="#", new_columns=["seqname","source","feature","start","end","score","strand","frame","attributes"])\
+def read_gtf(file, attributes=["transcript_id"], keep_attributes=True):
+    if keep_attributes:
+        return pl.read_csv(file, separator="\t", comment_prefix="#", has_header = False, new_columns=["seqname","source","feature","start","end","score","strand","frame","attributes"])\
+            .with_columns(
+                [pl.col("attributes").str.extract(rf'{attribute} "([^;]*)";').alias(attribute) for attribute in attributes]
+                )
+    else:
+        return pl.read_csv(file, separator="\t", comment_prefix="#", has_header = False, new_columns=["seqname","source","feature","start","end","score","strand","frame","attributes"])\
+            .with_columns(
+                [pl.col("attributes").str.extract(rf'{attribute} "([^;]*)";').alias(attribute) for attribute in attributes]
+                ).drop("attributes")
+
+def read_gff(file, attributes=["ID"], keep_attributes=True):
+    if keep_attributes:
+        return pl.read_csv(file, separator="\t", comment_prefix="#", has_header = False, new_columns=["seqname","source","feature","start","end","score","strand","frame","attributes"])\
+            .with_columns(
+                [pl.col("attributes").str.extract(rf"{attribute}=([^;]+)").alias(attribute) for attribute in attributes]
+                )
+    return pl.read_csv(file, separator="\t", comment_prefix="#", has_header = False, new_columns=["seqid", "source", "feature", "start", "end", "score", "strand", "frame", "attributes"])\
         .with_columns(
-            [pl.col("attributes").str.extract(rf'{attribute} "([^;]*)";').alias(attribute) for attribute in attributes]
+            [pl.col("attributes").str.extract(rf"{attribute}=([^;]+)").alias(attribute) for attribute in attributes]
             ).drop("attributes")
+
+def read_outfmt(file):
+    return pl.read_csv(file, separator="\t", new_columns=["qseqid", "sseqid", "pident", "length", "mismatch", "gapopen", "gstart", "gend", "sstart", "send", "evalue", "bitscore"])
