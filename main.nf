@@ -561,17 +561,28 @@ process prepareIsoformSwitchAnalysis {
     """
 }
 
-// For sample_gff3 rename CDS to exon and remove CDS
-// process prepareOrfClassify {
-//     input:
-//     path genome_gff3
-//     path annotation_gtf
-//     path reference_fasta
+process renameCdsToExon {
+    publishDir "nextflow_results", mode: 'copy'
 
-//     output:
-    
+    input:
+    path h5ad_file_orf
+    path genome_gff3_gtf
+    path reference_gtf
 
-// }
+    output:
+    path "genome_gff3_gtf_renamed.gtf"
+    path "reference_gtf_renamed.gtf"
+
+    script:
+    """
+    rename_cds_to_exon.py \\
+        --h5ad_file_orf $h5ad_file_orf \\
+        --genome_gff3_gtf $genome_gff3_gtf \\
+        --reference_gtf $reference_gtf \\
+        --genome_gff3_gtf_renamed "genome_gff3_gtf_renamed.gtf" \\
+        --reference_gtf_renamed "reference_gtf_renamed.gtf"
+    """
+}
 
 workflow {
     getIDToSample(params.datadir + "long_read/LUO26876.20240514/*/outputs/flnc.bam")
@@ -592,6 +603,7 @@ workflow {
     generateGenomeKitDB(convertGenomeGff3ForGenomeKit.out)
     addORFPredictions(getSingleCellObject.out, TransDecoderLongOrfs.out.longest_orfs_gff3, transDecoderPredict.out.transdecoder_gff3)
     convertGenomeGff3toGtf(cdnaAlignmentOrfToGenome.out.genome_gff3)
+    renameCdsToExon(addORFPredictions.out.h5ad_file_orf, convertGenomeGff3toGtf.out, params.annotation_gtf)
     makePacBioDatabase(addORFPredictions.out.h5ad_file_orf, cdnaAlignmentOrfToGenome.out.genome_gff3, params.gencode_translation_fasta)
     Channel.fromPath(params.datadir + "tc-1154/*.mzXML").collect().set { mzXMLiles }
     cometSearch(params.comet_params, makePacBioDatabase.out, mzXMLiles)

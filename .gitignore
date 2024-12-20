@@ -12,6 +12,7 @@ results/*
 conf/
 work/
 .nextflow.log*
+nextflow_results/
 
 # macOS
 .DS_Store
