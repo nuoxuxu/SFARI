@@ -1,26 +1,31 @@
-#!/usr/bin/env python
-
+#!/home/s/shreejoy/nxu/miniforge3/envs/patch_seq_spl/bin/python
 from src.utils import read_gff
 import polars as pl
-import sys
+import argparse
 
-transdecoder_genome_gff3 = sys.argv[1]
-out = sys.argv[2]
+def main():
+    parser = argparse.ArgumentParser(description="Reformat TransDecoder genome GFF3 to be used in UCSC Genome Browser")
+    parser.add_argument("--genome_gff3", action="store", type=str)
+    parser.add_argument("--output", action="store", type=str)
+    params = parser.parse_args()
 
-GFF3 = read_gff(transdecoder_genome_gff3, attributes=["Parent"])
+    GFF3 = read_gff(params.genome_gff3, attributes=["Parent"])
 
-GFF3 = GFF3\
-    .with_columns(
-        pl.when(pl.col("type")=="mRNA").then(pl.col("Parent").str.split("^").map_elements(lambda s: s[0])).otherwise(pl.col("Parent").str.extract("^(.*)\.[^.]+$"))
-    )\
-    .with_columns(
-        pl.when(pl.col("type")!= "mRNA").then(pl.col("Parent").str.extract("^(.*)\.[^.]+$")).otherwise(pl.col("Parent")).alias("gene_id"),
-        pl.when(pl.col("type")=="mRNA").then(None).otherwise(pl.col("Parent")).alias("transcript_id")
-    ).drop("Parent").drop_nulls("seqid")
+    GFF3 = GFF3\
+        .with_columns(
+            pl.when(pl.col("feature")=="mRNA").then(pl.col("Parent").str.split("^").map_elements(lambda s: s[0], return_dtype=pl.String)).otherwise(pl.col("Parent").str.extract(r"^(.*)\.[^.]+$"))
+        )\
+        .with_columns(
+            pl.when(pl.col("feature")!= "mRNA").then(pl.col("Parent").str.extract(r"^(.*)\.[^.]+$")).otherwise(pl.col("Parent")).alias("gene_id"),
+            pl.when(pl.col("feature")=="mRNA").then(None).otherwise(pl.col("Parent")).alias("transcript_id")
+        ).drop("Parent").drop_nulls("seqname")
 
-GFF3\
-    .with_columns(
-        attributes = pl.when(pl.col("type")=="mRNA").then(pl.lit('gene_id "') + pl.col("gene_id") + pl.lit('";')).otherwise(pl.lit('gene_id "') + pl.col("gene_id") + pl.lit('";') + pl.lit('transcript_id "') + pl.col("transcript_id") + pl.lit('";'))
-    )\
-    .select(["seqid", "source", "type", "start", "end", "score", "strand", "phase", "attributes"])\
-    .write_csv(out, quote_style = "never", separator = "\t", include_header = False)
+    GFF3\
+        .with_columns(
+            attributes = pl.when(pl.col("feature")=="mRNA").then(pl.lit('gene_id "') + pl.col("gene_id") + pl.lit('";')).otherwise(pl.lit('gene_id "') + pl.col("gene_id") + pl.lit('";') + pl.lit('transcript_id "') + pl.col("transcript_id") + pl.lit('";'))
+        )\
+        .select(["seqname", "source", "feature", "start", "end", "score", "strand", "frame", "attributes"])\
+        .write_csv(params.output, quote_style = "never", separator = "\t", include_header = False)
+    
+if __name__ == "__main__":
+    main()
