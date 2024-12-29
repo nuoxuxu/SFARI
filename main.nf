@@ -565,50 +565,22 @@ process renameCdsToExon {
     publishDir "nextflow_results", mode: 'copy'
 
     input:
-    path h5ad_file_orf
     path genome_gff3_gtf
     path reference_gtf
 
     output:
-    path "genome_gff3_gtf_renamed.gtf"
-    path "reference_gtf_renamed.gtf"
+    path "SFARI.cds_renamed_exon.gtf"
+    path "SFARI.transcript_exons_only.gtf"
+    path "gencode.cds_renamed_exon.gtf"
+    path "gencode.transcript_exons_only.gtf"
 
     script:
     """
     rename_cds_to_exon.py \\
-        --h5ad_file_orf $h5ad_file_orf \\
-        --genome_gff3_gtf $genome_gff3_gtf \\
+        --sample_gtf $genome_gff3_gtf \\
+        --sample_name SFARI \\
         --reference_gtf $reference_gtf \\
-        --genome_gff3_gtf_renamed genome_gff3_gtf_renamed.gtf \\
-        --reference_gtf_renamed reference_gtf_renamed.gtf
-    """
-
-    stub:
-    """
-    rename_cds_to_exon.py \\
-        --h5ad_file_orf /scratch/s/shreejoy/nxu/SFARI/nextflow_results/pbid_orf.h5ad \\
-        --genome_gff3_gtf $genome_gff3_gtf \\
-        --reference_gtf $reference_gtf \\
-        --genome_gff3_gtf_renamed genome_gff3_gtf_renamed.gtf \\
-        --reference_gtf_renamed reference_gtf_renamed.gtf    
-    """
-}
-
-process pigeonPrepareRenamedGtfs {
-    input:
-    path genome_gff3_gtf_renamed
-    path reference_gtf_renamed
-    path reference_fasta
-
-    output:
-    path "genome_gff3_gtf_renamed.sorted.gtf"
-    path "genome_gff3_gtf_renamed.sorted.gtf.pgi"
-    path "reference_gtf_renamed.sorted.gtf"
-    path "reference_gtf_renamed.sorted.gtf.pgi"
-
-    script:
-    """
-    ~/miniforge3/envs/SQANTI3.env/bin/pigeon prepare $genome_gff3_gtf_renamed $reference_gtf_renamed $reference_fasta
+        --reference_name gencode        
     """
 }
 
@@ -636,12 +608,11 @@ workflow {
     generateGenomeKitDB(convertGenomeGff3ForGenomeKit.out)
     addORFPredictions(getSingleCellObject.out, TransDecoderLongOrfs.out.longest_orfs_gff3, transDecoderPredict.out.transdecoder_gff3)
     convertGenomeGff3toGtf(cdnaAlignmentOrfToGenome.out.genome_gff3)
-    renameCdsToExon(addORFPredictions.out.h5ad_file_orf, convertGenomeGff3toGtf.out, params.annotation_gtf)
-    pigeonPrepareRenamedGtfs(renameCdsToExon.out, params.reference_fasta)
-    // makePacBioDatabase(addORFPredictions.out.h5ad_file_orf, cdnaAlignmentOrfToGenome.out.genome_gff3, params.gencode_translation_fasta)
-    // Channel.fromPath(params.datadir + "tc-1154/*.mzXML").collect().set { mzXMLiles }
-    // cometSearch(params.comet_params, makePacBioDatabase.out, mzXMLiles)
-    // runPercolator(cometSearch.out)
+    renameCdsToExon(convertGenomeGff3toGtf.out, params.annotation_gtf)
+    makePacBioDatabase(addORFPredictions.out.h5ad_file_orf, cdnaAlignmentOrfToGenome.out.genome_gff3, params.gencode_translation_fasta)
+    Channel.fromPath(params.datadir + "tc-1154/*.mzXML").collect().set { mzXMLiles }
+    cometSearch(params.comet_params, makePacBioDatabase.out, mzXMLiles)
+    runPercolator(cometSearch.out)
     prepareIsoformSwitchAnalysis(getSingleCellObject.out, pigeonFilter.out.filtered_gff, filterSampleFasta.out)
     // Channel.fromPath(params.datadir + "/*/outputs/flnc.report.csv").collect().set { flncReports }
     // collectPolyATailLength(flncReports, isoseqCollapse.out.read_stat)
