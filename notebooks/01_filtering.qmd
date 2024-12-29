@@ -77,7 +77,7 @@ df = lr_bulk\
     .with_columns_var(
         pl.Series("n_unique_samples", np.sum(lr_bulk.X > 0, axis = 0)))\
         .var["structural_category2", "n_unique_samples"]
-to_r(df, "df")        
+to_r(df, "df")
 ```
 
 ```{r}

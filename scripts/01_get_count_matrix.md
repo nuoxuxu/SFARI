@@ -5,7 +5,7 @@ Once we get the mapping of the collapsed transcript names to the transcript name
 Merge mapped.bam files, these bam files are outputs from `pbmm2`
 
 ```bash
-sbatch -t 0-5:0 --nodes=1 -J merge_bam -o merge_bam.out --wrap="ls data/long_read/LUO26876.20240514/*/outputs/mapped.bam | xargs samtools merge -o proc/merged.bam -@ 40"
+sbatch  -t 0-5:0 --nodes=1 -J merge_bam -o merge_bam.out --wrap="ls data/long_read/LUO26876.20240514/*/outputs/mapped.bam | xargs samtools merge -o proc/merged.bam -@ 40"
 ```
 
 Run isoseq collapse

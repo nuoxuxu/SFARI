@@ -1,12 +1,11 @@
 #!/bin/bash
 #SBATCH --job-name=sqanti3_qc
 #SBATCH --output=sqanti3_qc.out
-#SBATCH --time=0-5:0
+#SBATCH --time=0-12:0
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 
 conda activate SQANTI3.env
-echo "${CONDA_PREFIX}"
 python /home/s/shreejoy/nxu/tools/SQANTI3/sqanti3_qc.py \
 -t 40 \
 --skipORF \

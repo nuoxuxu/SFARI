@@ -25,16 +25,17 @@ def main():
     classification = pl.read_csv(params.classification, separator="\t", null_values=["NA"])
 
     read_stat = pl.read_csv(params.read_stat, separator = "\t")\
+        .rename({"pbid": "isoform"})\
         .with_columns(
             pl.col("id").map_elements(lambda s: s.split("/")[0], return_dtype = pl.String),pl.lit(1).alias("count")
         )\
-        .group_by("id", "pbid")\
+        .group_by("id", "isoform")\
         .agg(pl.sum("count"))\
-        .sort("pbid", descending=False)\
-        .pivot("id", index = "pbid", values = "count")\
+        .sort("isoform", descending=False)\
+        .pivot("id", index = "isoform", values = "count")\
         .fill_null(0)\
         .rename(id_to_sample)\
-        ["pbid", "iPSC_1", "iPSC_2", "iPSC_3", "NPC_1_1", "NPC_1_3", "NPC_2_1", "NPC_2_2", "NPC_3_1", "NPC_3_3", "CN_1_2", "CN_1_3", "CN_2_1", "CN_2_2", "CN_3_1", "CN_3_2"]
+        ["isoform", "iPSC_1", "iPSC_2", "iPSC_3", "NPC_1_1", "NPC_1_3", "NPC_2_1", "NPC_2_2", "NPC_3_1", "NPC_3_3", "CN_1_2", "CN_1_3", "CN_2_1", "CN_2_2", "CN_3_1", "CN_3_2"]
 
     sampleID = read_stat.columns[1:]
     time_point = [x.split("_")[0] for x in sampleID]
@@ -45,20 +46,20 @@ def main():
         }
     )
 
-    # Matching pbid in classification and read_stat
+    # Matching isoform in classification and read_stat
 
     read_stat = classification\
-        .join(read_stat, on = "pbid", how = "left")\
+        .join(read_stat, on = "isoform", how = "left")\
         .select(read_stat.columns)
 
     classification = classification\
-        .join(read_stat, on = "pbid", how = "left")\
+        .join(read_stat, on = "isoform", how = "left")\
         .select(classification.columns)
 
     # Create SingleCell object
 
     lr_bulk = SingleCell(
-        X = csr_array(read_stat.drop("pbid").to_numpy().T),
+        X = csr_array(read_stat.drop("isoform").to_numpy().T),
         obs = myDesign,
         var = classification
     )
@@ -73,7 +74,7 @@ def main():
     lr_bulk = lr_bulk[:, np.where(np.sum(lr_bulk.X > params.min_reads, axis = 0) > params.min_n_sample)[0]]
 
     # Save SingleCell object
-    lr_bulk.save(params.output)
+    lr_bulk.save(params.output, overwrite=True)
 
 if __name__ == "__main__":
     main()    

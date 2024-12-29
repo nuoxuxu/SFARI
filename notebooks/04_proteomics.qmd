@@ -5,6 +5,8 @@
 #| label: import-python
 import polars as pl
 from src.single_cell import SingleCell
+import polars.selectors as cs
+from src.ryp import to_r, r, to_py
 
 lr_bulk = SingleCell("results/long_read/pbid_filtered_analyzed.h5ad")
 ```
@@ -185,12 +187,6 @@ sbatch scripts/submit_percolator.sh
 
 ```{python}
 #| label: import-python
-import polars as pl
-from src.single_cell import SingleCell
-from src.ryp import r, to_r
-import polars.selectors as cs
-import seaborn as sns
-import matplotlib.pyplot as plt
 
 lr_bulk = SingleCell("results/long_read/pbid_filtered_analyzed.h5ad")
 ```
@@ -199,7 +195,7 @@ In `percolator_res`, each row is a unique combination of `PSMId` and `proteinIds
 
 ```{python}
 #| label: get-percolator-results
-percolator_res = pl.read_csv("results/long_read/percolator.tsv", has_header=True, separator="\t")
+percolator_res = pl.read_csv("results/long_read/percolator_2.tsv", has_header=True, separator="\t")
 
 percolator_res = percolator_res\
     .with_columns(
@@ -248,24 +244,49 @@ lr_bulk.var = lr_bulk.var\
 
 ```{python}
 #| label: visualize-prep
+
+variable_dict = {
+    "total": "Total",
+    "at_least_one_orf": "At least one ORF",
+    "validatable_orf": "Validatable ORF",
+    "validated_proteomics": "Validated by proteomics"
+}
+
+structural_category2_dict = {
+    "novel_not_in_catalog": "NNC",
+    "novel_in_catalog": "NIC",
+    "full-splice_match": "FSM",
+    "incomplete-splice_match": "ISM",
+    "Other": "Other"
+}
+
 temp = lr_bulk.var\
     .with_columns(
         protein_coding = pl.when(pl.col("structural_category").is_in(["full-splice_match", "incomplete-splice_match"])).then(pl.col("transcript_type")=="protein_coding").otherwise(pl.col("at_least_one_orf")),
-        validatable_orf = pl.col("validatable_orf") & (pl.col("ORF_type_right")=="complete")
+        validatable_orf = pl.col("validatable_orf") & (pl.col("ORF_type")=="complete")
     )\
-    .select(["structural_category2", "total", "protein_coding", "validatable_orf", "validated_proteomics"])\
+    .select(["structural_category2", "total", "at_least_one_orf", "validatable_orf", "validated_proteomics"])\
     .group_by("structural_category2")\
     .sum()\
     .unpivot(index="structural_category2")\
-    .cast({"variable": pl.Enum(["total", "protein_coding", "validatable_orf", "validated_proteomics"])})
+    .cast({"variable": pl.Enum(["total", "at_least_one_orf", "validatable_orf", "validated_proteomics"])})\
+    .with_columns(
+        variable = pl.col("variable").map_elements(lambda s: variable_dict[s]),
+        structural_category2 = pl.col("structural_category2").map_elements(lambda s: structural_category2_dict[s])
+    )\
+    .cast({"structural_category2": pl.Enum(["FSM", "ISM", "NIC", "NNC", "Other"])})
 ```
 
 ```{python}
 #| label: seaborn-visualize
+import matplotlib.pyplot as plt
+import seaborn as sns
+
 fig, ax = plt.subplots()
 sns.barplot(temp, x="structural_category2", y="value", hue="variable", ax=ax)
-ax.set_xticklabels(ax.get_xticklabels(), rotation=90, ha='right')
 ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+ax.set_xlabel("Structural Category")
+ax.set_ylabel("Number of transcripts")
 ```
 
 Abuandance of novel transcripts validated by proteomics
@@ -298,9 +319,15 @@ temp = novel_bulk\
         transcriptomics_only = pl.col("in_any_PSMs").not_() & pl.col("in_novel_only_PSMs").not_()
     )
 
+variable_dict = {
+    "in_any_PSMs": "In any PSMs",
+    "in_novel_only_PSMs": "Proteomics",
+    "transcriptomics_only": "Transcriptomics"
+}
+
 temp = temp\
     .unpivot(on=["in_any_PSMs", "in_novel_only_PSMs", "transcriptomics_only"], index="mean").filter(pl.col("value"))\
-    .cast({"variable": pl.Enum(["transcriptomics_only", "in_any_PSMs", "in_novel_only_PSMs"])})
+    .cast({"variable": pl.Enum(["in_novel_only_PSMs", "transcriptomics_only", "in_any_PSMs"])})
 
 to_r(temp, "temp")    
 ```

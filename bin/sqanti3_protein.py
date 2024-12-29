@@ -23,12 +23,7 @@ from collections import defaultdict, Counter, namedtuple
 from collections.abc import Iterable
 from csv import DictWriter, DictReader
 
-utilitiesPath = os.path.join(os.path.dirname(os.path.realpath(__file__)), "utilities")
-sys.path.insert(0, utilitiesPath)
 # from multiprocessing import Process
-
-# utilitiesPath = os.path.join(os.path.dirname(os.path.realpath(__file__)), "utilities")
-# sys.path.insert(0, utilitiesPath)
 # from rt_switching import rts
 # from indels_annot import calc_indels_from_sam
 
@@ -55,13 +50,9 @@ if cupcake_dir not in sys.path:
 from cupcake.tofu.compare_junctions import compare_junctions
 from cupcake.io.GFF import collapseGFFReader, write_collapseGFF_format
 GTF2GENEPRED_PROG = "gtfToGenePred"
-utilitiesPath = os.path.join(os.path.dirname(os.path.realpath(__file__)), "utilities")
-sys.path.insert(0, utilitiesPath)
-GTF2GENEPRED_PROG = os.path.join(utilitiesPath,"gtfToGenePred")
-GFFREAD_PROG = "gffread"
 
 # importing functions from original sqanti3
-sys.path.append("/home/s/shreejoy/nxu/tools/SQANTI3")
+# sys.path.append("/home/s/shreejoy/nxu/tools/SQANTI3")
 from sqanti3_qc import myQueryTranscripts, genePredReader, myQueryProteins, associationOverlapping
 
 

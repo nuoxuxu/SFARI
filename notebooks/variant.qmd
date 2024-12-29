@@ -1,0 +1,32 @@
+```{python}
+from src.ryp import r, to_py, to_r
+```
+
+```{r}
+library(VariantAnnotation)
+library(GenomicFeatures)
+library(TxDb.Hsapiens.UCSC.hg19.knownGene)
+library(BSgenome.Hsapiens.UCSC.hg19)
+```
+
+```{r}
+txdb <- makeTxDbFromGFF("SFARI.gtf", format = "gtf")
+```
+
+```{r}
+gr <- rtracklayer::import("SFARI.gtf")
+```
+
+```{r}
+fl <- system.file("extdata", "chr22.vcf.gz", package="VariantAnnotation")
+vcf <- readVcf(fl, "hg19")
+seqlevels(vcf) <- 'chr22'
+```
+
+```{r}
+txdb <- TxDb.Hsapiens.UCSC.hg19.knownGene
+```
+
+```{r}
+predictCoding(vcf, txdb, seqSource=Hsapiens)
+```

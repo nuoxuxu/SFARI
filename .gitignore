@@ -13,6 +13,7 @@ conf/
 work/
 .nextflow.log*
 nextflow_results/
+nextflow.config
 
 # macOS
 .DS_Store
@@ -23,6 +24,7 @@ nextflow_results/
 # python
 *.egg-info/
 **/__pycache__/
+**.pyc
 
 transcript_vis_app/*.csv
 **.dcf

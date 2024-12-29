@@ -1,0 +1,17 @@
+
+```{python}
+import polars as pl
+from src.single_cell import SingleCell
+import genome_kit as gk
+```
+
+
+```{python}
+lr_bulk = SingleCell("results/long_read/pbid_filtered.h5ad")
+genome = gk.Genome("SFARI")
+```
+
+
+```{python}
+genome.transcripts["PB.4.1"]
+```

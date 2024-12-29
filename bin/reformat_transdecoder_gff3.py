@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/home/s/shreejoy/nxu/miniforge3/envs/patch_seq_spl/bin/python
 from src.utils import read_gff
 import polars as pl
 import argparse

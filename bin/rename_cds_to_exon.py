@@ -7,11 +7,11 @@ import argparse
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('h5ad_file_orf', type=str, help='Path to the PBID ORF file')
-    parser.add_argument('genome_gff3_gtf', type=str, help='Path to the TransDecoder genome GTF file')
-    parser.add_argument('reference_gtf', type=str, help='Path to the reference GTF file')
-    parser.add_argument('genome_gff3_gtf_renamed', type=str, help='Path to the renamed TransDecoder genome GTF file')
-    parser.add_argument('reference_gtf_renamed', type=str, help='Path to the renamed reference GTF file')
+    parser.add_argument('--h5ad_file_orf', action="store", help='Path to the PBID ORF file')
+    parser.add_argument('--genome_gff3_gtf', action="store", help='Path to the TransDecoder genome GTF file')
+    parser.add_argument('--reference_gtf', action="store", help='Path to the reference GTF file')
+    parser.add_argument('--genome_gff3_gtf_renamed', action="store", help='Path to the renamed TransDecoder genome GTF file')
+    parser.add_argument('--reference_gtf_renamed', action="store", help='Path to the renamed reference GTF file')
     params = parser.parse_args()
 
     def get_full_gtf_from_exon(CDS_only, output_path):
@@ -38,7 +38,7 @@ def main():
             )\
             .sort("transcript_id", "feature", "start")\
             .drop("gene_id", "transcript_id")\
-            .write_csv(output_path, separator="\t", incldue_header=False, quote_style="never")
+            .write_csv(output_path, separator="\t", include_header=False, quote_style="never")
 
     lr_bulk = SingleCell(params.h5ad_file_orf)
 
@@ -69,6 +69,9 @@ def main():
         ).drop("transcript_type")
         
 
-    get_full_gtf_from_exon(reference_CDS_only, params.genome_gff3_gtf_renamed)\
+    get_full_gtf_from_exon(reference_CDS_only, params.genome_gff3_gtf_renamed)
         
     get_full_gtf_from_exon(sample_CDS_only, params.reference_gtf_renamed)
+
+if __name__ == "__main__":
+    main()

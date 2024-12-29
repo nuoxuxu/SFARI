@@ -329,17 +329,16 @@ switchPlot(
     IsoseqsSwitchList,
     condition1 = "CN",
     condition2 = "iPSC",
-    isoform_id = c("PB.44.412", "PB.44.700"),
-    IFcutoff = 0,
-    dIFcutoff = 0
+    gene = "SCN2A",
+    IFcutoff = 0.05,
+    dIFcutoff = 0.1
 )
 ```
 
 ```{r}
-extractSplicingSummary(
+extractConsequenceEnrichment(
     IsoseqsSwitchList,
-    asFractionTotal = FALSE,
-    plotGenes=FALSE
+    returnResult = FALSE
 )
 ```
 
@@ -366,6 +365,9 @@ extractSplicingSummary(
 )
 ```
 
+```{r}
+
+```
 # Garbage
 
 ```{python}
@@ -474,3 +476,50 @@ del value
 - Find examples of mutually exclusive events (MES)
 - Prioritize calculating mRNA-level features
 - Find examples of isoform switches for each consequence in SplicingEnrichment.png
+
+# Combine SwitchAnalyzeRlist
+
+
+```{r}
+library("BSgenome.Hsapiens.UCSC.hg38")
+bsg <- BSgenome.Hsapiens.UCSC.hg38
+
+IsoseqsSwitchList <- readRDS("results/long_read/IsoseqsSwitchList.rds")
+
+IsoseqsSwitchList_DEXSeq <- readRDS("results/long_read/IsoseqsSwitchList_DEXSeq.rds")
+
+IsoseqsSwitchList$isoformSwitchAnalysis <- IsoseqsSwitchList_DEXSeq$isoformSwitchAnalysis
+
+IsoseqsSwitchList$isoformFeatures <- IsoseqsSwitchList_DEXSeq$isoformFeatures
+
+IsoseqsSwitchList <- analyzeCPC2(
+    IsoseqsSwitchList,
+    "full_CPC2result.txt",
+    removeNoncodinORFs = TRUE
+)
+
+IsoseqsSwitchList <- analyzePFAM(
+    IsoseqsSwitchList,
+    "full_pfam_scan_results.txt"
+)
+
+extractSequence(
+    IsoseqsSwitchList,
+    bsg,
+    onlySwitchingGenes = FALSE,
+    removeShortAAseq = FALSE,
+    removeORFwithStop = FALSE,
+    outputPrefix = "full_"
+)
+
+consequencesOfInterest <- c('intron_retention','coding_potential','NMD_status','domains_identified','ORF_seq_similarity')
+
+IsoseqsSwitchList <- analyzeSwitchConsequences(
+    IsoseqsSwitchList,
+    consequencesToAnalyze = consequencesOfInterest, 
+    dIFcutoff = 0.1, # very high cutoff for fast runtimes - you should use the default (0.1)
+    showProgress=FALSE
+)
+
+saveRDS(IsoseqsSwitchList, "results/long_read/IsoseqsSwitchList.rds")
+```
