@@ -46,8 +46,12 @@ pb_info = defaultdict(lambda: [None, None, None, -1, -1, -1, None])
 pbs = defaultdict(lambda: [None, None, None, [], []])
 # pb -> [gene, chrom, strand, exons, cdss]
 for line in open(args.sample_cds_gtf):
+    if line.startswith("#"):
+        continue
+    if line.split("\t")[2] == "gene":
+        continue
     gene = line.split('gene_id "')[1].split('"')[0]
-    pb = line.split('|')[1]
+    pb = line.split('transcript_id "')[1].split('"')[0]
     wds = line.split('\t')
     chrom, strand, start, end = wds[0], wds[6], int(wds[3]), int(wds[4])
     pbs[pb][0] = gene 
@@ -209,7 +213,7 @@ def determine_final_utr_cat(junc_cat):
         return 'subset'
 
 
-with open(os.path.join(args.odir, 'pb_5utr_categories.tsv'), 'w') as ofile:
+with open(os.path.join("./", 'pb_5utr_categories.tsv'), 'w') as ofile:
     ofile.write('pb\tgene\tnum_5utr_exons\tutr_exon_status\ttss_in_gc_exons\tjunc_cat\tutr_cat\n')
     lens = []
     for pb, [gene, chrom, strand, tss, nterm, num_5utr_exons, junc_chain_5utr] in pb_info.items():
@@ -230,10 +234,3 @@ with open(os.path.join(args.odir, 'pb_5utr_categories.tsv'), 'w') as ofile:
 import matplotlib.pyplot as plt
 lens2 = sorted(lens)[0:1000]
 plt.hist(lens, bins=range(50))
-
-
-
-
-
-
-

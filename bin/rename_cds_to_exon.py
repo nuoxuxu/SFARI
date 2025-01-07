@@ -48,7 +48,7 @@ def transform_cds(gtf):
     )
     # rename CDS to exon and update transcript range
     gtf_cds['feature'] = np.where(gtf_cds['feature'] =='CDS','exon','transcript')
-    gtf_cds = gtf_cds.groupby('transcript_id').apply(set_transcript_ranges)
+    gtf_cds = gtf_cds.groupby('transcript_id', as_index=False).apply(set_transcript_ranges)
     # only keep transcripts that have a CDS
     sizes = gtf_cds.groupby('transcript_id').size()
     transcripts_with_cds = list(sizes[sizes > 1].index)
@@ -99,13 +99,12 @@ def process_gtf_multiprocess(sample,name, num_cores):
 
 def process_sample_rename(sample_file, name, num_cores):
 
-    sample = gtfparse.read_gtf(sample_file)
-    sample['transcript_id'] = sample['transcript_id'].apply(lambda x: x.split('|')[1])
+    sample = gtfparse.read_gtf(sample_file, result_type="pandas")
     process_gtf_multiprocess(sample, name, num_cores)
 
 def process_reference_rename(reference_file, name, num_cores):
     
-    ref = gtfparse.read_gtf(reference_file)
+    ref = gtfparse.read_gtf(reference_file, result_type="pandas")
     process_gtf_multiprocess(ref, name, num_cores)
 
     

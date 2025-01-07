@@ -8,6 +8,7 @@ def main():
     parser = argparse.ArgumentParser(description='Filter genome_gffs from TransDecoder with novel transripts')
     parser.add_argument('--h5ad_file_orf', action='store', type=str, required=True)
     parser.add_argument('--genome_gff3', action='store', type=str, required=True)
+    parser.add_argument('--protein_classification_unfiltered', action='store', type=str, required=True)
     parser.add_argument('--output', action='store', type=str, required=True)
     params = parser.parse_args()
 
@@ -46,15 +47,21 @@ def main():
                 .otherwise(pl.col("Parent"))
         )
 
-    # novel_pbids = lr_bulk.var\
-    #     .with_columns(
-    #         pl.col("base_isoform").cast(pl.String)
-    #     )\
-    #     .filter(
-    #         pl.col("structural_category").is_in(["novel_not_in_catalog", "novel_in_catalog"]),
-    #         pl.col("predicted_orf"),
-    #         pl.col("isoform")==pl.col("base_isoform")
-    #     )["isoform"]
+    novel_pbids = lr_bulk.var\
+        .join(
+        pl.read_csv(params.protein_classification_unfiltered, separator = "\t")\
+            .rename({"pb": "isoform"})\
+            ["isoform", "protein_classification_base"],
+        on = "isoform", how = "left"
+        )\
+        .filter(pl.col("ORF_type")=="complete")\
+        .with_columns(
+            pl.col("base_isoform").cast(pl.String)
+        )\
+        .filter(
+            pl.col("isoform") == pl.col("base_isoform"), 
+            pl.col("protein_classification_base").is_in(["pNNC", "pNIC"])
+        )["isoform"]
 
     novel_gene_ids = novel_pbids.str.split(".").map_elements(lambda x: "".join(x[0]+"." + x[1])).unique()
 
