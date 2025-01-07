@@ -5,7 +5,7 @@
 # Modified by Fran (francisco.pardo.palacios@gmail.com) currently as SQANTI3 version (05/15/2020)
 # Modified by Gloria (gs9yr@virginia.edu) for protein classification
 
-
+# %%
 __author__  = "etseng@pacb.com"
 __version__ = '2.0.0'  # Python 3.7
 
@@ -23,7 +23,12 @@ from collections import defaultdict, Counter, namedtuple
 from collections.abc import Iterable
 from csv import DictWriter, DictReader
 
+utilitiesPath = os.path.join(os.path.dirname(os.path.realpath(__file__)), "utilities")
+sys.path.insert(0, utilitiesPath)
 # from multiprocessing import Process
+
+# utilitiesPath = os.path.join(os.path.dirname(os.path.realpath(__file__)), "utilities")
+# sys.path.insert(0, utilitiesPath)
 # from rt_switching import rts
 # from indels_annot import calc_indels_from_sam
 
@@ -56,7 +61,6 @@ GTF2GENEPRED_PROG = os.path.join(utilitiesPath,"gtfToGenePred")
 GFFREAD_PROG = "gffread"
 
 # importing functions from original sqanti3
-# sys.path.append("/home/s/shreejoy/nxu/tools/SQANTI3")
 from sqanti3_qc import myQueryTranscripts, genePredReader, myQueryProteins, associationOverlapping
 
 
@@ -139,91 +143,86 @@ def reference_parser(args, genome_chroms):
 
 
 class myProteinTranscripts(myQueryTranscripts):
-    def __init__(
-        self, id, tss_diff, tts_diff, num_exons, length, str_class, subtype=None,
-        genes=None, transcripts=None, chrom=None, strand=None, bite ="NA",
-        RT_switching ="????", canonical="NA", min_cov ="NA",
-        min_cov_pos ="NA", min_samp_cov="NA", sd ="NA", FL ="NA", FL_dict={},
-        nIndels ="NA", nIndelsJunc ="NA", proteinID=None,
-        ORFlen="NA", CDS_start="NA", CDS_end="NA",
-        CDS_genomic_start="NA", CDS_genomic_end="NA", 
-        ORFseq="NA",
-        is_NMD="NA",
-        isoExp ="NA", geneExp ="NA", coding ="non_coding",
-        refLen ="NA", refExons ="NA",
-        refStart = "NA", refEnd = "NA",
-        q_splicesite_hit = 0,
-        q_exon_overlap = 0,
-        FSM_class = None, percAdownTTS = None, seqAdownTTS=None,
-        dist_cage='NA', within_cage='NA',
-        dist_polya_site='NA', within_polya_site='NA',
-        polyA_motif='NA', polyA_dist='NA', ref_obj=None
-        ):
+    def __init__(self, id, tss_diff, tts_diff, num_exons, length, str_class, subtype=None,
+                 genes=None, transcripts=None, chrom=None, strand=None, bite ="NA",
+                 RT_switching ="????", canonical="NA", min_cov ="NA",
+                 min_cov_pos ="NA", min_samp_cov="NA", sd ="NA", FL ="NA", FL_dict={},
+                 nIndels ="NA", nIndelsJunc ="NA", proteinID=None,
+                 ORFlen="NA", CDS_start="NA", CDS_end="NA",
+                 CDS_genomic_start="NA", CDS_genomic_end="NA", 
+                 ORFseq="NA",
+                 is_NMD="NA",
+                 isoExp ="NA", geneExp ="NA", coding ="non_coding",
+                 refLen ="NA", refExons ="NA",
+                 refStart = "NA", refEnd = "NA",
+                 q_splicesite_hit = 0,
+                 q_exon_overlap = 0,
+                 FSM_class = None, percAdownTTS = None, seqAdownTTS=None,
+                 dist_cage='NA', within_cage='NA',
+                 dist_polya_site='NA', within_polya_site='NA',
+                 polyA_motif='NA', polyA_dist='NA', ref_obj=None):
 
-        super().__init__(
-            id, tss_diff=tss_diff,
-            tts_diff=tts_diff,
-            num_exons=num_exons,
-            length=length,
-            str_class=str_class,
-            subtype=subtype,
-            genes=genes, transcripts=transcripts, chrom=chrom, strand=strand, bite=bite,
-            RT_switching=RT_switching, canonical=canonical, min_cov=min_cov,
-            min_cov_pos=min_cov_pos, min_samp_cov=min_samp_cov, sd=sd, FL=FL, FL_dict=FL_dict,
-            nIndels=nIndels, nIndelsJunc=nIndelsJunc , proteinID=proteinID,
-            ORFlen=ORFlen, CDS_start=CDS_start, CDS_end=CDS_end,
-            CDS_genomic_start=CDS_genomic_start, CDS_genomic_end=CDS_genomic_end,
-            ORFseq=ORFseq, is_NMD=is_NMD,
-            isoExp=isoExp, geneExp=geneExp, coding=coding,
-            refLen=refLen, refExons=refExons,
-            refStart=refStart, refEnd=refEnd,
-            q_splicesite_hit=q_splicesite_hit,
-            q_exon_overlap=q_exon_overlap,
-            FSM_class=FSM_class, percAdownTTS=percAdownTTS, seqAdownTTS=seqAdownTTS,
-            dist_cage=dist_cage, within_cage=within_cage,
-            dist_polya_site=dist_polya_site, within_polya_site=within_polya_site,
-            polyA_motif=polyA_motif, polyA_dist=polyA_dist
-            )
+        super().__init__(id, tss_diff=tss_diff,
+                         tts_diff=tts_diff,
+                         num_exons=num_exons,
+                         length=length,
+                         str_class=str_class,
+                         subtype=subtype,
+                 genes=genes, transcripts=transcripts, chrom=chrom, strand=strand, bite=bite,
+                 RT_switching=RT_switching, canonical=canonical, min_cov=min_cov,
+                 min_cov_pos=min_cov_pos, min_samp_cov=min_samp_cov, sd=sd, FL=FL, FL_dict=FL_dict,
+                 nIndels=nIndels, nIndelsJunc=nIndelsJunc , proteinID=proteinID,
+                 ORFlen=ORFlen, CDS_start=CDS_start, CDS_end=CDS_end,
+                 CDS_genomic_start=CDS_genomic_start, CDS_genomic_end=CDS_genomic_end,
+                 ORFseq=ORFseq, is_NMD=is_NMD,
+                 isoExp=isoExp, geneExp=geneExp, coding=coding,
+                 refLen=refLen, refExons=refExons,
+                 refStart=refStart, refEnd=refEnd,
+                 q_splicesite_hit=q_splicesite_hit,
+                 q_exon_overlap=q_exon_overlap,
+                 FSM_class=FSM_class, percAdownTTS=percAdownTTS, seqAdownTTS=seqAdownTTS,
+                 dist_cage=dist_cage, within_cage=within_cage,
+                 dist_polya_site=dist_polya_site, within_polya_site=within_polya_site,
+                 polyA_motif=polyA_motif, polyA_dist=polyA_dist)
 
         self.ref_obj = ref_obj
         self.num_junc_after_stop = None
 
     def modify(self, ref_transcript, ref_gene, tss_diff, tts_diff, refLen, refExons, ref):
-        super().modify(
-            ref_transcript=ref_transcript,
-            ref_gene=ref_gene,
-            tss_diff=tss_diff,
-            tts_diff=tts_diff,
-            refLen=refLen,
-            refExons=refExons
-            )
+        super().modify(ref_transcript=ref_transcript,
+                         ref_gene=ref_gene,
+                         tss_diff=tss_diff,
+                         tts_diff=tts_diff,
+                         refLen=refLen,
+                         refExons=refExons)
         self.ref_obj = ref
 
     def __str__(self):
-        return "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s" % (
-            self.chrom, self.strand,
-            str(self.length), str(self.num_exons),
-            str(self.str_class), "_".join(set(self.genes)),
-            self.id, str(self.refLen), str(self.refExons),
-            str(self.tss_diff), str(self.tts_diff),
-            self.subtype, self.RT_switching,
-            self.canonical, str(self.min_samp_cov),
-            str(self.min_cov), str(self.min_cov_pos),
-            str(self.sd), str(self.FL), str(self.nIndels),
-            str(self.nIndelsJunc), self.bite, str(self.isoExp),
-            str(self.geneExp), str(self.ratioExp()),
-            self.FSM_class, self.coding, str(self.ORFlen),
-            str(self.CDSlen()), str(self.CDS_start), str(self.CDS_end),
-            str(self.CDS_genomic_start), str(self.CDS_genomic_end), str(self.is_NMD),
-            str(self.percAdownTTS),
-            str(self.seqAdownTTS),
-            str(self.dist_cage),
-            str(self.within_cage),str(self.pos_cage_peak),
-            str(self.dist_polya_site),
-            str(self.within_polya_site),
-            str(self.polyA_motif),
-            str(self.polyA_dist)
-            )
+        return "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s" % (self.chrom, self.strand,
+                                                                                                                                                           str(self.length), str(self.num_exons),
+                                                                                                                                                           str(self.str_class), "_".join(set(self.genes)),
+                                                                                                                                                           self.id, str(self.refLen), str(self.refExons),
+                                                                                                                                                           str(self.tss_diff), str(self.tts_diff),
+                                                                                                                                                           self.subtype, self.RT_switching,
+                                                                                                                                                           self.canonical, str(self.min_samp_cov),
+                                                                                                                                                           str(self.min_cov), str(self.min_cov_pos),
+                                                                                                                                                           str(self.sd), str(self.FL), str(self.nIndels),
+                                                                                                                                                           str(self.nIndelsJunc), self.bite, str(self.isoExp),
+                                                                                                                                                           str(self.geneExp), str(self.ratioExp()),
+                                                                                                                                                           self.FSM_class, self.coding, str(self.ORFlen),
+                                                                                                                                                           str(self.CDSlen()), str(self.CDS_start), str(self.CDS_end),
+                                                                                                                                                           str(self.CDS_genomic_start), str(self.CDS_genomic_end), str(self.is_NMD),
+                                                                                                                                                           str(self.percAdownTTS),
+                                                                                                                                                           str(self.seqAdownTTS),
+                                                                                                                                                           str(self.dist_cage),
+                                                                                                                                                           str(self.within_cage),str(self.pos_cage_peak),
+                                                                                                                                                           str(self.dist_polya_site),
+                                                                                                                                                           str(self.within_polya_site),
+                                                                                                                                                           str(self.polyA_motif),
+                                                                                                                                                           str(self.polyA_dist))
+
+
+
 
 def protein_isoforms_parser(args):
     """
@@ -353,17 +352,15 @@ def transcriptsKnownSpliceSites(refs_1exon_by_chr, refs_exons_by_chr, start_ends
     seq_downTTS = None
     percA = None
 
-    isoform_hit = myProteinTranscripts(
-        id=trec.id, tts_diff="NA", tss_diff="NA", \
-        num_exons=trec.exonCount,
-        length=trec.length,
-        str_class="", \
-        chrom=trec.chrom,
-        strand=trec.strand, \
-        subtype="no_subcategory", \
-        percAdownTTS=str(percA), \
-        seqAdownTTS=seq_downTTS
-        )
+    isoform_hit = myProteinTranscripts(id=trec.id, tts_diff="NA", tss_diff="NA", \
+                                       num_exons=trec.exonCount,
+                                       length=trec.length,
+                                       str_class="", \
+                                       chrom=trec.chrom,
+                                       strand=trec.strand, \
+                                       subtype="no_subcategory", \
+                                       percAdownTTS=str(percA), \
+                                       seqAdownTTS=seq_downTTS)
 
     ##***************************************##
     ########### SPLICED TRANSCRIPTS ###########
@@ -389,17 +386,15 @@ def transcriptsKnownSpliceSites(refs_1exon_by_chr, refs_exons_by_chr, start_ends
         if len(hits_by_gene) == 0: return isoform_hit
 
         for ref_gene in hits_by_gene:
-            isoform_hit = myProteinTranscripts(
-                id=trec.id, tts_diff="NA", tss_diff="NA", \
-                num_exons=trec.exonCount,
-                length=trec.length,
-                str_class="", \
-                chrom=trec.chrom,
-                strand=trec.strand, \
-                subtype="no_subcategory", \
-                percAdownTTS=str(percA), \
-                seqAdownTTS=seq_downTTS
-                )
+            isoform_hit = myProteinTranscripts(id=trec.id, tts_diff="NA", tss_diff="NA", \
+                                               num_exons=trec.exonCount,
+                                               length=trec.length,
+                                               str_class="", \
+                                               chrom=trec.chrom,
+                                               strand=trec.strand, \
+                                               subtype="no_subcategory", \
+                                               percAdownTTS=str(percA), \
+                                               seqAdownTTS=seq_downTTS)
 
             for ref in hits_by_gene[ref_gene]:
                 if trec.strand != ref.strand:
@@ -409,24 +404,22 @@ def transcriptsKnownSpliceSites(refs_1exon_by_chr, refs_exons_by_chr, start_ends
 
                 if ref.exonCount == 1: # mono-exonic reference, handle specially here
                     if calc_exon_overlap(trec.exons, ref.exons) > 0 and cat_ranking[isoform_hit.str_class] < cat_ranking["geneOverlap"]:
-                        isoform_hit = myProteinTranscripts(
-                            trec.id, "NA", "NA", trec.exonCount, trec.length,
-                            "geneOverlap",
-                            subtype="mono-exon",
-                            chrom=trec.chrom,
-                            strand=trec.strand,
-                            genes=[ref.gene],
-                            transcripts=[ref.id],
-                            refLen=ref.length,
-                            refExons=ref.exonCount,
-                            refStart=ref.txStart,
-                            refEnd=ref.txEnd,
-                            q_splicesite_hit=0,
-                            q_exon_overlap=calc_exon_overlap(trec.exons, ref.exons),
-                            percAdownTTS=str(percA),
-                            seqAdownTTS=seq_downTTS,
-                            ref_obj=ref
-                            )
+                        isoform_hit = myProteinTranscripts(trec.id, "NA", "NA", trec.exonCount, trec.length,
+                                                            "geneOverlap",
+                                                           subtype="mono-exon",
+                                                           chrom=trec.chrom,
+                                                           strand=trec.strand,
+                                                           genes=[ref.gene],
+                                                           transcripts=[ref.id],
+                                                           refLen=ref.length,
+                                                           refExons=ref.exonCount,
+                                                           refStart=ref.txStart,
+                                                           refEnd=ref.txEnd,
+                                                           q_splicesite_hit=0,
+                                                           q_exon_overlap=calc_exon_overlap(trec.exons, ref.exons),
+                                                           percAdownTTS=str(percA),
+                                                           seqAdownTTS=seq_downTTS,
+                                                           ref_obj=ref)
 
                 else: # multi-exonic reference
                     match_type = compare_junctions(trec, ref, internal_fuzzy_max_dist=0, max_5_diff=999999, max_3_diff=999999)
@@ -446,24 +439,22 @@ def transcriptsKnownSpliceSites(refs_1exon_by_chr, refs_exons_by_chr, start_ends
                         # (2) this one is better (prev not FSM or is FSM but worse tss/tts)
                         if cat_ranking[isoform_hit.str_class] < cat_ranking["full-splice_match"] or \
                                 abs(diff_tss)+abs(diff_tts) < isoform_hit.get_total_diff():
-                            isoform_hit = myProteinTranscripts(
-                                trec.id, diff_tss, diff_tts, trec.exonCount, trec.length,
-                                str_class="full-splice_match",
-                                subtype=subtype,
-                                chrom=trec.chrom,
-                                strand=trec.strand,
-                                genes=[ref.gene],
-                                transcripts=[ref.id],
-                                refLen = ref.length,
-                                refExons= ref.exonCount,
-                                refStart=ref.txStart,
-                                refEnd=ref.txEnd,
-                                q_splicesite_hit=calc_splicesite_agreement(trec.exons, ref.exons),
-                                q_exon_overlap=calc_exon_overlap(trec.exons, ref.exons),
-                                percAdownTTS=str(percA),
-                                seqAdownTTS=seq_downTTS,
-                                ref_obj=ref
-                                )
+                            isoform_hit = myProteinTranscripts(trec.id, diff_tss, diff_tts, trec.exonCount, trec.length,
+                                                               str_class="full-splice_match",
+                                                               subtype=subtype,
+                                                               chrom=trec.chrom,
+                                                               strand=trec.strand,
+                                                               genes=[ref.gene],
+                                                               transcripts=[ref.id],
+                                                               refLen = ref.length,
+                                                               refExons= ref.exonCount,
+                                                               refStart=ref.txStart,
+                                                               refEnd=ref.txEnd,
+                                                               q_splicesite_hit=calc_splicesite_agreement(trec.exons, ref.exons),
+                                                               q_exon_overlap=calc_exon_overlap(trec.exons, ref.exons),
+                                                               percAdownTTS=str(percA),
+                                                               seqAdownTTS=seq_downTTS,
+                                                               ref_obj=ref)
                     # #######################################################
                     # SQANTI's incomplete-splice_match
                     # (only check if don't already have a FSM match)
@@ -475,24 +466,22 @@ def transcriptsKnownSpliceSites(refs_1exon_by_chr, refs_exons_by_chr, start_ends
                         # (2) prev hit not as good (is ISM with worse tss/tts or anyKnownSpliceSite)
                         if cat_ranking[isoform_hit.str_class] < cat_ranking["incomplete-splice_match"] or \
                             (isoform_hit.str_class=='incomplete-splice_match' and abs(diff_tss)+abs(diff_tts) < isoform_hit.get_total_diff()):
-                            isoform_hit = myProteinTranscripts(
-                                trec.id, diff_tss, diff_tts, trec.exonCount, trec.length,
-                                str_class="incomplete-splice_match",
-                                subtype=subtype,
-                                chrom=trec.chrom,
-                                strand=trec.strand,
-                                genes=[ref.gene],
-                                transcripts=[ref.id],
-                                refLen = ref.length,
-                                refExons= ref.exonCount,
-                                refStart=ref.txStart,
-                                refEnd=ref.txEnd,
-                                q_splicesite_hit=calc_splicesite_agreement(trec.exons, ref.exons),
-                                q_exon_overlap=calc_exon_overlap(trec.exons, ref.exons),
-                                percAdownTTS=str(percA),
-                                seqAdownTTS=seq_downTTS,
-                                ref_obj=ref
-                                )
+                            isoform_hit = myProteinTranscripts(trec.id, diff_tss, diff_tts, trec.exonCount, trec.length,
+                                                               str_class="incomplete-splice_match",
+                                                               subtype=subtype,
+                                                               chrom=trec.chrom,
+                                                               strand=trec.strand,
+                                                               genes=[ref.gene],
+                                                               transcripts=[ref.id],
+                                                               refLen = ref.length,
+                                                               refExons= ref.exonCount,
+                                                               refStart=ref.txStart,
+                                                               refEnd=ref.txEnd,
+                                                               q_splicesite_hit=calc_splicesite_agreement(trec.exons, ref.exons),
+                                                               q_exon_overlap=calc_exon_overlap(trec.exons, ref.exons),
+                                                               percAdownTTS=str(percA),
+                                                               seqAdownTTS=seq_downTTS,
+                                                               ref_obj=ref)
                     # #######################################################
                     # Some kind of junction match that isn't ISM/FSM
                     # #######################################################
@@ -504,67 +493,61 @@ def transcriptsKnownSpliceSites(refs_1exon_by_chr, refs_exons_by_chr, start_ends
                                 (isoform_hit.str_class=='anyKnownJunction' and q_sp_hit > isoform_hit.q_splicesite_hit) or \
                                 (isoform_hit.str_class=='anyKnownJunction' and q_sp_hit==isoform_hit.q_splicesite_hit and q_ex_overlap > isoform_hit.q_exon_overlap) or \
                                 (isoform_hit.str_class=='anyKnownJunction' and q_sp_hit==isoform_hit.q_splicesite_hit and q_exon_d < abs(trec.exonCount-isoform_hit.refExons)):
-                            isoform_hit = myProteinTranscripts(
-                                trec.id, "NA", "NA", trec.exonCount, trec.length,
-                                str_class="anyKnownJunction",
-                                subtype="no_subcategory",
-                                chrom=trec.chrom,
-                                strand=trec.strand,
-                                genes=[ref.gene],
-                                transcripts=["novel"],
-                                refLen=ref.length,
-                                refExons=ref.exonCount,
-                                refStart=ref.txStart,
-                                refEnd=ref.txEnd,
-                                q_splicesite_hit=calc_splicesite_agreement(trec.exons, ref.exons),
-                                q_exon_overlap=calc_exon_overlap(trec.exons, ref.exons),
-                                percAdownTTS=str(percA),
-                                seqAdownTTS=seq_downTTS,
-                                ref_obj=ref
-                                )
+                            isoform_hit = myProteinTranscripts(trec.id, "NA", "NA", trec.exonCount, trec.length,
+                                                               str_class="anyKnownJunction",
+                                                               subtype="no_subcategory",
+                                                               chrom=trec.chrom,
+                                                               strand=trec.strand,
+                                                               genes=[ref.gene],
+                                                               transcripts=["novel"],
+                                                               refLen=ref.length,
+                                                               refExons=ref.exonCount,
+                                                               refStart=ref.txStart,
+                                                               refEnd=ref.txEnd,
+                                                               q_splicesite_hit=calc_splicesite_agreement(trec.exons, ref.exons),
+                                                               q_exon_overlap=calc_exon_overlap(trec.exons, ref.exons),
+                                                               percAdownTTS=str(percA),
+                                                               seqAdownTTS=seq_downTTS,
+                                                               ref_obj=ref)
                     else: # must be nomatch
                         assert match_type == 'nomatch'
                         # at this point, no junction overlap, but may be a single splice site (donor or acceptor) match?
                         # also possibly just exonic (no splice site) overlap
                         if cat_ranking[isoform_hit.str_class] < cat_ranking["anyKnownSpliceSite"] and calc_splicesite_agreement(trec.exons, ref.exons) > 0:
-                            isoform_hit = myProteinTranscripts(
-                                trec.id, "NA", "NA", trec.exonCount, trec.length,
-                                str_class="anyKnownSpliceSite",
-                                subtype="no_subcategory",
-                                chrom=trec.chrom,
-                                strand=trec.strand,
-                                genes=[ref.gene],
-                                transcripts=["novel"],
-                                refLen=ref.length,
-                                refExons=ref.exonCount,
-                                refStart=ref.txStart,
-                                refEnd=ref.txEnd,
-                                q_splicesite_hit=calc_splicesite_agreement(trec.exons, ref.exons),
-                                q_exon_overlap=calc_exon_overlap(trec.exons,
-                                                                ref.exons),
-                                percAdownTTS=str(percA),
-                                seqAdownTTS=seq_downTTS
-                                )
+                            isoform_hit = myProteinTranscripts(trec.id, "NA", "NA", trec.exonCount, trec.length,
+                                                               str_class="anyKnownSpliceSite",
+                                                               subtype="no_subcategory",
+                                                               chrom=trec.chrom,
+                                                               strand=trec.strand,
+                                                               genes=[ref.gene],
+                                                               transcripts=["novel"],
+                                                               refLen=ref.length,
+                                                               refExons=ref.exonCount,
+                                                               refStart=ref.txStart,
+                                                               refEnd=ref.txEnd,
+                                                               q_splicesite_hit=calc_splicesite_agreement(trec.exons, ref.exons),
+                                                               q_exon_overlap=calc_exon_overlap(trec.exons,
+                                                                                              ref.exons),
+                                                               percAdownTTS=str(percA),
+                                                               seqAdownTTS=seq_downTTS)
 
                         if isoform_hit.str_class=="": # still not hit yet, check exonic overlap
                             if cat_ranking[isoform_hit.str_class] < cat_ranking["geneOverlap"] and calc_exon_overlap(trec.exons, ref.exons) > 0:
-                                isoform_hit = myProteinTranscripts(
-                                    trec.id, "NA", "NA", trec.exonCount, trec.length,
-                                    str_class="geneOverlap",
-                                    subtype="no_subcategory",
-                                    chrom=trec.chrom,
-                                    strand=trec.strand,
-                                    genes=[ref.gene],
-                                    transcripts=["novel"],
-                                    refLen=ref.length,
-                                    refExons=ref.exonCount,
-                                    refStart=ref.txStart,
-                                    refEnd=ref.txEnd,
-                                    q_splicesite_hit=calc_splicesite_agreement(trec.exons, ref.exons),
-                                    q_exon_overlap=calc_exon_overlap(trec.exons, ref.exons),
-                                    percAdownTTS=str(percA),
-                                    seqAdownTTS=seq_downTTS
-                                    )
+                                isoform_hit = myProteinTranscripts(trec.id, "NA", "NA", trec.exonCount, trec.length,
+                                                                   str_class="geneOverlap",
+                                                                   subtype="no_subcategory",
+                                                                   chrom=trec.chrom,
+                                                                   strand=trec.strand,
+                                                                   genes=[ref.gene],
+                                                                   transcripts=["novel"],
+                                                                   refLen=ref.length,
+                                                                   refExons=ref.exonCount,
+                                                                   refStart=ref.txStart,
+                                                                   refEnd=ref.txEnd,
+                                                                   q_splicesite_hit=calc_splicesite_agreement(trec.exons, ref.exons),
+                                                                   q_exon_overlap=calc_exon_overlap(trec.exons, ref.exons),
+                                                                   percAdownTTS=str(percA),
+                                                                   seqAdownTTS=seq_downTTS)
 
             best_by_gene[ref_gene] = isoform_hit
         # now we have best_by_gene:
@@ -604,19 +587,17 @@ def transcriptsKnownSpliceSites(refs_1exon_by_chr, refs_exons_by_chr, start_ends
 
                 # see if there's already an existing match AND if so, if this one is better
                 if isoform_hit.str_class == "": # no match so far
-                    isoform_hit = myProteinTranscripts(
-                        trec.id, diff_tss, diff_tts, trec.exonCount, trec.length, "full-splice_match",
-                        subtype="mono-exon",
-                        chrom=trec.chrom,
-                        strand=trec.strand,
-                        genes=[ref.gene],
-                        transcripts=[ref.id],
-                        refLen=ref.length,
-                        refExons = ref.exonCount,
-                        percAdownTTS=str(percA),
-                        seqAdownTTS=seq_downTTS,
-                        ref_obj=ref
-                        )
+                    isoform_hit = myProteinTranscripts(trec.id, diff_tss, diff_tts, trec.exonCount, trec.length, "full-splice_match",
+                                                       subtype="mono-exon",
+                                                       chrom=trec.chrom,
+                                                       strand=trec.strand,
+                                                       genes=[ref.gene],
+                                                       transcripts=[ref.id],
+                                                       refLen=ref.length,
+                                                       refExons = ref.exonCount,
+                                                       percAdownTTS=str(percA),
+                                                       seqAdownTTS=seq_downTTS,
+                                                       ref_obj=ref)
                 elif abs(diff_tss)+abs(diff_tts) < isoform_hit.get_total_diff():
                     isoform_hit.modify(ref.id, ref.gene, diff_tss, diff_tts, ref.length, ref.exonCount, ref)
 
@@ -1030,6 +1011,11 @@ def get_perfect_subset_status(r1, r2):
 
 ### end ###
 
+
+
+
+
+
 ###############################
 ##### start of sqanti run #####
 ###############################
@@ -1067,20 +1053,18 @@ if __name__ == "__main__":
     cds_isoform_gff = args.isoform_gff
     cds_annotation_gtf = args.annotation_gtf
 
-    sqanti_args = SQANTIArgs(
-        cds_isoform_gff,
-        cds_annotation_gtf,
-        dir=output_dir,
-        output_prefix=output_prefix,
-        corrGTF=args.isoform_gff,
-        orf_tsv=args.orf_tsv,
-        genename=None,
-        min_ref_len=0,
-        is_fusion=False,
-        coverage=None,
-        window=None,
-        novel_gene_prefix=None
-        )
+    sqanti_args = SQANTIArgs(cds_isoform_gff,
+                      cds_annotation_gtf,
+                      dir=output_dir,
+                      output_prefix=output_prefix,
+                      corrGTF=args.isoform_gff,
+                      orf_tsv=args.orf_tsv,
+                      genename=None,
+                      min_ref_len=0,
+                      is_fusion=False,
+                      coverage=None,
+                      window=None,
+                      novel_gene_prefix=None)
 
 
     #### process exon-based comparisons ####
@@ -1096,18 +1080,16 @@ if __name__ == "__main__":
     orfDict = read_in_custom_orf_calls_into_orfDict(sqanti_args.orf_tsv)
 
     ## transcript isoform classification
-    isoforms_info = isoformClassification(
-        sqanti_args,
-        isoforms_by_chr,
-        refs_1exon_by_chr,
-        refs_exons_by_chr,
-        junctions_by_chr,
-        junctions_by_gene,
-        start_ends_by_gene,
-        orfDict=orfDict,
-        genome_dict=None,
-        indelsJunc=None
-        )
+    isoforms_info = isoformClassification(sqanti_args,
+                                          isoforms_by_chr,
+                                          refs_1exon_by_chr,
+                                          refs_exons_by_chr,
+                                          junctions_by_chr,
+                                          junctions_by_gene,
+                                          start_ends_by_gene,
+                                          orfDict=orfDict,
+                                          genome_dict=None,
+                                          indelsJunc=None)
 
 
     #### process cds-based comparisons ####
@@ -1118,20 +1100,18 @@ if __name__ == "__main__":
     # NOTE - liz - i need to stick with these names since they are originally in sqanti input
     cds_isoform_gff = args.cds_isoform_gff #os.path.abspath(ddir + 'jurkat_cds_chr22.gff')
     cds_annotation_gtf = args.cds_annotation_gtf #os.path.abspath(ddir + 'gencode_cds_chr22.gtf')
-    protein_args = ProteinArgs(
-        cds_isoform_gff,
-        cds_annotation_gtf,
-        dir=output_dir,
-        output_prefix=output_prefix,
-        corrGTF=cds_isoform_gff,
-        orf_tsv=args.orf_tsv,
-        genename=None,
-        min_ref_len=0,
-        is_fusion=False,
-        coverage=None,
-        window=None,
-        novel_gene_prefix=None
-        )
+    protein_args = ProteinArgs(cds_isoform_gff,
+                               cds_annotation_gtf,
+                               dir=output_dir,
+                               output_prefix=output_prefix,
+                               corrGTF=cds_isoform_gff,
+                               orf_tsv=args.orf_tsv,
+                               genename=None,
+                               min_ref_len=0,
+                               is_fusion=False,
+                               coverage=None,
+                               window=None,
+                               novel_gene_prefix=None)
 
     ## parse reference transcripts(GTF) to dicts
     protein_refs_1exon_by_chr, protein_refs_exons_by_chr, protein_junctions_by_chr, \
@@ -1143,18 +1123,16 @@ if __name__ == "__main__":
 
     # isoform classification
     # note - orfDict is input, but results not in use for cds compare
-    isoforms_info_cds = isoformClassification(
-        protein_args,
-        protein_isoforms_by_chr,
-        protein_refs_1exon_by_chr,
-        protein_refs_exons_by_chr,
-        protein_junctions_by_chr,
-        protein_junctions_by_gene,
-        protein_start_ends_by_gene,
-        genome_dict=None,
-        indelsJunc=None,
-        orfDict=None
-        )
+    isoforms_info_cds = isoformClassification(protein_args,
+                                              protein_isoforms_by_chr,
+                                              protein_refs_1exon_by_chr,
+                                              protein_refs_exons_by_chr,
+                                              protein_junctions_by_chr,
+                                              protein_junctions_by_gene,
+                                              protein_start_ends_by_gene,
+                                              genome_dict=None,
+                                              indelsJunc=None,
+                                              orfDict=None)
 
     #### write out results
     #### note - need to get "perfect subset" data while write-out
@@ -1223,3 +1201,5 @@ if __name__ == "__main__":
         writer.writerow(info)
     f.close()
     print(f"Output written to: {output_filename}")
+
+
