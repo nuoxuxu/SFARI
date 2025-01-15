@@ -6,6 +6,7 @@ from src.utils import read_gff
 
 def main():
     parser = argparse.ArgumentParser(description='Filter genome_gffs from TransDecoder with novel transripts')
+    parser.add_argument('--mode', action='store', type=str, required=True)
     parser.add_argument('--h5ad_file_orf', action='store', type=str, required=True)
     parser.add_argument('--genome_gff3', action='store', type=str, required=True)
     parser.add_argument('--protein_classification_unfiltered', action='store', type=str, required=True)
@@ -65,10 +66,27 @@ def main():
 
     novel_gene_ids = novel_pbids.str.split(".").map_elements(lambda x: "".join(x[0]+"." + x[1])).unique()
 
-    genome_gff3 = genome_gff3\
+    base_iso_pbids = lr_bulk.var\
+        .filter(pl.col("ORF_type")=="complete")\
+        .with_columns(
+            pl.col("base_isoform").cast(pl.String)
+        )\
         .filter(
-            ((pl.col("feature")=="gene") & pl.col("ID").is_in(novel_gene_ids)) | ((pl.col("feature")!="gene") & pl.col("transcript_id").is_in(novel_pbids))
-        )
+            pl.col("isoform") == pl.col("base_isoform")
+        )["isoform"]
+    
+    base_iso_gene_ids = base_iso_pbids.str.split(".").map_elements(lambda x: "".join(x[0]+"." + x[1])).unique()
+
+    if params.mode == "hybrid":
+        genome_gff3 = genome_gff3\
+            .filter(
+                ((pl.col("feature")=="gene") & pl.col("ID").is_in(novel_gene_ids)) | ((pl.col("feature")!="gene") & pl.col("transcript_id").is_in(novel_pbids))
+            )
+    elif params.mode == "pacbio":
+        genome_gff3 = genome_gff3\
+            .filter(
+                ((pl.col("feature")=="gene") & pl.col("ID").is_in(base_iso_gene_ids)) | ((pl.col("feature")!="gene") & pl.col("transcript_id").is_in(base_iso_pbids))
+            )        
 
     genome_gff3\
         .with_columns(
@@ -80,7 +98,7 @@ def main():
                 .then(pl.lit("ID=")+pl.col("ID")+pl.lit(";Parent=")+pl.col("Parent")+pl.lit(";exon_number=")+pl.col("exon_number"))        
         )\
         .drop(["ID", "Parent", "exon_number", "transcript_id"])\
-        .write_csv(params.output, include_header=False, quote_style="never", separator="\t")
+        .write_csv(params.output, include_header=False, quote_style="never", separator="\t")  
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 #!/home/s/shreejoy/nxu/miniforge3/envs/patch_seq_spl/bin/python
 import polars as pl
-from collections import defaultdict
+from collections import defaultdict, namedtuple
 from Bio import SeqIO
 from src.single_cell import SingleCell
 import pandas as pd
@@ -13,6 +13,8 @@ def read_fasta(fasta_file):
     for rec in SeqIO.parse(fasta_file, 'fasta'):
         if rec.id.startswith("ENSP"):            
             seqs[rec.id.split("|")[1]] = str(rec.seq)
+        elif rec.id.count("p")==1:
+            seqs[rec.id.rsplit(".", 1)[0]] = str(rec.seq)
         else:
             seqs[rec.id] = str(rec.seq)
     return seqs
@@ -158,7 +160,7 @@ def write_peptide_gtf(output_name, pep_ranges, pbs):
                     ofile.write('\t'.join([chr, 'hg38_canon', 'CDS', str(start), str(end), '.', strand,
                                 '.', pep_acc]) + '\n')
 
-def main():
+if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Filter genome_gffs from TransDecoder with novel transripts')
     parser.add_argument('--sample_gtf', action='store', type=str, required=True)
     parser.add_argument('--reference_gtf', action='store', type=str, required=True)
@@ -166,8 +168,66 @@ def main():
     parser.add_argument('--h5ad_file', action='store', type=str, required=True)
     parser.add_argument('--sample_fasta', action='store', type=str, required=True)
     parser.add_argument('--output', action='store', type=str, required=True)
-    
     params = parser.parse_args()
+    
+    seqs = read_fasta(params.sample_fasta)
+    pb_gene = SingleCell(params.h5ad_file).var["isoform", "associated_gene"]
+    percolator_res = pl.read_csv(params.peptides, has_header=True, separator="\t")\
+        .with_columns(
+        proteinIds = pl.col("proteinIds").map_elements(lambda s: s.split(","), return_dtype=pl.List(pl.String))
+        )\
+        .explode("proteinIds")\
+        .filter(
+            pl.col("q-value") < 0.05,
+            pl.col("proteinIds").str.contains("DECOY").not_()
+        )\
+        .with_columns(
+            pl.when(pl.col("proteinIds").str.starts_with("ENSP"))\
+                .then(pl.col("proteinIds").str.extract(r"^[^|]*\|([^|]*)"))\
+                .otherwise(pl.col("proteinIds"))
+        )\
+        .with_columns(
+            pl.col("peptide").str.replace_all(r"M\[15.9949\]", "M")
+        )\
+        .with_columns(
+            pep = pl.col("peptide").str.split(".").map_elements(lambda x: x[1], return_dtype=pl.String),
+            prev_aa = pl.col("peptide").str.split(".").map_elements(lambda x: x[0], return_dtype=pl.String),
+            next_aa = pl.col("peptide").str.split(".").map_elements(lambda x: x[2], return_dtype=pl.String)
+        )\
+        .rename(
+            {"proteinIds": "pb_acc"}
+        )\
+        .join(pb_gene.rename({"isoform": "pb_acc"}), on = "pb_acc", how = "left")\
+        .rename({"associated_gene": "gene"})[['pep', 'pb_acc', 'prev_aa','next_aa', 'gene']]\
+        .unique("pep")
+
+    start_idx = percolator_res.map_rows(find_start_pep_index).rename({"map": "pep_start"})
+    end_idx = percolator_res.map_rows(find_end_pep_index).rename({"map": "pep_end"})
+
+    pep_ranges = pl.concat([pl.concat([percolator_res, start_idx], how="horizontal"), end_idx], how="horizontal")\
+        .filter(
+            pl.col("pb_acc").is_in(seqs.keys())
+        )\
+        .filter(
+            ((pl.col("pep_start")<0).or_(pl.col("pep_end")<0)).not_()
+        )
+    
+    sample_gtf = read_sample_gtf(params.sample_gtf)
+    reference_gtf = read_reference_gtf(params.reference_gtf)
+    pbs = process_gtf(pd.concat([sample_gtf, reference_gtf], ignore_index=True))
+
+    write_peptide_gtf(params.output, pep_ranges.to_pandas(), pbs)
+        
+else:
+    Args = namedtuple("Args", "sample_gtf reference_gtf peptides h5ad_file sample_fasta output")
+    params = Args(
+        sample_gtf = "nextflow_results/transcripts_filtered.fasta.transdecoder.genome.gff3.gtf",
+        reference_gtf = "/project/s/shreejoy/Genomic_references/GENCODE/gencode.v39.annotation.gtf",
+        peptides = "nextflow_results/hybrid_percolator.tsv",
+        h5ad_file = "nextflow_results/pbid_orf.h5ad",
+        sample_fasta = "nextflow_results/hybrid.fasta",
+        output = "test_peptides.gtf"
+    )
     seqs = read_fasta(params.sample_fasta)
     pb_gene = SingleCell(params.h5ad_file).var["isoform", "associated_gene"]
     percolator_res = pl.read_csv(params.peptides, has_header=True, separator="\t")\
@@ -213,12 +273,21 @@ def main():
         .filter(
             ((pl.col("pep_start")<0).or_(pl.col("pep_end")<0)).not_()
         )
+        
+    cds = read_fasta("nextflow_results/transcripts_filtered.fasta.transdecoder.cds")
+    transcript = read_fasta("nextflow_results/transcripts_filtered.fasta")
 
     sample_gtf = read_sample_gtf(params.sample_gtf)
     reference_gtf = read_reference_gtf(params.reference_gtf)
     pbs = process_gtf(pd.concat([sample_gtf, reference_gtf], ignore_index=True))
 
-    write_peptide_gtf(params.output, pep_ranges.to_pandas(), pbs)
+    chr, strand, coords, blens, cblens = pbs["PB.100609.85"]
+    pep_seq, pb_acc, prev_aa, next_aa,gene, pep_start, pep_end = pep_ranges.filter(pl.col("pep").str.contains("TLTAEEAEEEWERR"))
 
-if __name__ == "__main__":
-    main()
+    i1, delta1 = get_first_block_index(pep_start[0], cblens)
+    i2, delta2 = get_first_block_index(pep_end[0], cblens)
+
+    orf_coords = make_coords_trimmed_to_orf_range_neg_strand(i1, delta1, i2, delta2, coords)
+    make_coords_trimmed_to_orf_range(i1, delta1, i2, delta2, coords)
+
+    seqs["PB.100609.85"].find("TLTAEEAEEEWERR")
