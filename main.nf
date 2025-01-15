@@ -461,6 +461,31 @@ process getBestOrf {
         --output best_orf.tsv    
     """
 }
+
+process renameCdsToExon {
+    publishDir "nextflow_results", mode: 'copy'
+    conda "/home/s/shreejoy/nxu/miniforge3/envs/SQANTI3.env"
+
+    input:
+    path genome_gff3_gtf
+    path reference_gtf
+
+    output:
+    path "SFARI.cds_renamed_exon.gtf", emit: sample_cds
+    path "SFARI.transcript_exons_only.gtf", emit: sample_exon
+    path "gencode.cds_renamed_exon.gtf", emit: reference_exon
+    path "gencode.transcript_exons_only.gtf", emit: reference_cds
+
+    script:
+    """
+    rename_cds_to_exon.py \\
+        --sample_gtf $genome_gff3_gtf \\
+        --sample_name SFARI \\
+        --reference_gtf $reference_gtf \\
+        --reference_name gencode        
+    """
+}
+
 process sqantiProtein {
     input:
     path sample_exon
