@@ -135,8 +135,7 @@ def write_peptide_gtf(output_name, pep_ranges, pbs):
         # remove for conversion to bed12 (genePred complains)
         # ofile.write('track name=peptide color=0,0,0\n')
         for i, row in pep_ranges.iterrows():
-            
-            pep_seq, pb_acc, prev_aa, next_aa,gene, pep_start, pep_end = row
+            pep_seq, pb_acc, prev_aa, next_aa, gene, PSMId, mapped_to_novel_transcripts_uniquely, pep_start, pep_end = row
             # convert from protein (AA) to CDS (nt) coords
             pep_start = pep_start * 3 - 2
             pep_end = pep_end * 3
@@ -155,7 +154,7 @@ def write_peptide_gtf(output_name, pep_ranges, pbs):
                 if chr in ['chrX','chrY']:
                     gene = f"{gene}_{chr}"
                 acc_id= f"{prev_aa}.{pep_seq}.{next_aa}({gene})"
-                pep_acc = f'gene_id "{acc_id}"; transcript_id "{acc_id}";'
+                pep_acc = f'gene_id "{PSMId}"; gene_name "{gene}"; transcript_id "{acc_id}"; mapped_to_novel_transcripts_uniquely "{mapped_to_novel_transcripts_uniquely}";'
                 for [start, end] in orf_coords:
                     ofile.write('\t'.join([chr, 'hg38_canon', 'CDS', str(start), str(end), '.', strand,
                                 '.', pep_acc]) + '\n')
@@ -171,7 +170,14 @@ if __name__ == "__main__":
     params = parser.parse_args()
     
     seqs = read_fasta(params.sample_fasta)
-    pb_gene = SingleCell(params.h5ad_file).var["isoform", "associated_gene"]
+    pb_gene = SingleCell(params.h5ad_file).var["isoform", "associated_gene"].with_columns(pl.col("associated_gene").cast(pl.String))
+    gencode_gene = read_gtf("/project/s/shreejoy/Genomic_references/GENCODE/gencode.v39.annotation.gtf", attributes = ["gene_name", "transcript_id"])\
+        .filter(
+            pl.col("feature") == "transcript",
+            pl.col("transcript_id").is_in(seqs.keys())
+        )["transcript_id", "gene_name"].rename({"transcript_id": "isoform", "gene_name": "associated_gene"})
+    pb_gene = pl.concat([pb_gene, gencode_gene])
+
     percolator_res = pl.read_csv(params.peptides, has_header=True, separator="\t")\
         .with_columns(
         proteinIds = pl.col("proteinIds").map_elements(lambda s: s.split(","), return_dtype=pl.List(pl.String))
@@ -198,7 +204,7 @@ if __name__ == "__main__":
             {"proteinIds": "pb_acc"}
         )\
         .join(pb_gene.rename({"isoform": "pb_acc"}), on = "pb_acc", how = "left")\
-        .rename({"associated_gene": "gene"})[['pep', 'pb_acc', 'prev_aa','next_aa', 'gene']]\
+        .rename({"associated_gene": "gene"})[['pep', 'pb_acc', 'prev_aa','next_aa', 'gene', 'PSMId']]\
         .unique("pep")
 
     start_idx = percolator_res.map_rows(find_start_pep_index).rename({"map": "pep_start"})
@@ -229,7 +235,13 @@ else:
         output = "test_peptides.gtf"
     )
     seqs = read_fasta(params.sample_fasta)
-    pb_gene = SingleCell(params.h5ad_file).var["isoform", "associated_gene"]
+    pb_gene = SingleCell(params.h5ad_file).var["isoform", "associated_gene"].with_columns(pl.col("associated_gene").cast(pl.String))
+    gencode_gene = read_gtf("/project/s/shreejoy/Genomic_references/GENCODE/gencode.v39.annotation.gtf", attributes = ["gene_name", "transcript_id"])\
+        .filter(
+            pl.col("feature") == "transcript",
+            pl.col("transcript_id").is_in(seqs.keys())
+        )["transcript_id", "gene_name"].rename({"transcript_id": "isoform", "gene_name": "associated_gene"})
+    pb_gene = pl.concat([pb_gene, gencode_gene])
     percolator_res = pl.read_csv(params.peptides, has_header=True, separator="\t")\
         .with_columns(
         proteinIds = pl.col("proteinIds").map_elements(lambda s: s.split(","), return_dtype=pl.List(pl.String))
