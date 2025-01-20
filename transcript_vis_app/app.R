@@ -3,29 +3,62 @@ library(ggtranscript)
 library(dplyr)
 library(tidyr)
 library(readr)
+library(shiny)
 library(bslib)
 library(patchwork)
 
 combined_gtf <- read_csv("./shiny.csv")
 pbid_abundance <- read_csv("./pbid_abundance.csv")
 talon_abundance <- read_csv("./talon_abundance.csv")
+CDS_gtf <- read_csv("genome_gff3_gtf.csv")
+gencode_gtf <- read_csv("GENCODE_v39.csv")
+peptides_gtf <- read_csv("SFARI_peptides.csv")
 
 ui <- page_fillable(
-  selectizeInput(
-    "select_genes",
-    "Select genes from list below:",
-    choices = choices <- unique(combined_gtf$gene_name)
-  ),
-  layout_columns(
-    card(
-      title = "Gene Structure",
-      plotOutput("ggtranscript_plot")
+  navset_tab(
+    nav_panel(
+      title = "Comparison",
+      selectizeInput(
+        "select_genes",
+        "Select genes from list below:",
+        choices = choices <- unique(combined_gtf$gene_name)
+      ),
+      layout_columns(
+        card(
+          title = "Gene Structure",
+          plotOutput("ggtranscript_plot")
+        ),
+        card(
+          title = "Abundance",
+          plotOutput("abundance")
+        ),
+        col_widths = c(8, 4)
+      )      
     ),
-    card(
-      title = "Abundance",
-      plotOutput("abundance")
-    ),
-    col_widths = c(8, 4)
+    nav_panel(
+      title = "CDS",
+        selectizeInput(
+          "select_genes_CDS",
+          "Select genes from list below:",
+          choices = choices <- unique(CDS_gtf$gene_name)
+        ),
+        selectizeInput(
+          "select_protein_class",
+          "Select SQANTI protrein classes from list below:",
+          choices = choices <- c(unique(as.character(unique(CDS_gtf[["protein_classification_base"]]))), "all"),
+          selected = "all"
+        ),        
+        selectizeInput(
+          "select_mapped_to_nov_trans_only",
+          "Filtere for peptides that map to novel ORFs only",
+          choices = choices <- c(TRUE, FALSE, "all"),
+          selected = "all"
+        ),
+      card(
+        title = "Unique CDS",
+        plotOutput("CDS_plot")
+      )
+    )
   )
 )
 
@@ -155,6 +188,148 @@ plot_abundance <- function(gene_of_interest) {
   }
 }
 
+plot_gencode <- function(gtf, gene_of_interest, xmin, xmax) {
+    exons <- gtf %>%
+        filter(gene_name == {{ gene_of_interest }}) %>%
+        filter(feature %in% c("exon"))
+    CDS <- gtf %>%
+        filter(gene_name == {{ gene_of_interest }}) %>%
+        filter(feature == "CDS")
+
+    exons %>%
+        ggplot(
+            aes(xstart = start, xend = end, y = transcript_id, strand = strand)
+            ) +
+        geom_range(
+            fill = "white",
+            height = 0.25
+            ) +            
+        geom_intron(
+            data = to_intron(exons, "transcript_id")
+            ) +
+        geom_range(
+            data = CDS
+            ) +
+        coord_cartesian(xlim = c({{xmin}}, {{xmax}})) +
+        theme(
+            panel.background = element_blank(),
+            panel.grid.major = element_blank(),
+            panel.grid.minor = element_blank(),
+            axis.ticks.x = element_blank(),
+            axis.text.x = element_blank(),
+            axis.ticks.y = element_blank(),
+            axis.title.y = element_blank(),
+            strip.text.y = element_text(size = 12),
+            axis.text.y = element_text(size = 12),
+            legend.position = "top"
+        )
+}
+
+plot_CDS <- function(gtf, gene_of_interest, select_protein_class) {
+    if (select_protein_class == "all") {
+      gtf <- gtf %>%
+          filter(gene_name == {{gene_of_interest}})
+    } else {
+      gtf <- gtf %>%
+          filter(gene_name == {{gene_of_interest}}) %>%
+          filter(protein_classification_base == {{select_protein_class}})
+    }
+
+    gtf %>%
+        ggplot(
+            aes(xstart = start, xend = end, y = transcript_id, strand = strand)
+            ) +
+        geom_range(
+            aes(fill = protein_classification_base)
+            ) +  
+        geom_intron(
+            data = to_intron(gtf, "transcript_id")
+            ) +
+        theme(
+            panel.background = element_blank(),
+            panel.grid.major = element_blank(),
+            panel.grid.minor = element_blank(),
+            axis.ticks.x = element_blank(),
+            axis.text.x = element_blank(),
+            axis.ticks.y = element_blank(),
+            axis.title.y = element_blank(),
+            strip.text.y = element_text(size = 12),
+            axis.text.y = element_text(size = 12),
+            legend.position = "top"
+        )
+}
+
+plot_peptides <- function(gtf, gene_of_interest, select_mapped_to_nov_trans_only, xmin, xmax) {
+    if (select_mapped_to_nov_trans_only == "all") {
+      gtf <- gtf %>%
+          filter(gene_name == {{gene_of_interest}})
+    } else {
+      gtf <- gtf %>%
+          filter(gene_name == {{gene_of_interest}})%>%
+          filter(mapped_to_novel_transcripts_uniquely == {{select_mapped_to_nov_trans_only}})
+    }
+    gtf %>%
+        ggplot(
+            aes(xstart = start, xend = end, y = transcript_id, strand = strand)
+            ) +
+        geom_range(
+            aes(fill = mapped_to_novel_transcripts_uniquely)
+            ) +  
+        geom_intron(
+            data = to_intron(gtf, "transcript_id")
+            ) +
+        coord_cartesian(xlim = c({{xmin}}, {{xmax}})) +
+        theme(
+            panel.background = element_blank(),
+            panel.grid.major = element_blank(),
+            panel.grid.minor = element_blank(),
+            axis.ticks.x = element_blank(),
+            axis.text.x = element_blank(),
+            axis.ticks.y = element_blank(),
+            axis.title.y = element_blank(),
+            strip.text.y = element_text(size = 12),
+            axis.text.y = element_text(size = 12),
+            legend.position = "top"
+        )
+}
+
+get_n_transcript_CDS <- function(gene_of_interest, select_protein_class, select_mapped_to_nov_trans_only) {
+    if (select_protein_class == "all") {
+      n_CDS <- CDS_gtf %>%
+          filter(gene_name == {{gene_of_interest}}) %>%
+          summarise(CDS = n_distinct(transcript_id))
+    } else {
+      n_CDS <- CDS_gtf %>%
+          filter(gene_name == {{gene_of_interest}}) %>%
+          filter(protein_classification_base == {{select_protein_class}}) %>%
+          summarise(CDS = n_distinct(transcript_id))
+    }
+    if (select_mapped_to_nov_trans_only == "all") {
+      n_peptides <- peptides_gtf %>%
+          filter(gene_name == {{gene_of_interest}}) %>%
+          summarise(peptides = n_distinct(transcript_id))
+    } else {
+      n_peptides <- peptides_gtf %>%
+          filter(gene_name == {{gene_of_interest}}) %>%
+          filter(mapped_to_novel_transcripts_uniquely == {{select_mapped_to_nov_trans_only}}) %>%
+          summarise(peptides = n_distinct(transcript_id))      
+    }
+    n_gencode <- gencode_gtf %>%
+        filter(gene_name == {{gene_of_interest}}) %>%
+        summarise(gencode = n_distinct(transcript_id))    
+
+    cbind(n_gencode, n_CDS, n_peptides)
+}
+
+plot_combined <- function(gene_of_interest, select_protein_class, select_mapped_to_nov_trans_only) {
+    CDS <- plot_CDS(CDS_gtf, {{gene_of_interest}}, {{select_protein_class}})
+    xmin <- ggplot_build(CDS)$layout$panel_params[[1]]$x.range[1]
+    xmax <- ggplot_build(CDS)$layout$panel_params[[1]]$x.range[2]
+    gencode <- plot_gencode(gencode_gtf, {{gene_of_interest}}, {{xmin}}, {{xmax}})
+    peptides <- plot_peptides(peptides_gtf, {{gene_of_interest}}, {{select_mapped_to_nov_trans_only}}, {{xmin}}, {{xmax}})
+    gencode / CDS / peptides + plot_layout(heights = get_n_transcript_CDS(gene_of_interest, select_protein_class, select_mapped_to_nov_trans_only) * 2)
+}
+
 server <- function(input, output, session) {
   output$ggtranscript_plot <- renderPlot(
     {
@@ -170,6 +345,14 @@ server <- function(input, output, session) {
     },
     height = reactive({
       20 * sum(get_n_transcript_ratio(input$select_genes)) + 100
+    })
+  )
+  output$CDS_plot <- renderPlot(
+    {
+      plot_combined(input$select_genes_CDS, input$select_protein_class, input$select_mapped_to_nov_trans_only)
+    },
+    height = reactive({
+      20 * sum(get_n_transcript_CDS(input$select_genes_CDS, input$select_protein_class, input$select_mapped_to_nov_trans_only)) + 100
     })
   )
 }
