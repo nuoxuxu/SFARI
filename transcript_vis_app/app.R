@@ -50,10 +50,10 @@ ui <- page_fillable(
         ),        
         selectizeInput(
           "select_mapped_to_nov_trans_only",
-          "Filtere for peptides that map to novel ORFs only",
-          choices = choices <- c(TRUE, FALSE, "all"),
+          "Filter for peptides that represent novel splice junctions or mono-exons",
+          choices = choices <- c("known", "novel", "all"),
           selected = "all"
-        ),
+      ),
       card(
         title = "Unique CDS",
         plotOutput("CDS_plot")
@@ -226,7 +226,7 @@ plot_gencode <- function(gtf, gene_of_interest, xmin, xmax) {
 }
 
 plot_CDS <- function(gtf, gene_of_interest, select_protein_class) {
-    if (select_protein_class == "all") {
+    if ((select_protein_class == "all")) {
       gtf <- gtf %>%
           filter(gene_name == {{gene_of_interest}})
     } else {
@@ -259,21 +259,21 @@ plot_CDS <- function(gtf, gene_of_interest, select_protein_class) {
         )
 }
 
-plot_peptides <- function(gtf, gene_of_interest, select_mapped_to_nov_trans_only, xmin, xmax) {
-    if (select_mapped_to_nov_trans_only == "all") {
+plot_peptides <- function(gtf, gene_of_interest, novelty, xmin, xmax) {
+    if (novelty == "all") {
       gtf <- gtf %>%
           filter(gene_name == {{gene_of_interest}})
     } else {
       gtf <- gtf %>%
           filter(gene_name == {{gene_of_interest}})%>%
-          filter(mapped_to_novel_transcripts_uniquely == {{select_mapped_to_nov_trans_only}})
+          filter(novelty == {{novelty}})
     }
     gtf %>%
         ggplot(
             aes(xstart = start, xend = end, y = transcript_id, strand = strand)
             ) +
         geom_range(
-            aes(fill = mapped_to_novel_transcripts_uniquely)
+            aes(fill = novelty)
             ) +  
         geom_intron(
             data = to_intron(gtf, "transcript_id")
@@ -293,7 +293,7 @@ plot_peptides <- function(gtf, gene_of_interest, select_mapped_to_nov_trans_only
         )
 }
 
-get_n_transcript_CDS <- function(gene_of_interest, select_protein_class, select_mapped_to_nov_trans_only) {
+get_n_transcript_CDS <- function(gene_of_interest, select_protein_class, novelty) {
     if (select_protein_class == "all") {
       n_CDS <- CDS_gtf %>%
           filter(gene_name == {{gene_of_interest}}) %>%
@@ -304,14 +304,14 @@ get_n_transcript_CDS <- function(gene_of_interest, select_protein_class, select_
           filter(protein_classification_base == {{select_protein_class}}) %>%
           summarise(CDS = n_distinct(transcript_id))
     }
-    if (select_mapped_to_nov_trans_only == "all") {
+    if (novelty == "all") {
       n_peptides <- peptides_gtf %>%
           filter(gene_name == {{gene_of_interest}}) %>%
           summarise(peptides = n_distinct(transcript_id))
     } else {
       n_peptides <- peptides_gtf %>%
           filter(gene_name == {{gene_of_interest}}) %>%
-          filter(mapped_to_novel_transcripts_uniquely == {{select_mapped_to_nov_trans_only}}) %>%
+          filter(novelty == {{novelty}}) %>%
           summarise(peptides = n_distinct(transcript_id))      
     }
     n_gencode <- gencode_gtf %>%

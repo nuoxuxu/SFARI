@@ -347,3 +347,96 @@ pl.read_csv("/Users/xunuo/projects/Dev_Brain_IsoSeq/data/cp_vz_0.75_min_7_recove
     .filter(pl.col("transcript_id").is_in(combined_gtf["transcript_id"]))\
     .write_csv("transcript_vis_app/talon_abundance.csv")
 ```
+
+# Processing SFARI CDS gtf
+
+```{python}
+#| label: import-genome-gff3-gtf
+
+CDS_gtf  = read_gtf(
+    "nextflow_results/transcripts_filtered.fasta.transdecoder.genome.gff3.gtf",
+    attributes = ["transcript_id", "gene_id"]
+    )\
+    .filter(
+        pl.col("feature")!="transcript",
+        pl.col("feature") == "CDS"
+        )\
+    ["seqname", "feature", "start", "end", "strand", "gene_id", "transcript_id"]
+
+
+protein_classification = pl.read_csv("nextflow_results/SFARI_unfiltered.protein_classification.tsv", separator = "\t").rename({"pb": "transcript_id"})["transcript_id", "pr_gene", "protein_classification_base"]
+
+gene_id_to_gene_name = read_gtf(paste0(Sys.getenv("GENCODE/gencode.v39.annotation.gtf")), attributes = ["gene_name", "gene_id"]).unique("gene_id")["gene_name", "gene_id"]
+```
+
+```{python}
+#| label: add-protein_classification_base-and-gene_name
+CDS_gtf = CDS_gtf\
+    .join(
+        protein_classification,
+        on = "transcript_id",
+        how = "left"
+    )\
+    .join(
+        gene_id_to_gene_name.rename({"gene_id": "pr_gene"}),
+        on = "pr_gene",
+        how = "left"
+    )["seqname", "feature", "start", "end", "strand", "gene_name", "transcript_id", "protein_classification_base"]
+```
+
+```{python}
+#| label: write-genome_gff3_gtf
+CDS_gtf.write_csv("transcript_vis_app/genome_gff3_gtf.csv")
+```
+
+# Processing GENCODE gtf
+
+```{python}
+#| label: load-ENST-in-gencode.v39.pc_translations.f
+from Bio import SeqIO
+from collections import defaultdict
+def read_fasta(fasta_file):
+    seqs = defaultdict()
+    for rec in SeqIO.parse(fasta_file, 'fasta'):
+        if rec.id.startswith("ENSP"):            
+            seqs[rec.id.split("|")[1]] = str(rec.seq)
+        elif rec.id.count("p")==1:
+            seqs[rec.id.rsplit(".", 1)[0]] = str(rec.seq)
+        else:
+            seqs[rec.id] = str(rec.seq)
+    return seqs
+gencode_v39_pc = read_fasta("/Users/xunuo/Genomic_references/GENCODE/gencode.v39.pc_translations.fa")
+```
+
+```{python}
+#| label: filter-gencode_gtf
+gencode_gtf = read_gtf(
+    "/Users/xunuo/Genomic_references/GENCODE/gencode.v39.annotation.gtf",
+    attributes = ["gene_name", "transcript_id", "transcript_type"]
+    )\
+    .filter(
+        pl.col("feature").is_in(["exon", "CDS"]),
+        pl.col("gene_name").is_in(CDS_gtf["gene_name"].unique()),
+        pl.col("transcript_id").is_in(list(gencode_v39_pc.keys()))
+        )\
+    ["seqname", "feature", "start", "end", "strand", "gene_name", "transcript_id", "transcript_type"]
+```
+
+```{python}
+#| label: write-gencode_gtf
+gencode_gtf.write_csv("transcript_vis_app/GENCODE_v39.csv")
+```
+
+# Processing Peptides gtf 
+
+```{python}
+#| label: import-SFARI_peptides
+SFARI_peptides = read_gtf("nextflow_results/SFARI_peptides.gtf", attributes = ["gene_name", "transcript_id", "mapped_to_novel_transcripts_uniquely"])
+```
+
+
+```{python}
+SFARI_peptides\
+    ["seqname", "start", "end", "strand", "gene_name", "transcript_id", "mapped_to_novel_transcripts_uniquely"]\
+    .write_csv("transcript_vis_app/SFARI_peptides.csv")
+```
