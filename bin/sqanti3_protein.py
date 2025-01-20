@@ -5,7 +5,7 @@
 # Modified by Fran (francisco.pardo.palacios@gmail.com) currently as SQANTI3 version (05/15/2020)
 # Modified by Gloria (gs9yr@virginia.edu) for protein classification
 
-
+# %%
 __author__  = "etseng@pacb.com"
 __version__ = '2.0.0'  # Python 3.7
 
@@ -23,7 +23,12 @@ from collections import defaultdict, Counter, namedtuple
 from collections.abc import Iterable
 from csv import DictWriter, DictReader
 
+utilitiesPath = os.path.join(os.path.dirname(os.path.realpath(__file__)), "utilities")
+sys.path.insert(0, utilitiesPath)
 # from multiprocessing import Process
+
+# utilitiesPath = os.path.join(os.path.dirname(os.path.realpath(__file__)), "utilities")
+# sys.path.insert(0, utilitiesPath)
 # from rt_switching import rts
 # from indels_annot import calc_indels_from_sam
 
@@ -44,15 +49,18 @@ except ImportError:
 
 
 # so gloria can run cupcake and gtf tools on mac
-cupcake_dir = '/home/s/shreejoy/nxu/tools/cDNA_Cupcake'
-if cupcake_dir not in sys.path:
-    sys.path.append('/home/s/shreejoy/nxu/tools/cDNA_Cupcake')
+# cupcake_dir = '/Users/gloriasheynkman/Documents/research_drive/bioinfo_tools/cDNA_Cupcake/'
+# if cupcake_dir not in sys.path:
+#     sys.path.append('/Users/gloriasheynkman/Documents/research_drive/bioinfo_tools/cDNA_Cupcake/')
 from cupcake.tofu.compare_junctions import compare_junctions
 from cupcake.io.GFF import collapseGFFReader, write_collapseGFF_format
 GTF2GENEPRED_PROG = "gtfToGenePred"
+utilitiesPath = os.path.join(os.path.dirname(os.path.realpath(__file__)), "utilities")
+sys.path.insert(0, utilitiesPath)
+GTF2GENEPRED_PROG = os.path.join(utilitiesPath,"gtfToGenePred")
+GFFREAD_PROG = "gffread"
 
 # importing functions from original sqanti3
-# sys.path.append("/home/s/shreejoy/nxu/tools/SQANTI3")
 from sqanti3_qc import myQueryTranscripts, genePredReader, myQueryProteins, associationOverlapping
 
 
@@ -1193,3 +1201,5 @@ if __name__ == "__main__":
         writer.writerow(info)
     f.close()
     print(f"Output written to: {output_filename}")
+
+

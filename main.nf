@@ -461,7 +461,33 @@ process getBestOrf {
         --output best_orf.tsv    
     """
 }
+
+process renameCdsToExon {
+    publishDir "nextflow_results", mode: 'copy'
+    conda "/home/s/shreejoy/nxu/miniforge3/envs/SQANTI3.env"
+
+    input:
+    path genome_gff3_gtf
+    path reference_gtf
+
+    output:
+    path "SFARI.cds_renamed_exon.gtf", emit: sample_cds
+    path "SFARI.transcript_exons_only.gtf", emit: sample_exon
+    path "gencode.cds_renamed_exon.gtf", emit: reference_exon
+    path "gencode.transcript_exons_only.gtf", emit: reference_cds
+
+    script:
+    """
+    rename_cds_to_exon.py \\
+        --sample_gtf $genome_gff3_gtf \\
+        --sample_name SFARI \\
+        --reference_gtf $reference_gtf \\
+        --reference_name gencode        
+    """
+}
+
 process sqantiProtein {
+    publishDir "nextflow_results", mode: 'copy'
     input:
     path sample_exon
     path sample_cds
@@ -512,7 +538,27 @@ process fivePrimeUtr {
     --name SFARI \\
     --utr_info pb_5utr_categories.tsv \\
     --sqanti_protein_classification $sqanti_protein_classification \\
-    --odir ./    
+    --odir ./
+    """
+
+    stub:
+    """
+    1_get_gc_exon_and_5utr_info.py \\
+    --gencode_gtf $reference_gtf \\
+    --odir ./
+
+    2_classify_5utr_status.py \\
+    --gencode_exons_bed gencode_exons_for_cds_containing_ensts.bed \\
+    --gencode_exons_chain gc_exon_chain_strings_for_cds_containing_transcripts.tsv \\
+    --sample_cds_gtf $sample_cds \\
+    --odir ./ 
+
+    
+    3_merge_5utr_info_to_pclass_table.py \\
+    --name SFARI \\
+    --utr_info pb_5utr_categories.tsv \\
+    --sqanti_protein_classification "/scratch/s/shreejoy/nxu/SFARI/nextflow_results/SFARI.sqanti_protein_classification.tsv" \\
+    --odir ./
     """
 }
 
@@ -540,45 +586,47 @@ process makePacBioDatabase {
     conda "/home/s/shreejoy/nxu/miniforge3/envs/SQANTI3.env"
 
     input:
+    val mode
     path h5ad_file_orf
     path genome_gff3
     path protein_classification_unfiltered
     path gencode_fasta
 
     output:
-    path "PacBio_db.fasta"
+    path "*.fasta"
 
     script:
-    """
-    filter_genome_gff3.py \\
-        --h5ad_file_orf $h5ad_file_orf \\
-        --genome_gff3 $genome_gff3 \\
-        --protein_classification_unfiltered $protein_classification_unfiltered \\
-        --output novel_transcripts.gff3
+    if( mode == 'hybrid' )
+        """
+        filter_genome_gff3.py \\
+            --mode $mode \\
+            --h5ad_file_orf /scratch/s/shreejoy/nxu/SFARI/nextflow_results/pbid_orf.h5ad \\
+            --genome_gff3 $genome_gff3 \\
+            --protein_classification_unfiltered $protein_classification_unfiltered \\
+            --output "${mode}_novel_transcripts.gff3"
 
-    apptainer run \\
-        -B \${PWD},\${GENOMIC_DATA_DIR} \\
-        \${NXF_SINGULARITY_CACHEDIR}/agat_1.0.0--pl5321hdfd78af_0.sif \\
-        agat_sp_extract_sequences.pl -g nextflow_results/novel_transcripts.gff3 -f \${GENOMIC_DATA_DIR}GENCODE/GRCh38.primary_assembly.genome.fa -t cds -p -o PacBio_db.fasta
+        apptainer run \\
+            -B \${PWD},\${GENOMIC_DATA_DIR} \\
+            \${NXF_SINGULARITY_CACHEDIR}/agat_1.0.0--pl5321hdfd78af_0.sif \\
+            agat_sp_extract_sequences.pl -g ${mode}_novel_transcripts.gff3 -f \${GENOMIC_DATA_DIR}GENCODE/GRCh38.primary_assembly.genome.fa -t cds -p -o ${mode}.fasta
 
-    cat $gencode_fasta >> PacBio_db.fasta
-    """
+        cat $gencode_fasta >> ${mode}.fasta
+        """
 
-    stub:
-    """
-    filter_genome_gff3.py \\
-        --h5ad_file_orf /scratch/s/shreejoy/nxu/SFARI/nextflow_results/pbid_orf.h5ad \\
-        --genome_gff3 $genome_gff3 \\
-        --protein_classification_unfiltered $protein_classification_unfiltered \\
-        --output novel_transcripts.gff3
+    else if ( mode == 'pacbio' )
+        """
+        filter_genome_gff3.py \\
+            --mode $mode \\
+            --h5ad_file_orf /scratch/s/shreejoy/nxu/SFARI/nextflow_results/pbid_orf.h5ad \\
+            --genome_gff3 $genome_gff3 \\
+            --protein_classification_unfiltered $protein_classification_unfiltered \\
+            --output "${mode}_novel_transcripts.gff3"
 
-    apptainer run \\
-        -B \${PWD},\${GENOMIC_DATA_DIR} \\
-        \${NXF_SINGULARITY_CACHEDIR}/agat_1.0.0--pl5321hdfd78af_0.sif \\
-        agat_sp_extract_sequences.pl -g novel_transcripts.gff3 -f \${GENOMIC_DATA_DIR}GENCODE/GRCh38.primary_assembly.genome.fa -t cds -p -o PacBio_db.fasta
-
-    cat $gencode_fasta >> PacBio_db.fasta
-    """
+        apptainer run \\
+            -B \${PWD},\${GENOMIC_DATA_DIR} \\
+            \${NXF_SINGULARITY_CACHEDIR}/agat_1.0.0--pl5321hdfd78af_0.sif \\
+            agat_sp_extract_sequences.pl -g ${mode}_novel_transcripts.gff3 -f \${GENOMIC_DATA_DIR}GENCODE/GRCh38.primary_assembly.genome.fa -t cds -p -o ${mode}.fasta
+        """
 }
 
 process cometSearch {
@@ -603,10 +651,11 @@ process runPercolator {
     conda "/home/s/shreejoy/nxu/miniforge3/envs/patch_seq_spl"
     
     input:
+    val mode
     path "file*.pin"
 
     output:
-    path "percolator.tsv"
+    path "${mode}_percolator.tsv"
 
     script:
     """
@@ -631,7 +680,7 @@ process runPercolator {
         printf "\\n";
     }' OFS="\\t" percolator.tsv > percolator_res.tsv
 
-    mv percolator_res.tsv percolator.tsv
+    mv percolator_res.tsv ${mode}_percolator.tsv
     """
 }
 
@@ -639,18 +688,19 @@ process addPeptideSupport{
     publishDir "nextflow_results", mode: 'copy'
 
     input:
+    val mode
     path h5ad_file_orf
     path percolator_tsv
 
     output:
-    path "pbid_orf_peptide.h5ad"
+    path "pbid_orf_${mode}.h5ad"
 
     script:
     """
     add_peptide_support.py \\
         --h5ad_file $h5ad_file_orf \\
         --peptide_file $percolator_tsv \\
-        --output "pbid_orf_peptide.h5ad"
+        --output "pbid_orf_${mode}.h5ad"
     """
 
     stub:
@@ -658,7 +708,7 @@ process addPeptideSupport{
     add_peptide_support.py \\
         --h5ad_file /scratch/s/shreejoy/nxu/SFARI/nextflow_results/pbid_orf.h5ad \\
         --peptide_file $percolator_tsv \\
-        --output "pbid_orf_peptide.h5ad"    
+        --output "pbid_orf_${mode}.h5ad"
     """
 }
 
@@ -685,30 +735,40 @@ process prepareIsoformSwitchAnalysis {
     """
 }
 
-process renameCdsToExon {
+process peptideTrackVisualization {
     publishDir "nextflow_results", mode: 'copy'
-    conda "/home/s/shreejoy/nxu/miniforge3/envs/SQANTI3.env"
-
     input:
     path genome_gff3_gtf
     path reference_gtf
+    path peptides
+    path h5ad_file
+    path sample_fasta
 
     output:
-    path "SFARI.cds_renamed_exon.gtf", emit: sample_cds
-    path "SFARI.transcript_exons_only.gtf", emit: sample_exon
-    path "gencode.cds_renamed_exon.gtf", emit: reference_exon
-    path "gencode.transcript_exons_only.gtf", emit: reference_cds
+    path "SFARI_peptides.gtf"
 
     script:
     """
-    rename_cds_to_exon.py \\
+    make_peptide_gtf_file.py \\
         --sample_gtf $genome_gff3_gtf \\
-        --sample_name SFARI \\
         --reference_gtf $reference_gtf \\
-        --reference_name gencode        
+        --peptides $peptides \\
+        --h5ad_file $h5ad_file \\
+        --sample_fasta $sample_fasta \\
+        --output "SFARI_peptides.gtf"
     """
-}
 
+    stub:
+    """
+    make_peptide_gtf_file.py \\
+        --sample_gtf $genome_gff3_gtf \\
+        --reference_gtf $reference_gtf \\
+        --peptides $peptides \\
+        --h5ad_file "/scratch/s/shreejoy/nxu/SFARI/nextflow_results/pbid_orf.h5ad" \\
+        --sample_fasta $sample_fasta \\
+        --output "SFARI_peptides.gtf"
+    """    
+}
 workflow {
     getIDToSample(params.datadir + "long_read/LUO26876.20240514/*/outputs/flnc.bam")
     Channel.fromPath(params.datadir + "long_read/LUO26876.20240514/*/outputs/mapped.bam").collect().set { bamFiles }
@@ -733,11 +793,12 @@ workflow {
     sqantiProtein(renameCdsToExon.out.sample_exon, renameCdsToExon.out.sample_cds, renameCdsToExon.out.reference_exon, renameCdsToExon.out.reference_cds, getBestOrf.out)
     fivePrimeUtr(params.annotation_gtf, convertGenomeGff3toGtf.out, sqantiProtein.out)
     proteinClassification(fivePrimeUtr.out)
-    makePacBioDatabase(addORFPredictions.out.h5ad_file_orf, cdnaAlignmentOrfToGenome.out.genome_gff3, proteinClassification.out, params.gencode_translation_fasta)
+    makePacBioDatabase(params.searchDB, addORFPredictions.out.h5ad_file_orf, cdnaAlignmentOrfToGenome.out.genome_gff3, proteinClassification.out, params.gencode_translation_fasta)
     Channel.fromPath(params.datadir + "tc-1154/*.mzXML").collect().set { mzXMLiles }
     cometSearch(params.comet_params, makePacBioDatabase.out, mzXMLiles)
-    runPercolator(cometSearch.out)
-    addPeptideSupport(addORFPredictions.out, runPercolator.out)
+    runPercolator(params.searchDB, cometSearch.out)
+    // addPeptideSupport(params.searchDB, addORFPredictions.out, runPercolator.out)
+    peptideTrackVisualization(convertGenomeGff3toGtf.out, params.annotation_gtf, runPercolator.out, addORFPredictions.out, makePacBioDatabase.out)
     // prepareIsoformSwitchAnalysis(getSingleCellObject.out, pigeonFilter.out.filtered_gff, filterSampleFasta.out)
     // Channel.fromPath(params.datadir + "/*/outputs/flnc.report.csv").collect().set { flncReports }
     // collectPolyATailLength(flncReports, isoseqCollapse.out.read_stat)

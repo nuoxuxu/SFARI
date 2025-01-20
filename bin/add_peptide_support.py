@@ -23,7 +23,7 @@ def main():
         .with_columns(
             pl.when(pl.col("proteinIds").str.starts_with("PB"))\
                 .then(pl.col("proteinIds"))\
-                .otherwise(pl.col("proteinIds").str.split("|").map_elements(lambda s: s[0], return_dtype=pl.String))
+                .otherwise(pl.col("proteinIds").str.split("|").map_elements(lambda s: s[1], return_dtype=pl.String))
         )
 
     known_transcripts = lr_bulk.var.cast({"associated_transcript": pl.String}).filter(pl.col("associated_transcript").str.starts_with("ENST"))["isoform"].unique()
