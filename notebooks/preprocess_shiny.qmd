@@ -348,47 +348,6 @@ pl.read_csv("/Users/xunuo/projects/Dev_Brain_IsoSeq/data/cp_vz_0.75_min_7_recove
     .write_csv("transcript_vis_app/talon_abundance.csv")
 ```
 
-# Processing SFARI CDS gtf
-
-```{python}
-#| label: import-genome-gff3-gtf
-
-CDS_gtf  = read_gtf(
-    "nextflow_results/transcripts_filtered.fasta.transdecoder.genome.gff3.gtf",
-    attributes = ["transcript_id", "gene_id"]
-    )\
-    .filter(
-        pl.col("feature")!="transcript",
-        pl.col("feature") == "CDS"
-        )\
-    ["seqname", "feature", "start", "end", "strand", "gene_id", "transcript_id"]
-
-
-protein_classification = pl.read_csv("nextflow_results/SFARI_unfiltered.protein_classification.tsv", separator = "\t").rename({"pb": "transcript_id"})["transcript_id", "pr_gene", "protein_classification_base"]
-
-gene_id_to_gene_name = read_gtf(paste0(Sys.getenv("GENCODE/gencode.v39.annotation.gtf")), attributes = ["gene_name", "gene_id"]).unique("gene_id")["gene_name", "gene_id"]
-```
-
-```{python}
-#| label: add-protein_classification_base-and-gene_name
-CDS_gtf = CDS_gtf\
-    .join(
-        protein_classification,
-        on = "transcript_id",
-        how = "left"
-    )\
-    .join(
-        gene_id_to_gene_name.rename({"gene_id": "pr_gene"}),
-        on = "pr_gene",
-        how = "left"
-    )["seqname", "feature", "start", "end", "strand", "gene_name", "transcript_id", "protein_classification_base"]
-```
-
-```{python}
-#| label: write-genome_gff3_gtf
-CDS_gtf.write_csv("transcript_vis_app/genome_gff3_gtf.csv")
-```
-
 # Processing GENCODE gtf
 
 ```{python}
@@ -427,16 +386,126 @@ gencode_gtf = read_gtf(
 gencode_gtf.write_csv("transcript_vis_app/GENCODE_v39.csv")
 ```
 
-# Processing Peptides gtf 
+# Processing Peptides gtf
 
 ```{python}
-#| label: import-SFARI_peptides
-SFARI_peptides = read_gtf("nextflow_results/SFARI_peptides.gtf", attributes = ["gene_name", "transcript_id", "mapped_to_novel_transcripts_uniquely"])
+from src.ryp import r, to_r
 ```
 
+```{r}
+library(dplyr)
+library(GenomicFeatures)
+library(GenomicAlignments)
+library(rtracklayer)
+library(readr)
+```
+
+```{r}
+#| label: splice-junction-peptides
+peptide_SJ <- makeTxDbFromGFF("nextflow_results/SFARI_peptides.gtf") %>%
+    intronsByTranscript(use.names=TRUE)
+peptide_SJ <- peptide_SJ[lengths(peptide_SJ) != 0] %>%
+    unlist()
+
+GENCODE_SJ <- makeTxDbFromGFF(paste0(Sys.getenv("GENOMIC_DATA_DIR"), "GENCODE/gencode.v39.annotation.gtf")) %>%
+    intronsByTranscript(use.names=TRUE) %>%
+    unlist()
+
+peptide_SJ_not_in_GENCODE <- peptide_SJ[!(seq_along(peptide_SJ) %in% queryHits(findOverlaps(peptide_SJ, GENCODE_SJ, type = "equal")))]
+
+SFARI_SJ <- makeTxDbFromGFF("nextflow_results/transcripts_filtered.fasta.transdecoder.genome.gff3.gtf") %>% 
+    intronsByTranscript(use.names=TRUE)
+SFARI_SJ <- SFARI_SJ[lengths(SFARI_SJ) != 0] %>%
+    unlist()
+
+pbid_containing_novel_SJs <- SFARI_SJ[unique(subjectHits(findOverlaps(peptide_SJ_not_in_GENCODE, SFARI_SJ, type="equal")))] %>%
+    names() %>%
+    unique()
+```
+
+```{r}
+#| label: mono-exonic-peptides
+peptide_exon <- makeTxDbFromGFF("nextflow_results/SFARI_peptides.gtf") %>%
+    exonsBy(use.names = TRUE, by = "tx")
+peptide_exon <- peptide_exon[lengths(peptide_exon) == 1]
+
+GENCODE_exon <- makeTxDbFromGFF(paste0(Sys.getenv("GENOMIC_DATA_DIR"), "GENCODE/gencode.v39.annotation.gtf")) %>%
+    exonsBy(by = "tx", use.names=TRUE)
+
+peptide_exon_not_in_GENCODE <- peptide_exon[!(seq_along(peptide_exon) %in% queryHits(findSpliceOverlaps(peptide_exon, GENCODE_exon)))] %>% unlist()
+
+SFARI_CDS <- makeTxDbFromGFF("nextflow_results/transcripts_filtered.fasta.transdecoder.genome.gff3.gtf") %>% 
+    cdsBy(by = "tx", use.names=TRUE)
+
+idx <- findSpliceOverlaps(peptide_exon[!(seq_along(peptide_exon) %in% queryHits(findSpliceOverlaps(peptide_exon, GENCODE_exon)))], SFARI_CDS) %>%
+    subjectHits()
+
+pbid_containing_novel_exons <- names(SFARI_CDS[idx])
+```
+
+```{r}
+#| label: write-SFARI_peptides
+SFARI_peptides <- as.data.frame(import.gff("nextflow_results/SFARI_peptides.gtf"))
+SFARI_peptides <- SFARI_peptides %>%
+    mutate(
+        type = case_when(
+            transcript_id %in% names(peptide_exon) ~ "mono-exonic",
+            transcript_id %in% names(peptide_SJ) ~ "splice-junction"
+        ),
+        novelty = case_when(
+            transcript_id %in% c(names(peptide_exon_not_in_GENCODE), names(peptide_SJ_not_in_GENCODE)) ~ "novel",
+            .default = "known"
+        )
+    )
+SFARI_peptides[c("seqnames", "start", "end", "strand", "gene_name", "transcript_id", "type", "novelty")] %>%
+    write.csv("transcript_vis_app/SFARI_peptides.csv")
+```
+
+# Processing SFARI CDS GTF
 
 ```{python}
-SFARI_peptides\
-    ["seqname", "start", "end", "strand", "gene_name", "transcript_id", "mapped_to_novel_transcripts_uniquely"]\
-    .write_csv("transcript_vis_app/SFARI_peptides.csv")
+#| label: import-genome-gff3-gtf
+CDS_gtf  = read_gtf(
+    "nextflow_results/transcripts_filtered.fasta.transdecoder.genome.gff3.gtf",
+    attributes = ["transcript_id", "gene_id"]
+    )\
+    .filter(
+        pl.col("feature")!="transcript",
+        pl.col("feature") == "CDS"
+        )\
+    ["seqname", "feature", "start", "end", "strand", "gene_id", "transcript_id"]
+
+
+protein_classification = pl.read_csv("nextflow_results/SFARI_unfiltered.protein_classification.tsv", separator = "\t").rename({"pb": "transcript_id"})["transcript_id", "pr_gene", "protein_classification_base"]
+
+gene_id_to_gene_name = read_gtf(paste0(Sys.getenv("GENCODE/gencode.v39.annotation.gtf")), attributes = ["gene_name", "gene_id"]).unique("gene_id")["gene_name", "gene_id"]
+```
+
+```{python}
+#| label: add-protein_classification_base-and-gene_name
+CDS_gtf = CDS_gtf\
+    .join(
+        protein_classification,
+        on = "transcript_id",
+        how = "left"
+    )\
+    .join(
+        gene_id_to_gene_name.rename({"gene_id": "pr_gene"}),
+        on = "pr_gene",
+        how = "left"
+    )["seqname", "feature", "start", "end", "strand", "gene_name", "transcript_id", "protein_classification_base"]
+to_r(CDS_gtf, "genome_gff3_gtf")
+```
+
+```{r}
+#| label: write-genome_gff3_gtf
+genome_gff3_gtf <- genome_gff3_gtf %>%
+    mutate(
+        containing_novel_spl = case_when(
+            transcript_id %in% c(pbid_containing_novel_SJs, pbid_containing_novel_exons) ~ TRUE,
+            .default = FALSE
+        )
+    )
+
+genome_gff3_gtf %>% write.csv("transcript_vis_app/genome_gff3_gtf.csv")
 ```
