@@ -135,7 +135,7 @@ def write_peptide_gtf(output_name, pep_ranges, pbs):
         # remove for conversion to bed12 (genePred complains)
         # ofile.write('track name=peptide color=0,0,0\n')
         for i, row in pep_ranges.iterrows():
-            pep_seq, pb_acc, prev_aa, next_aa, gene, PSMId, mapped_to_novel_transcripts_uniquely, pep_start, pep_end = row
+            pep_seq, pb_acc, prev_aa, next_aa, gene, PSMId, pep_start, pep_end = row
             # convert from protein (AA) to CDS (nt) coords
             pep_start = pep_start * 3 - 2
             pep_end = pep_end * 3
@@ -154,13 +154,14 @@ def write_peptide_gtf(output_name, pep_ranges, pbs):
                 if chr in ['chrX','chrY']:
                     gene = f"{gene}_{chr}"
                 acc_id= f"{prev_aa}.{pep_seq}.{next_aa}({gene})"
-                pep_acc = f'gene_id "{PSMId}"; gene_name "{gene}"; transcript_id "{acc_id}"; mapped_to_novel_transcripts_uniquely "{mapped_to_novel_transcripts_uniquely}";'
+                pep_acc = f'gene_id "{PSMId}"; gene_name "{gene}"; transcript_id "{acc_id}";'
                 for [start, end] in orf_coords:
-                    ofile.write('\t'.join([chr, 'hg38_canon', 'CDS', str(start), str(end), '.', strand,
+                    ofile.write('\t'.join([chr, 'hg38_canon', 'exon', str(start), str(end), '.', strand,
                                 '.', pep_acc]) + '\n')
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Filter genome_gffs from TransDecoder with novel transripts')
+    parser.add_argument('--filter', action='store_true')
     parser.add_argument('--sample_gtf', action='store', type=str, required=True)
     parser.add_argument('--reference_gtf', action='store', type=str, required=True)
     parser.add_argument('--peptides', action='store', type=str, required=True)
@@ -178,34 +179,60 @@ if __name__ == "__main__":
         )["transcript_id", "gene_name"].rename({"transcript_id": "isoform", "gene_name": "associated_gene"})
     pb_gene = pl.concat([pb_gene, gencode_gene])
 
-    percolator_res = pl.read_csv(params.peptides, has_header=True, separator="\t")\
-        .with_columns(
-        proteinIds = pl.col("proteinIds").map_elements(lambda s: s.split(","), return_dtype=pl.List(pl.String))
-        )\
-        .explode("proteinIds")\
-        .filter(
-            pl.col("q-value") < 0.05,
-            pl.col("proteinIds").str.contains("DECOY").not_()
-        )\
-        .with_columns(
-            pl.when(pl.col("proteinIds").str.starts_with("ENSP"))\
-                .then(pl.col("proteinIds").str.extract(r"^[^|]*\|([^|]*)"))\
-                .otherwise(pl.col("proteinIds"))
-        )\
-        .with_columns(
-            pl.col("peptide").str.replace_all(r"M\[15.9949\]", "M")
-        )\
-        .with_columns(
-            pep = pl.col("peptide").str.split(".").map_elements(lambda x: x[1], return_dtype=pl.String),
-            prev_aa = pl.col("peptide").str.split(".").map_elements(lambda x: x[0], return_dtype=pl.String),
-            next_aa = pl.col("peptide").str.split(".").map_elements(lambda x: x[2], return_dtype=pl.String)
-        )\
-        .rename(
-            {"proteinIds": "pb_acc"}
-        )\
-        .join(pb_gene.rename({"isoform": "pb_acc"}), on = "pb_acc", how = "left")\
-        .rename({"associated_gene": "gene"})[['pep', 'pb_acc', 'prev_aa','next_aa', 'gene', 'PSMId']]\
-        .unique("pep")
+    if params.filter:
+        percolator_res = pl.read_csv(params.peptides, has_header=True, separator="\t")\
+            .with_columns(
+            proteinIds = pl.col("proteinIds").map_elements(lambda s: s.split(","), return_dtype=pl.List(pl.String))
+            )\
+            .explode("proteinIds")\
+            .filter(
+                pl.col("q-value") < 0.05,
+                pl.col("proteinIds").str.contains("DECOY").not_()
+            )\
+            .with_columns(
+                pl.when(pl.col("proteinIds").str.starts_with("ENSP"))\
+                    .then(pl.col("proteinIds").str.extract(r"^[^|]*\|([^|]*)"))\
+                    .otherwise(pl.col("proteinIds"))
+            )\
+            .with_columns(
+                pl.col("peptide").str.replace_all(r"M\[15.9949\]", "M")
+            )\
+            .with_columns(
+                pep = pl.col("peptide").str.split(".").map_elements(lambda x: x[1], return_dtype=pl.String),
+                prev_aa = pl.col("peptide").str.split(".").map_elements(lambda x: x[0], return_dtype=pl.String),
+                next_aa = pl.col("peptide").str.split(".").map_elements(lambda x: x[2], return_dtype=pl.String)
+            )\
+            .rename(
+                {"proteinIds": "pb_acc"}
+            )\
+            .join(pb_gene.rename({"isoform": "pb_acc"}), on = "pb_acc", how = "left")\
+            .rename({"associated_gene": "gene"})[['pep', 'pb_acc', 'prev_aa','next_aa', 'gene', 'PSMId']]\
+            .unique("pep")
+    else:
+        percolator_res = pl.read_csv(params.peptides, has_header=True, separator="\t")\
+            .with_columns(
+            proteinIds = pl.col("proteinIds").map_elements(lambda s: s.split(","), return_dtype=pl.List(pl.String))
+            )\
+            .explode("proteinIds")\
+            .with_columns(
+                pl.when(pl.col("proteinIds").str.starts_with("ENSP"))\
+                    .then(pl.col("proteinIds").str.extract(r"^[^|]*\|([^|]*)"))\
+                    .otherwise(pl.col("proteinIds"))
+            )\
+            .with_columns(
+                pl.col("peptide").str.replace_all(r"M\[15.9949\]", "M")
+            )\
+            .with_columns(
+                pep = pl.col("peptide").str.split(".").map_elements(lambda x: x[1], return_dtype=pl.String),
+                prev_aa = pl.col("peptide").str.split(".").map_elements(lambda x: x[0], return_dtype=pl.String),
+                next_aa = pl.col("peptide").str.split(".").map_elements(lambda x: x[2], return_dtype=pl.String)
+            )\
+            .rename(
+                {"proteinIds": "pb_acc"}
+            )\
+            .join(pb_gene.rename({"isoform": "pb_acc"}), on = "pb_acc", how = "left")\
+            .rename({"associated_gene": "gene"})[['pep', 'pb_acc', 'prev_aa','next_aa', 'gene', 'PSMId']]\
+            .unique("pep")        
 
     start_idx = percolator_res.map_rows(find_start_pep_index).rename({"map": "pep_start"})
     end_idx = percolator_res.map_rows(find_end_pep_index).rename({"map": "pep_end"})
