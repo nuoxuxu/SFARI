@@ -5,16 +5,12 @@
 // println listOfFiles
 
 params.datadir = "/scratch/s/shreejoy/nxu/SFARI/data/"
-params.annotation_gtf = "/project/s/shreejoy/Genomic_references/GENCODE/gencode.v39.annotation.gtf"
-params.transcripts_fasta = "/project/s/shreejoy/Genomic_references/GENCODE/gencode.v39.transcripts.fa"
 params.reference_fasta = "/project/s/shreejoy/Genomic_references/GENCODE/GRCh38.primary_assembly.genome.fa"
-params.gencode_translation_fasta = "/project/s/shreejoy/Genomic_references/GENCODE/gencode.v39.pc_translations.fa"
 params.comet_params = "/scratch/s/shreejoy/nxu/SFARI/data/comet.params"
 
 params.human_hexamer = "$projectDir/data/Human_Hexamer.tsv"
 params.human_logit_model = "$projectDir/data/Human_logitModel.RData"
 params.protein_fasta = "/project/s/shreejoy/Genomic_references/UniProt/UP000005640_9606.fasta"
-params.sq_out = "/scratch/s/shreejoy/nxu/SFARI/proc/SQANTI3_qc_classification.txt"
 params.hmmfile = "$projectDir/data/Pfam-A.hmm"
 params.name = "SFARI"
 params.min_junctions_after_stop_codon = 2
@@ -564,7 +560,7 @@ process fivePrimeUtr {
 
 process proteinClassification{
     publishDir "nextflow_results", mode: 'copy'
-    conda "/home/s/shreejoy/nxu/miniforge3/envs/SQANTI3.env"
+    conda "/home/s/shreej∏oy/nxu/miniforge3/envs/SQANTI3.env"
     input:
     path sqanti_protein_classification_w_5utr
 
@@ -576,7 +572,7 @@ process proteinClassification{
     protein_classification.py \\
     --sqanti_protein $sqanti_protein_classification_w_5utr \\
     --name SFARI_unfiltered \\
-    --dest_dir ./    
+    --dest_dir ./
     """
 }
 
@@ -735,9 +731,10 @@ process prepareIsoformSwitchAnalysis {
     """
 }
 
-process peptideTrackVisualization {
+process peptideTrackUCSC {
     publishDir "nextflow_results", mode: 'copy'
     input:
+    val mode
     path genome_gff3_gtf
     path reference_gtf
     path peptides
@@ -745,7 +742,78 @@ process peptideTrackVisualization {
     path sample_fasta
 
     output:
-    path "SFARI_peptides.gtf"
+    path "SFARI_peptides_${mode}.gtf"
+
+    script:
+    """
+    make_peptide_gtf_file.py \\
+        --filter \\
+        --sample_gtf $genome_gff3_gtf \\
+        --reference_gtf $reference_gtf \\
+        --peptides $peptides \\
+        --h5ad_file $h5ad_file \\
+        --sample_fasta $sample_fasta \\
+        --output "SFARI_peptides_${mode}.gtf"
+    """
+
+    stub:
+    """
+    make_peptide_gtf_file.py \\
+        --filter \\
+        --sample_gtf $genome_gff3_gtf \\
+        --reference_gtf $reference_gtf \\
+        --peptides $peptides \\
+        --h5ad_file "/scratch/s/shreejoy/nxu/SFARI/nextflow_results/pbid_orf.h5ad" \\
+        --sample_fasta $sample_fasta \\
+        --output "SFARI_peptides_${mode}.gtf"
+    """    
+}
+
+process peptideTrackShinyApp {
+    publishDir "nextflow_results", mode: 'copy'
+    conda "/home/s/shreejoy/nxu/miniforge3/envs/patch_seq_spl"
+    input:
+    val mode
+    path genome_gff3_gtf
+    path unfiltered_protein_classification
+    path reference_gtf
+    path peptides_gtf
+
+    output:
+    path "SFARI_peptides_${mode}.csv"
+    path "genome_gff3_gtf_${mode}.csv"
+
+    script:
+    """
+    add-protein_classification_base-and-gene_name.py \\
+        --genome_gff3_gtf $genome_gff3_gtf \\
+        --unfiltered_protein_classification $unfiltered_protein_classification \\
+        --reference_gtf $reference_gtf \\
+        --output "genome_gff3_gtf_processed.csv"
+
+    get_novel_peptides.R \\
+        $peptides_gtf \\
+        $reference_gtf \\
+        $genome_gff3_gtf \\
+        "genome_gff3_gtf_processed.csv" \\
+        "SFARI_peptides_${mode}.csv" \\
+        "genome_gff3_gtf_${mode}.csv"
+    """
+}
+
+process peptideTrackAll {
+    publishDir "nextflow_results", mode: 'copy'
+    conda "/home/s/shreejoy/nxu/miniforge3/envs/patch_seq_spl"
+    input:
+    val mode
+    path genome_gff3_gtf
+    path reference_gtf
+    path peptides
+    path h5ad_file
+    path sample_fasta
+    
+    output:
+    path "all_peptides_annotated_${mode}.csv"
 
     script:
     """
@@ -753,22 +821,19 @@ process peptideTrackVisualization {
         --sample_gtf $genome_gff3_gtf \\
         --reference_gtf $reference_gtf \\
         --peptides $peptides \\
-        --h5ad_file $h5ad_file \\
-        --sample_fasta $sample_fasta \\
-        --output "SFARI_peptides.gtf"
-    """
-
-    stub:
-    """
-    make_peptide_gtf_file.py \\
-        --sample_gtf $genome_gff3_gtf \\
-        --reference_gtf $reference_gtf \\
-        --peptides $peptides \\
         --h5ad_file "/scratch/s/shreejoy/nxu/SFARI/nextflow_results/pbid_orf.h5ad" \\
         --sample_fasta $sample_fasta \\
-        --output "SFARI_peptides.gtf"
-    """    
+        --output "all_peptides.gtf"
+    
+    get_novel_peptides.R \\
+        all_peptides.gtf \\
+        $reference_gtf \\
+        $genome_gff3_gtf \\
+        "genome_gff3_gtf_processed.csv" \\
+        "all_peptides_annotated_${mode}.csv"
+    """
 }
+
 workflow {
     getIDToSample(params.datadir + "long_read/LUO26876.20240514/*/outputs/flnc.bam")
     Channel.fromPath(params.datadir + "long_read/LUO26876.20240514/*/outputs/mapped.bam").collect().set { bamFiles }
@@ -798,7 +863,9 @@ workflow {
     cometSearch(params.comet_params, makePacBioDatabase.out, mzXMLiles)
     runPercolator(params.searchDB, cometSearch.out)
     // addPeptideSupport(params.searchDB, addORFPredictions.out, runPercolator.out)
-    peptideTrackVisualization(convertGenomeGff3toGtf.out, params.annotation_gtf, runPercolator.out, addORFPredictions.out, makePacBioDatabase.out)
+    peptideTrackUCSC(params.searchDB, convertGenomeGff3toGtf.out, params.annotation_gtf, runPercolator.out, addORFPredictions.out, makePacBioDatabase.out)
+    peptideTrackShinyApp(params.searchDB, convertGenomeGff3toGtf.out, proteinClassification.out, params.annotation_gtf, peptideTrackUCSC.out)
+    peptideTrackAll(params.searchDB, convertGenomeGff3toGtf.out, params.annotation_gtf, runPercolator.out, addORFPredictions.out, makePacBioDatabase.out)
     // prepareIsoformSwitchAnalysis(getSingleCellObject.out, pigeonFilter.out.filtered_gff, filterSampleFasta.out)
     // Channel.fromPath(params.datadir + "/*/outputs/flnc.report.csv").collect().set { flncReports }
     // collectPolyATailLength(flncReports, isoseqCollapse.out.read_stat)
