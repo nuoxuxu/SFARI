@@ -6898,26 +6898,96 @@ def get_positions_bim_or_pvar(bim_or_pvar_file, new_bim_or_pvar_file, dbSNP, *,
 
 def read_gtf(file, attributes=["transcript_id"], keep_attributes=True):
     if keep_attributes:
-        return pl.read_csv(file, separator="\t", comment_prefix="#", has_header = False, new_columns=["seqname","source","feature","start","end","score","strand","frame","attributes"])\
+        return pl.read_csv(file, separator="\t", comment_prefix="#", schema_overrides = {"seqname": pl.String}, has_header = False, new_columns=["seqname","source","feature","start","end","score","strand","frame","attributes"])\
             .with_columns(
                 [pl.col("attributes").str.extract(rf'{attribute} "([^;]*)";').alias(attribute) for attribute in attributes]
                 )
     else:
-        return pl.read_csv(file, separator="\t", comment_prefix="#", has_header = False, new_columns=["seqname","source","feature","start","end","score","strand","frame","attributes"])\
+        return pl.read_csv(file, separator="\t", comment_prefix="#", schema_overrides = {"seqname": pl.String}, has_header = False, new_columns=["seqname","source","feature","start","end","score","strand","frame","attributes"])\
             .with_columns(
                 [pl.col("attributes").str.extract(rf'{attribute} "([^;]*)";').alias(attribute) for attribute in attributes]
                 ).drop("attributes")
 
 def read_gff(file, attributes=["ID"], keep_attributes=True):
     if keep_attributes:
-        return pl.read_csv(file, separator="\t", comment_prefix="#", has_header = False, new_columns=["seqname","source","feature","start","end","score","strand","frame","attributes"])\
+        return pl.read_csv(file, separator="\t", comment_prefix="#", schema_overrides = {"seqname": pl.String}, has_header = False, new_columns=["seqname","source","feature","start","end","score","strand","frame","attributes"])\
             .with_columns(
                 [pl.col("attributes").str.extract(rf"{attribute}=([^;]+)").alias(attribute) for attribute in attributes]
                 )
-    return pl.read_csv(file, separator="\t", comment_prefix="#", has_header = False, new_columns=["seqid", "source", "feature", "start", "end", "score", "strand", "frame", "attributes"])\
+    return pl.read_csv(file, separator="\t", comment_prefix="#", schema_overrides = {"seqname": pl.String}, has_header = False, new_columns=["seqid", "source", "feature", "start", "end", "score", "strand", "frame", "attributes"])\
         .with_columns(
             [pl.col("attributes").str.extract(rf"{attribute}=([^;]+)").alias(attribute) for attribute in attributes]
             ).drop("attributes")
 
 def read_outfmt(file):
     return pl.read_csv(file, separator="\t", new_columns=["qseqid", "sseqid", "pident", "length", "mismatch", "gapopen", "gstart", "gend", "sstart", "send", "evalue", "bitscore"])
+
+def read_fasta(fasta_file, gencode = False):
+    """
+    Reads a FASTA file and converts it into a Polars DataFrame.
+    Removes '*' from sequences.
+    
+    Args:
+        fasta_file (str): Path to the FASTA file.
+    
+    Returns:
+        polars.DataFrame: A DataFrame with 'transcript_id' and 'seq' columns.
+    """
+    sequences = []
+    transcript_id = None
+    seq = []
+    
+    with open(fasta_file, "r") as file:
+        for line in file:
+            line = line.strip()
+            if line.startswith(">"):  # Header line
+                if transcript_id is not None:  # Save previous entry
+                    sequences.append((transcript_id, "".join(seq).replace("*", "")))  # Strip '*'
+                # Extract transcript_id (substring before the first space)
+                if gencode is False:
+                    transcript_id = line[1:].split(" ", 1)[0]
+                else:
+                    transcript_id = line[1:].split("|")[1]
+                seq = []  # Reset sequence
+            else:
+                seq.append(line)  # Collect sequence lines
+
+    # Add the last sequence
+    if transcript_id is not None:
+        sequences.append((transcript_id, "".join(seq).replace("*", "")))  # Strip '*'
+    
+    # Convert to Polars DataFrame
+    df = pl.DataFrame(sequences, schema=["transcript_id", "seq"], orient="row")
+    return df
+
+def write_fasta(df: pl.DataFrame, id_col: str, seq_col: str, output_file: str):
+    """
+    Writes a FASTA file from a Polars DataFrame.
+    
+    Parameters:
+        df (pl.DataFrame): Polars DataFrame containing sequence data.
+        id_col (str): Column name for sequence IDs.
+        seq_col (str): Column name for amino acid sequences.
+        output_file (str): Path to the output FASTA file.
+    """
+    with open(output_file, 'w') as f:
+        for row in df.iter_rows(named=True):
+            f.write(f">{row[id_col]}\n{row[seq_col]}\n")
+
+def collapse_isoforms_to_proteoforms(gtf):
+    return gtf\
+        .filter(pl.col("feature")=="CDS")\
+        .group_by("transcript_id")\
+        .agg(
+            pl.col("start").min().alias("CDS_genomic_start"),
+            pl.col("end").max().alias("CDS_genomic_end")
+        )\
+        .group_by("CDS_genomic_start", "CDS_genomic_end")\
+        .agg(
+            pl.col("transcript_id")
+        )\
+        .with_columns(
+            base_isoform = pl.col("transcript_id").map_elements(lambda x: x[0], return_dtype=pl.String)
+        )\
+        .explode("transcript_id")\
+        .select("base_isoform", "transcript_id")            
