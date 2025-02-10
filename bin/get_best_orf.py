@@ -1,36 +1,69 @@
-#!/home/s/shreejoy/nxu/miniforge3/envs/patch_seq_spl/bin/python
-
-from src.single_cell import SingleCell
+#!/usr/bin/env python3
+from src.utils import read_fasta
 import polars as pl
-from src.utils import read_gff
 import argparse
 
-parser = argparse.ArgumentParser("Test")
-parser.add_argument("--h5ad_file", action='store', type=str, required=True)
-parser.add_argument("--pred_orfs_gff3", action='store', type=str, required=True)
-parser.add_argument("--output", action='store', type=str, required=True)
-params = parser.parse_args()
+def main():
+    parser = argparse.ArgumentParser("Get best_orf.tsv")
+    parser.add_argument("--final_sample_classification", action='store', type=str, required=True)
+    parser.add_argument("--final_sample_fasta", action='store', type=str, required=True)
+    parser.add_argument("--cds_fasta", action='store', type=str, required=True)
+    parser.add_argument("--output", action='store', type=str, required=True)
 
-lr_bulk = SingleCell(params.h5ad_file)
+    params = parser.parse_args()
+    
+    def get_CDS_start_end_coord(transcript_seq, CDS_seq):
+        
+        # Find start position
+        start_pos = transcript_seq.find(CDS_seq)
 
-best_orf = lr_bulk.var.filter(pl.col("predicted_orf"))["isoform", "length"]\
-    .with_columns(
-        orf_frame = 1
-    )\
-    .rename({"isoform": "pb_acc", "length": "len"})
+        # Compute end position
+        if start_pos != -1:  # Ensure substring exists
+            end_pos = start_pos + len(CDS_seq) - 1
+            return start_pos, end_pos
+        else:
+            print("Substring not found.")
 
-transdecoder_gff3 = read_gff(params.pred_orfs_gff3)\
-    .drop_nulls("seqname")\
-    .filter(pl.col("feature")== "CDS")\
-    ["seqname", "start", "end"]\
-    .rename({"seqname": "pb_acc", "start": "orf_start", "end": "orf_end"})
+    cds = read_fasta(params.cds_fasta)
+    full_tx = read_fasta(params.final_sample_fasta)
 
-best_orf = best_orf\
-    .join(
-        transdecoder_gff3, on = "pb_acc", how = "left"
-    )\
-    .with_columns(
-        orf_len = pl.col("orf_end") - pl.col("orf_start") + 1
-    )
+    df = cds\
+        .rename({"seq": "cds_seq"})\
+        .join(
+            full_tx.rename({"seq": "full_seq"}),
+            on="transcript_id",
+            how="left"
+        )
 
-best_orf.write_csv(params.output, separator="\t")
+    df = pl.concat([df.select("transcript_id"), df.map_rows(lambda row: get_CDS_start_end_coord(row[2], row[1]))], how="horizontal")\
+        .rename(
+            {"column_0": "start", "column_1": "end"}
+        )\
+        .with_columns(
+            pl.col("start") + 1,
+            pl.col("end") + 1
+        )
+
+    best_orf = pl.read_parquet(params.final_sample_classification)\
+        ["isoform", "length"]\
+        .with_columns(
+            orf_frame = 1
+        )\
+        .rename({"isoform": "pb_acc", "length": "len"})
+
+    df = df\
+        .rename({"transcript_id": "pb_acc", "start": "orf_start", "end": "orf_end"})
+
+    best_orf = best_orf\
+        .join(
+            df, on = "pb_acc", how = "left"
+        )\
+        .drop_nulls("orf_start")\
+        .with_columns(
+            orf_len = pl.col("orf_end") - pl.col("orf_start") + 1
+        )
+
+    best_orf.write_csv(params.output, separator="\t")
+
+if __name__ == "__main__":
+    main()
