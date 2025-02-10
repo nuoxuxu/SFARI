@@ -500,53 +500,32 @@ process proteinClassification {
     """
 }
 
-process makePacBioDatabase {
+process makeProteinSearchDatabase {
     publishDir "${params.output_dir}", mode: 'copy'
 
     conda "/home/s/shreejoy/nxu/miniforge3/envs/SQANTI3.env"
 
     input:
     val mode
-    path h5ad_file_orf
-    path genome_gff3
-    path protein_classification_unfiltered
-    path gencode_fasta
+    path protein_classification
+    path filtered_predicted_cds_gtf
+    path peptide_fasta
+    path translation_fasta
 
     output:
     path "*.fasta"
 
     script:
     if( mode == 'hybrid' )
-        """
-        filter_genome_gff3.py \\
-            --mode $mode \\
-            --h5ad_file_orf /scratch/s/shreejoy/nxu/SFARI/nextflow_results/pbid_orf.h5ad \\
-            --genome_gff3 $genome_gff3 \\
-            --protein_classification_unfiltered $protein_classification_unfiltered \\
-            --output "${mode}_novel_transcripts.gff3"
-
-        apptainer run \\
-            -B \${PWD},\${GENOMIC_DATA_DIR} \\
-            \${NXF_SINGULARITY_CACHEDIR}/agat_1.0.0--pl5321hdfd78af_0.sif \\
-            agat_sp_extract_sequences.pl -g ${mode}_novel_transcripts.gff3 -f \${GENOMIC_DATA_DIR}GENCODE/GRCh38.primary_assembly.genome.fa -t cds -p -o ${mode}.fasta
-
-        cat $gencode_fasta >> ${mode}.fasta
-        """
-
-    else if ( mode == 'pacbio' )
-        """
-        filter_genome_gff3.py \\
-            --mode $mode \\
-            --h5ad_file_orf /scratch/s/shreejoy/nxu/SFARI/nextflow_results/pbid_orf.h5ad \\
-            --genome_gff3 $genome_gff3 \\
-            --protein_classification_unfiltered $protein_classification_unfiltered \\
-            --output "${mode}_novel_transcripts.gff3"
-
-        apptainer run \\
-            -B \${PWD},\${GENOMIC_DATA_DIR} \\
-            \${NXF_SINGULARITY_CACHEDIR}/agat_1.0.0--pl5321hdfd78af_0.sif \\
-            agat_sp_extract_sequences.pl -g ${mode}_novel_transcripts.gff3 -f \${GENOMIC_DATA_DIR}GENCODE/GRCh38.primary_assembly.genome.fa -t cds -p -o ${mode}.fasta
-        """
+    """
+    make_protein_search_database.py \\
+        --mode $mode \\
+        --protein_classification $protein_classification \\
+        --filtered_predicted_cds_gtf $filtered_predicted_cds_gtf \\
+        --peptide_fasta $peptide_fasta \\
+        --translation_fasta $translation_fasta \\
+        --output "${mode}.fasta"
+    """
 }
 
 process cometSearch {
