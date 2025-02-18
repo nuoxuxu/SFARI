@@ -2,7 +2,6 @@
 import polars as pl
 from collections import defaultdict, namedtuple
 from Bio import SeqIO
-from src.single_cell import SingleCell
 import pandas as pd
 import copy
 import argparse
@@ -190,6 +189,7 @@ if __name__ == "__main__":
             prev_aa = pl.col("peptide").str.split(".").map_elements(lambda x: x[0], return_dtype=pl.String),
             next_aa = pl.col("peptide").str.split(".").map_elements(lambda x: x[2], return_dtype=pl.String)
         )\
+        .unique("pep")\
         .rename(
             {"proteinIds": "pb_acc"}
         )\
@@ -207,7 +207,8 @@ if __name__ == "__main__":
             pl.col("pb_acc").is_in(seqs.keys())
         )\
         .filter(
-            ((pl.col("pep_start")<0).or_(pl.col("pep_end")<0)).not_()
+            pl.col("pep_start") > 0,
+            pl.col("pep_end") > 0
         )
     
     sample_gtf = read_sample_gtf(params.predicted_cds_gtf)
