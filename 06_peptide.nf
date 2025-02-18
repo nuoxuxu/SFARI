@@ -1,5 +1,5 @@
 process peptideTrackUCSC {
-    publishDir "${params.output_dir}", mode: 'copy'
+    conda "/home/s/shreejoy/nxu/miniforge3/envs/patch_seq_spl"
     input:
     val mode
     path annotation_gtf
@@ -9,7 +9,7 @@ process peptideTrackUCSC {
     path peptides
 
     output:
-    path "SFARI_peptides_${mode}.gtf"
+    path "peptides_${mode}.gtf"
 
     script:
     """
@@ -19,6 +19,52 @@ process peptideTrackUCSC {
         --predicted_cds_gtf $predicted_cds_gtf \\
         --protein_search_database $protein_search_database \\
         --peptides $peptides \\
-        --output "SFARI_peptides_${mode}.gtf"
+        --output "peptides_${mode}.gtf"
     """
+}
+
+process addPeptideAnnotation {
+    conda "/home/s/shreejoy/nxu/miniforge3/envs/patch_seq_spl"
+    publishDir "${params.output_dir}/${params.orf_prediction}", mode: 'copy'
+    conda
+
+    input:
+    val mode
+    path annotation_gtf
+    path predicted_cds_gtf
+    path peptides_gtf
+    
+    output:
+    path "annot_peptides_${mode}.gtf"
+    
+    script:
+    """
+    get_novel_peptides.R \\
+        $annotation_gtf \\
+        $predicted_cds_gtf \\
+        $peptides_gtf \\
+        "annot_peptides_${mode}.gtf"
+    """
+    
+}
+
+workflow peptide {
+    take:
+    final_sample_classification
+    predicted_cds_gtf
+    protein_search_database
+    peptides
+
+    main:
+    peptideTrackUCSC(params.searchDB, params.annotation_gtf, final_sample_classification, predicted_cds_gtf, protein_search_database, peptides)
+    addPeptideAnnotation(params.searchDB, params.annotation_gtf, predicted_cds_gtf, peptideTrackUCSC.out)
+}
+
+workflow {
+    final_sample_classification = Channel.fromPath("nextflow_results/V47/final_classification.parquet")
+    predicted_cds_gtf = Channel.fromPath("nextflow_results/V47/orfanage/orfanage.gtf")
+    protein_search_database = Channel.fromPath("nextflow_results/V47/orfanage/hybrid.fasta")
+    peptides = Channel.fromPath("nextflow_results/V47/orfanage/hybrid_percolator.tsv")
+
+    peptide(final_sample_classification, predicted_cds_gtf, protein_search_database, peptides)
 }
