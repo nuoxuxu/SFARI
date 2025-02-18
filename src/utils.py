@@ -6960,6 +6960,30 @@ def read_fasta(fasta_file, gencode = False):
     df = pl.DataFrame(sequences, schema=["transcript_id", "seq"], orient="row")
     return df
 
+def read_SJ(file):
+    return pl.read_csv(
+            file, separator="\t", 
+            new_columns=["chrom", "start", "end", "strand", "motif", "annotated", "unique_reads", "multi_reads", "max_overhang"], 
+            schema_overrides={"chrom": pl.String}
+        )
+
+def gtf_to_SJ(gtf):
+    import numpy as np
+    return gtf\
+        .filter(
+            pl.col("feature")!="transcript"
+        )\
+        .group_by("transcript_id", maintain_order=True)\
+        .agg(
+            pl.col("strand").unique().map_elements(lambda l: l[0], return_dtype=pl.String),
+            pl.col("seqname").unique().map_elements(lambda l: l[0], return_dtype=pl.String),
+            pl.col("start").map_elements(lambda l: np.sort(np.array(l)-1)[1:].tolist(), return_dtype=pl.List(pl.Int64)).alias("end"),
+            pl.col("end").map_elements(lambda l: np.sort(np.array(l)+1)[:-1].tolist(), return_dtype=pl.List(pl.Int64)).alias("start")
+        )\
+        .explode("start", "end")\
+        .rename({"seqname": "chrom"})\
+        .filter(pl.col("start").is_null().not_())
+        
 def write_fasta(df: pl.DataFrame, id_col: str, seq_col: str, output_file: str):
     """
     Writes a FASTA file from a Polars DataFrame.
@@ -6990,4 +7014,4 @@ def collapse_isoforms_to_proteoforms(gtf):
             base_isoform = pl.col("transcript_id").map_elements(lambda x: x[0], return_dtype=pl.String)
         )\
         .explode("transcript_id")\
-        .select("base_isoform", "transcript_id")            
+        .select("base_isoform", "transcript_id")
