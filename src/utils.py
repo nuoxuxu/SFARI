@@ -7003,15 +7003,16 @@ def collapse_isoforms_to_proteoforms(gtf):
         .filter(pl.col("feature")=="CDS")\
         .group_by("transcript_id")\
         .agg(
-            pl.col("start").min().alias("CDS_genomic_start"),
-            pl.col("end").max().alias("CDS_genomic_end")
+            pl.col("start"),
+            pl.col("end")
         )\
-        .group_by("CDS_genomic_start", "CDS_genomic_end")\
+        .group_by(["start", "end"])\
         .agg(
             pl.col("transcript_id")
         )\
         .with_columns(
-            base_isoform = pl.col("transcript_id").map_elements(lambda x: x[0], return_dtype=pl.String)
+            base_isoform = pl.col("transcript_id").map_elements(lambda x: x[0])
         )\
         .explode("transcript_id")\
-        .select("base_isoform", "transcript_id")
+        .rename({"transcript_id": "isoform"})\
+        .select("isoform", "base_isoform")
