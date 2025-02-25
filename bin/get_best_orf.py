@@ -49,7 +49,10 @@ def main():
         .with_columns(
             orf_frame = 1
         )\
-        .rename({"isoform": "pb_acc", "length": "len"})
+        .rename({"isoform": "pb_acc", "length": "len"})\
+        .filter(
+            pl.col("pb_acc").is_in(cds["transcript_id"])
+        )
 
     df = df\
         .rename({"transcript_id": "pb_acc", "start": "orf_start", "end": "orf_end"})
