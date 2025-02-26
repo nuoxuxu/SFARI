@@ -34,18 +34,20 @@ in_GENCODE_hits <- findOverlaps(peptide_SJ_in_GENCODE, SFARI_SJ, type="equal")
 not_in_GENCODE_hits <- findOverlaps(peptide_SJ_not_in_GENCODE, SFARI_SJ, type="equal")
 
 in_GENCODE_df <- tibble(
-    peptide_SJ = names(peptide_SJ_in_GENCODE)[queryHits(in_GENCODE_hits)],
-    SFARI_SJ = names(SFARI_SJ)[subjectHits(in_GENCODE_hits)],
-    GENCODE = rep(TRUE, length(in_GENCODE_hits))
+    peptide = names(peptide_SJ_in_GENCODE)[queryHits(in_GENCODE_hits)],
+    pb = names(SFARI_SJ)[subjectHits(in_GENCODE_hits)],
+    GENCODE = rep(TRUE, length(in_GENCODE_hits)),
+    type = rep("splice-junction", length(in_GENCODE_hits))
 )
 
 not_GENCODE_df <- tibble(
-    peptide_SJ = names(peptide_SJ_not_in_GENCODE)[queryHits(hits)],
-    SFARI_SJ = names(SFARI_SJ)[subjectHits(hits)],
-    GENCODE = rep(FALSE, length(hits))
+    peptide = names(peptide_SJ_not_in_GENCODE)[queryHits(not_in_GENCODE_hits)],
+    pb = names(SFARI_SJ)[subjectHits(not_in_GENCODE_hits)],
+    GENCODE = rep(FALSE, length(not_in_GENCODE_hits)),
+    type = rep("splice-junction", length(not_in_GENCODE_hits))
 ) 
 
-bind_rows(in_GENCODE_df, not_GENCODE_df)
+peptide_SJ_mapping <- bind_rows(in_GENCODE_df, not_GENCODE_df)
 
 # Mono-exons
 
@@ -59,20 +61,30 @@ GENCODE_exon <- makeTxDbFromGFF(annotation_gtf) %>%
 SFARI_CDS <- makeTxDbFromGFF(predicted_cds_gtf) %>% 
     cdsBy(by = "tx", use.names=TRUE)
 
-idx <- findSpliceOverlaps(peptide_exon[!(seq_along(peptide_exon) %in% queryHits(findSpliceOverlaps(peptide_exon, GENCODE_exon)))], SFARI_CDS) %>%
-    subjectHits()
+peptide_exon_in_GENCODE <- peptide_exon[seq_along(peptide_exon) %in% queryHits(findSpliceOverlaps(peptide_exon, GENCODE_exon))]
+peptide_exon_not_in_GENCODE <- peptide_exon[!(seq_along(peptide_exon) %in% queryHits(findSpliceOverlaps(peptide_exon, GENCODE_exon)))]  
 
-pbid_containing_novel_exons <- names(SFARI_CDS[idx])
+in_GENCODE_hits <- findSpliceOverlaps(peptide_exon_in_GENCODE, SFARI_CDS, type="equal")
+not_in_GENCODE_hits <- findSpliceOverlaps(peptide_exon_not_in_GENCODE, SFARI_CDS, type="equal")
 
-#-----------------------------------Update classification-----------------------------------#
-classification <- read_parquet("nextflow_results/V47/final_classification.parquet")
+in_GENCODE_df <- tibble(
+    peptide = names(peptide_exon_in_GENCODE)[queryHits(in_GENCODE_hits)],
+    pb = names(SFARI_CDS)[subjectHits(in_GENCODE_hits)],
+    GENCODE = rep(TRUE, length(in_GENCODE_hits)),
+    type = "mono-exonic"
 
-classification <- classification %>%
-    mutate(
-        containing_novel_spl = case_when(
-            isoform %in% c(pbid_containing_novel_SJs, pbid_containing_novel_exons) ~ TRUE,
-            .default = FALSE
-        )
-    )
+)
 
-classification %>% write_parquet("nextflow_results/V47/final_classification.parquet")
+not_GENCODE_df <- tibble(
+    peptide = names(peptide_exon_not_in_GENCODE)[queryHits(not_in_GENCODE_hits)],
+    pb = names(SFARI_CDS)[subjectHits(not_in_GENCODE_hits)],
+    GENCODE = rep(FALSE, length(not_in_GENCODE_hits)),
+    type = "mono-exonic"
+)
+
+peptide_exon_mapping <- bind_rows(in_GENCODE_df, not_GENCODE_df)
+
+# Combine two types of peptides
+
+out <- bind_rows(peptide_SJ_mapping, peptide_exon_mapping)
+out %>% write_parquet("nextflow_results/V47/orfanage/peptide_mapping.parquet")
