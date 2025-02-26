@@ -35,6 +35,7 @@ pbid_containing_novel_SJs <- SFARI_SJ[unique(subjectHits(findOverlaps(peptide_SJ
     unique()
 
 # Mono-exons
+
 peptide_exon <- makeTxDbFromGFF(peptides_gtf) %>%
     exonsBy(use.names = TRUE, by = "tx")
 peptide_exon <- peptide_exon[lengths(peptide_exon) == 1]
@@ -73,5 +74,5 @@ SFARI_peptides %>%
     mutate(
         feature = "exon",
         attribute = paste0('gene_id "', gene_id, '"; transcript_id "', transcript_id, '"; gene_name "', gene_name, '"; detected "', detected, '"; type "', type, '"; novelty "', novelty, '";')) %>%
-        dplyr::select(c(seqnames, source, feature, start, end, score, strand, phase, attribute)) %>% 
+        dplyr::select(c(seqnames, source, feature, start, end, score, strand, phase, attribute)) %>%
         write.table(peptides_output, sep="\t", row.names=FALSE, col.names=FALSE, quote=FALSE)
