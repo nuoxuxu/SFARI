@@ -3,13 +3,12 @@ library(arrow)
 library(ggplot2)
 library(readr)
 
-my_theme <- theme_bw() +
+my_theme <- theme_classic() +
     theme(
-        plot.title = element_text(size = 25),
-        axis.text.x = element_text(size = 20),
-        axis.title.x = element_text(size = 23),
-        axis.text.y = element_text(size = 20),
-        axis.title.y = element_text(size = 23),
+        axis.title.x = element_text(size = 12),
+        axis.title.y = element_text(size = 12),
+        axis.text.x = element_text(size = 10),
+        axis.text.y = element_text(size = 10),
         legend.position = "none"
     )
 
@@ -18,12 +17,6 @@ theme_set(my_theme)
 classification <- read_parquet("nextflow_results/V47/final_classification.parquet")
 
 classification %>%
-    filter(structural_category %in% c(
-        "full-splice_match",
-        "incomplete-splice_match",
-        "novel_in_catalog",
-        "novel_not_in_catalog"
-    )) %>%
     group_by(associated_gene) %>%
     summarise(len = n(), .groups = "drop") %>%
     group_by(len) %>%
@@ -45,15 +38,15 @@ classification %>%
     mutate(
         percentage = (count / sum(count)) * 100
     ) %>%
-    ggplot(aes(x = len, y = count, fill = len)) +
-    geom_col() +
-    geom_text(aes(label = paste0(round(percentage, 1), "%")), vjust = 2, colour = "white", size = 7) +
-    scale_y_continuous(labels = function(x) x / 1000) +
-    labs(
-        x = "Isoforms per gene",
-        y = expression("Transcripts (x" ~ 10^3 * ")")
-    )
-ggsave("figures/figure_1/isoforms_per_gene.pdf", width = 8, height = 7)
+    ggplot(aes(x = len, y = count)) +
+        geom_col() +
+        geom_text(aes(label = paste0(round(percentage, 1), "%")), vjust = 2, colour = "white", size = 3) +
+        scale_y_continuous(labels = function(x) x / 1000) +
+        labs(
+            x = "Isoforms per gene",
+            y = expression("Transcripts (x" ~ 10^3 * ")")
+        )
+ggsave("figures/figure_1/isoforms_per_gene.pdf", width = 3, height = 2.5)
 
 classification <- read_tsv("nextflow_results/V47/merged_collapsed_classification.filtered_lite_classification.txt")
 

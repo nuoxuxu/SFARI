@@ -2,6 +2,7 @@ library(dplyr)
 library(ggplot2)
 library(arrow)
 library(scales)
+library(patchwork)
 
 colorVector <- c(
     "FSM" = "#009E73",
@@ -19,12 +20,12 @@ structural_category_labels <- c(
     "Other"                    = "Other"
 )
 
-my_theme <- theme_bw() +
+my_theme <- theme_classic() +
     theme(
-        plot.title = element_text(size = 30),
-        axis.text.x = element_text(size = 30),
-        axis.text.y = element_text(size = 27),
-        axis.title.y = element_text(size = 30),
+        axis.title.x = element_text(size = 13),
+        axis.title.y = element_text(size = 13),
+        axis.text.x = element_text(size = 12),
+        axis.text.y = element_text(size = 12),
         legend.position = "none"
     )
 
@@ -32,7 +33,7 @@ theme_set(my_theme)
 
 # Transcript Classification
 
-read_parquet("nextflow_results/V47/final_classification.parquet") %>%
+transcript_classification_hist <- read_parquet("nextflow_results/V47/final_classification.parquet") %>%
     mutate(
         # If category is in our known set, keep it; otherwise use "Other"
         structural_category2 = if_else(
@@ -56,10 +57,10 @@ read_parquet("nextflow_results/V47/final_classification.parquet") %>%
     ) %>%
     ggplot(aes(x = structural_category2, y = len, fill = structural_category2)) +
         geom_bar(stat = "identity") +
-        geom_text(aes(label = paste0(round(percentage, 1), "%")), vjust = 2, colour = "white", size = 7) +
+        geom_text(aes(label = paste0(round(percentage, 1), "%")), vjust = 2, colour = "white", size = 2.5) +
         scale_y_continuous(labels = function(x) x / 1000) +
         scale_fill_manual("Structural Category", values = colorVector) +
-        labs(x = "Structural Category", y = expression("Transcripts (x" ~ 10^3 * ")"), title = "Transcripts Identified by Novelty") +
+        labs(x = "Structural Category", y = expression("Transcripts (x" ~ 10^3 * ")")) +
         xlab(NULL)
 ggsave("figures/figure_1/transcript_classification_hist.pdf", width = 8, height = 7)
 
@@ -93,7 +94,7 @@ ggsave("figures/figure_1/length_vs_abundance.pdf", width = 8, height = 7)
 
 # Number of exons vs abudance
 
-read_parquet("nextflow_results/V47/final_classification.parquet") %>%
+nexon_vs_abundance <- read_parquet("nextflow_results/V47/final_classification.parquet") %>%
     mutate(
         structural_category2 = if_else(
             structural_category %in% c(
@@ -112,7 +113,6 @@ read_parquet("nextflow_results/V47/final_classification.parquet") %>%
     scale_x_continuous(limits = c(1, 40)) +
     scale_y_continuous(labels = function(x) x / 1000) +
     scale_fill_manual("Structural Category", values = colorVector) +
-    ggtitle("Exons per  Transcript") +
     labs(
         x = "# Exons",
         y = expression("Transcripts (x" ~ 10^3 * ")")
@@ -125,9 +125,9 @@ row_sum <- read_parquet("nextflow_results/V47/final_expression.parquet") %>%
     mutate(
         row_sum = rowSums(across(where(is.numeric)))
     ) %>%
-    select(row_sum)
+    dplyr::select(row_sum)
 
-read_parquet("nextflow_results/V47/final_classification.parquet") %>%
+count_vs_abundance <- read_parquet("nextflow_results/V47/final_classification.parquet") %>%
     mutate(
         structural_category2 = if_else(
             structural_category %in% c(
@@ -146,10 +146,8 @@ read_parquet("nextflow_results/V47/final_classification.parquet") %>%
     ggplot(aes(x = row_sum, fill = structural_category2)) +
     geom_histogram(position = position_fill(), alpha = .75) +
     scale_x_log10() +
-    annotation_logticks(scaled = T, sides = "b") +
     scale_fill_manual("Structural Category", values = colorVector) +
-    labs(x = "Min observed counts", y = "Transcript proportion") +
-    ggtitle("Transcript novelty vs Abundance")
+    labs(x = "Min observed counts", y = "Transcript proportion")
 ggsave("figures/figure_1/count_vs_abundance.pdf", width = 8, height = 7)
 
 # Transcript classification for the transcripts in the Other category
@@ -166,7 +164,7 @@ read_parquet("nextflow_results/V47/final_classification.parquet") %>%
         geom_bar(stat = "identity") +
         geom_text(aes(label = paste0(round(percentage, 1), "%")), colour = "black", size = 7, vjust=-0.5) +
         scale_y_continuous(labels = function(x) x / 1000, limits=c(0, 5000)) +
-        labs(x = NULL, y = expression("Transcripts (x" ~ 10^3 * ")"), title = "Transcripts Identified by Novelty")
+        labs(x = NULL, y = expression("Transcripts (x" ~ 10^3 * ")"))
 ggsave("figures/figure_1/other_transcript_classification_hist.pdf", width = 10, height = 7)
 
 # FSM transcript gene type percentages
@@ -217,3 +215,6 @@ read_parquet("nextflow_results/V47/final_classification.parquet") %>%
         labs(x="", y="# FSM transcripts") +
         coord_flip()
 ggsave("figures/figure_1/FSM_transcripts_gene_type.pdf", width = 8, height = 7)
+
+transcript_classification_hist + count_vs_abundance + nexon_vs_abundance + plot_layout(widths = c(1.5, 1, 1))
+ggsave("figures/figure_1/transcript_fig_combined.pdf", width = 7, height = 2.5)
