@@ -4,6 +4,8 @@ library(GenomicFeatures)
 library(GenomicAlignments)
 library(rtracklayer)
 library(readr)
+library(ggplot2)
+library(patchwork)
 
 #-----------------------------------Load Datasets-----------------------------------#
 annotation_gtf <- paste0(Sys.getenv("GENOMIC_DATA_DIR"), "/GENCODE/gencode.v47.annotation.gtf")
@@ -88,3 +90,104 @@ peptide_exon_mapping <- bind_rows(in_GENCODE_df, not_GENCODE_df)
 
 out <- bind_rows(peptide_SJ_mapping, peptide_exon_mapping)
 out %>% write_parquet("nextflow_results/V47/orfanage/peptide_mapping.parquet")
+
+#-----------------------------------Plotting-----------------------------------#
+
+# Add "detected" column to the peptide mapping
+
+peptide_mapping <- read_parquet("nextflow_results/V47/orfanage/peptide_mapping.parquet")
+
+peptides_gtf <- import("nextflow_results/V47/orfanage/annot_peptides_hybrid.gtf") %>%
+    as_tibble() %>% 
+    distinct(transcript_id, .keep_all = TRUE)
+
+classification <- read_tsv("nextflow_results/V47/orfanage/SFARI.protein_classification.tsv")    
+
+peptide_mapping <- peptide_mapping %>% 
+    left_join(
+        peptides_gtf %>% 
+            dplyr::select(transcript_id, detected),
+        join_by(peptide == transcript_id)
+    ) %>% 
+    left_join(
+        classification %>% dplyr::select(pb, protein_classification_base), 
+        join_by(pb == pb)
+    )
+
+plot_percent_validated <- function(peptide_mapping) {
+    all <- peptide_mapping %>% 
+        distinct(pb) %>% 
+        nrow()
+
+    detected <- peptide_mapping %>% 
+        filter(detected == "True") %>%
+        distinct(pb) %>% 
+        nrow()
+
+    undetected <- all - detected
+
+    p1 <- tibble(
+        is_detected = c(TRUE, FALSE),
+        len = c(detected, undetected)
+        ) %>% 
+        mutate(
+            percent = len / sum(len) * 100, # calculate percentage over all groups
+            type = "known" # add literal column type
+        ) %>% 
+        arrange(desc(is_detected)) %>%
+        mutate(ypos = cumsum(percent) - 0.5 * percent) %>% 
+        ggplot(aes(x="", y=percent, fill=is_detected)) +
+        geom_bar(width=1, stat="identity", color = "white") +
+        coord_polar("y", start=0) +
+        theme_void() +
+        geom_text(aes(y = ypos, label = sprintf("%.1f%%", percent)), color = "white", size = 9) +
+        theme(
+            legend.position = "none"
+        )    
+
+    # Plot percentage of transcripts that are validated by novel peptides only
+
+    all <- peptide_mapping %>% 
+        filter(GENCODE == FALSE) %>%
+        distinct(pb) %>% 
+        nrow()
+
+    detected <- peptide_mapping %>% 
+        filter(GENCODE == FALSE) %>%
+        filter(detected == "True") %>%
+        distinct(pb) %>% 
+        nrow()
+
+    undetected <- all - detected
+
+    p2 <- tibble(
+        is_detected = c(TRUE, FALSE),
+        len = c(detected, undetected)
+        ) %>% 
+        mutate(
+            percent = len / sum(len) * 100, # calculate percentage over all groups
+            type = "known" # add literal column type
+        ) %>% 
+        arrange(desc(is_detected)) %>%
+        mutate(ypos = cumsum(percent) - 0.5 * percent) %>% 
+        ggplot(aes(x="", y=percent, fill=is_detected)) +
+        geom_bar(width=1, stat="identity", color = "white") +
+        coord_polar("y", start=0) +
+        theme_void() +
+        geom_text(aes(y = ypos, label = sprintf("%.1f%%", percent)), color = "white", size = 9) +
+        theme(
+            legend.position = "none"
+        )    
+
+    p1 + p2    
+}
+
+peptide_mapping %>% 
+    filter(protein_classification_base == "pNNC") %>%
+    plot_percent_validated()
+ggsave("figures/figure_2/validation_by_peptide_pNNC.pdf", width = 10, height = 5)
+
+peptide_mapping %>% 
+    filter(protein_classification_base == "pNIC") %>%
+    plot_percent_validated()
+ggsave("figures/figure_2/validation_by_peptide_pNIC.pdf", width = 10, height = 5)
