@@ -21,7 +21,8 @@ protein_classification <- read_tsv("nextflow_results/V47/orfanage/SFARI.protein_
         protein_classification_base %in% c("pNIC", "pFSM", "pISM", "pNNC"),
         protein_classification_base,
         "Other"
-    ))
+    )) %>% 
+    distinct(base_isoform, .keep_all = TRUE)
 
 summary_df <- protein_classification %>%
     group_by(structural_category2) %>%
@@ -39,7 +40,7 @@ colorVector <- c(
 summary_df$structural_category2 <- factor(summary_df$structural_category2, levels = c("pFSM", "pISM", "pNIC", "pNNC", "Other"))
 
 summary_df %>%
-    filter(structural_category2 %in% c("pFSM", "pNIC", "pNNC")) %>%
+    filter(structural_category2 %in% c("pFSM", "pNIC", "pNNC", "Other")) %>%
     ggplot(aes(x = structural_category2, y = len, fill = structural_category2)) +
     geom_bar(stat = "identity") +
     geom_text(aes(label = paste0(round(percentage, 1), "%")), vjust = 2, colour = "white", size = 5) +
@@ -50,4 +51,4 @@ summary_df %>%
         y = expression("Proteins (x" ~ 10^3 * ")")
         )
 
-ggsave("figures/figure_2/protein_class.pdf", width = 3, height = 2.5)
+ggsave("figures/figure_2/protein_class.pdf", width = 4, height = 2.5)
