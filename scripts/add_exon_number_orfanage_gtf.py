@@ -5,17 +5,26 @@ import polars.selectors as cs
 
 orfanage_gtf = read_gtf("nextflow_results/V47/orfanage/orfanage.gtf")
 
+# Get level 1 and level 2 features
+level_1_2_feature = orfanage_gtf\
+    .filter(
+        pl.col("feature").is_in(["gene", "transcript"])
+    )\
+    .with_columns(
+        exon_number = pl.lit(None).cast(pl.String)
+    )
+
 # Add attribute "exon_number" to each exon
 
 exons = orfanage_gtf\
     .filter(pl.col("feature") == "exon")\
     .with_columns(
-        exon_number = pl.col("transcript_id").rank(method="ordinal").over("transcript_id")
+        exon_number = pl.col("transcript_id").rank(method="ordinal").over("transcript_id").cast(pl.String)
     )
 
 # Add attribute "exon_number" to each CDS, start_codon, and stop_codon
 
-other_level2_features = orfanage_gtf\
+other_level3_features = orfanage_gtf\
     .filter(
         pl.col("feature").is_in(["start_codon", "stop_codon", "CDS"])
     )\
@@ -32,11 +41,12 @@ other_level2_features = orfanage_gtf\
 
 # Combine the two dataframes
 
-orfanage_gtf_with_exon_num = pl.concat([exons, other_level2_features])\
-    .sort(["transcript_id", "start"])\
-    .with_columns(exon_number = pl.col("exon_number").cast(pl.String))\
+orfanage_gtf_with_exon_num = pl.concat([level_1_2_feature, exons, other_level3_features])\
+    .sort(["transcript_id", "feature", "start"])\
     .with_columns(
-        attributes = pl.col("attributes") + pl.lit(' exon_number "') + pl.col("exon_number") + pl.lit('";')
+        attributes = pl.when(pl.col("feature").is_in(["exon", "CDS", "start_codon", "stop_codon"]))\
+            .then(pl.col("attributes") + pl.lit(' exon_number "') + pl.col("exon_number") + pl.lit('";'))\
+            .otherwise(pl.col("attributes"))
     ).drop("exon_number")
 
 # Add protein_id
