@@ -39,7 +39,7 @@ addScheme(scheme, "myScheme")
 prepare gencode
 
 ```{r}
-gencode= paste0(Sys.getenv("GENOMIC_DATA_DIR"), "GENCODE/gencode.v47.annotation.gtf")
+gencode= paste0(Sys.getenv("GENOMIC_DATA_DIR"), "/GENCODE/gencode.v47.annotation.gtf")
 gencode_txdb=makeTxDbFromGFF(gencode, format="gtf")
 gencode_transcript=exonsBy(gencode_txdb,by="tx",use.names=T)
 ```
@@ -90,14 +90,20 @@ peptides <- peptide_annot %>%
 
 gencode_only_transcript_onegene=gencode_transcript[gencode_only,]
 gencode_only_transcript_onegene=unlist(gencode_only_transcript_onegene)
-elementMetadata(gencode_only_transcript_onegene)$transcript <- names(gencode_only_transcript_onegene)
-gencode_only_track=GeneRegionTrack(gencode_only_transcript_onegene,group = "transcirpt",name = "Gencode undetected")
+gencode_only_transcript_onegene <- reduce(gencode_only_transcript_onegene)
+# elementMetadata(gencode_only_transcript_onegene)$transcript <- "collapsed"
+# gencode_only_track=GeneRegionTrack(gencode_only_transcript_onegene,group = "transcirpt",name = "Gencode undetected")
+gencode_only_track <- GeneRegionTrack(gencode_only_transcript_onegene, name="Known")
+# ranges(geneTrack)$feature <- as.character(ranges(geneTrack)$feature)
+ranges(gencode_only_track)$transcript <- rep("transcript", length(ranges(gencode_only_track)))
 
-shared_transcript=gencode_transcript[shared,]
-shared_transcript=unlist(shared_transcript)
-elementMetadata(shared_transcript)$transcript=names(shared_transcript)
-shared_track=GeneRegionTrack(shared_transcript,group = "transcript",name = "Gencode detected")
 
+# shared_transcript=gencode_transcript[shared,]
+# shared_transcript=unlist(shared_transcript)
+# elementMetadata(shared_transcript)$transcript=names(shared_transcript)
+# shared_track=GeneRegionTrack(shared_transcript,group = "transcript",name = "Gencode detected")
+
+novel <- "PB.16589.675"
 isoseq_transcript_onegene=isoseq_transcript[novel,]
 isoseq_transcript_onegene=unlist(isoseq_transcript_onegene)
 elementMetadata(isoseq_transcript_onegene)$transcript=names(isoseq_transcript_onegene)
@@ -105,9 +111,13 @@ isoseq_track=GeneRegionTrack(isoseq_transcript_onegene,group = "transcript",name
 
 peptide_onegene <- peptide_transcript[peptides,]
 peptide_onegene <- unlist(peptide_onegene)
+elementMetadata(peptide_onegene)$transcript=names(peptide_onegene)
 peptide_track=GeneRegionTrack(peptide_onegene,group = "transcript",name = "Peptides")
+```
 
+DisplayPars
 
+```{r}
 displayPars(gencode_only_track)=list(
   stacking="squish",
   background.panel = "#ffffb2",
@@ -144,8 +154,8 @@ displayPars(peptide_track)=list(
   col="black",
   lwd=0.3,
   col.line="black",
-  showId = FALSE,
-  transcriptAnnotation = NULL,
+  showId = TRUE,
+  transcriptAnnotation = "transcript",
   fontcolor.title="black",
   background.title="#ef6548"
   )                               
@@ -170,18 +180,14 @@ plot
 ```{r}
 extra=(rightmost - leftmost)*0.05
 
-pdf("figures/figure_2/genome_track_HSPD1.pdf", width = 10, height = 11)
+pdf("figures/figure_2/genome_track_HSPD1.pdf", width = 9, height = 3)
 plotTracks(
-  list(ideoTrack,axisTrack,gencode_only_track,shared_track,isoseq_track, peptide_track),
+  list(ideoTrack,axisTrack,gencode_only_track,isoseq_track, peptide_track),
   chromosome = chr,
   from = leftmost - extra,
   to = rightmost + extra,
   sizes = c(
-    1,1,
-    max(1.5,0.35*length(gencode_only)),
-    max(1.5,0.35*length(shared)),
-    max(2,0.3*length(novel)),
-    max(1,0.35*length(peptides))
+    1,1,1,1,1
     )
   )
 dev.off()
