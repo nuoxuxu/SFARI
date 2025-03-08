@@ -69,14 +69,14 @@ def plot_transcript_class_hist(classification):
         """
     )
 
-def plot_protein_class_hist(protein_classification, orfanage_gtf):
+def plot_protein_class_hist(protein_classification, orfanage_gtf, save_path):
     from src.utils import collapse_isoforms_to_proteoforms
     
     isoforms_to_proteoforms = collapse_isoforms_to_proteoforms(orfanage_gtf)
 
     protein_classification = protein_classification\
-        .rename({"pb": "transcript_id"})\
-        .join(isoforms_to_proteoforms, on="transcript_id")\
+        .rename({"pb": "isoform"})\
+        .join(isoforms_to_proteoforms, on="isoform")\
         .unique("base_isoform")\
         .with_columns(
             structural_category2 = pl.when(pl.col("protein_classification_base").is_in(["pNIC", "pFSM", "pISM", "pNNC"]))\
@@ -92,6 +92,7 @@ def plot_protein_class_hist(protein_classification, orfanage_gtf):
         )
 
     to_r(summary_df, "summary_df")
+    to_r(save_path, "save_path")
 
     r(
         """
@@ -106,8 +107,8 @@ def plot_protein_class_hist(protein_classification, orfanage_gtf):
         )
 
         summary_df$structural_category2 <- factor(summary_df$structural_category2, levels = c("pFSM", "pISM", "pNIC", "pNNC", "Other"))
-
-        summary_df %>% 
+        summary_df %>%
+            filter(structural_category2 %in% c("pFSM", "pNIC", "pNNC")) %>% 
             ggplot(aes(x = structural_category2, y = len, fill = structural_category2)) +
             geom_bar(stat = "identity") +
             geom_text(aes(label = paste0(round(percentage, 1), "%")), vjust = 2, colour = "white", size = 5) +
@@ -116,13 +117,13 @@ def plot_protein_class_hist(protein_classification, orfanage_gtf):
                 axis.text.x = element_text(size = 18),
                 panel.grid.minor = element_blank()
                 ) +
-            labs(x = "Structural Category", y = "Percentage", title = "Transcripts Identified by Novelty") +
+            labs(x = "Structural Category", y = "Percentage", title = "Proteoforms Identified by Novelty") +
             scale_fill_manual("Structural Category", values=colorVector) +
             scale_y_continuous(labels = function(x) x/1000) +
-            ylab("Transcripts (x 10^3)") +
+            ylab("Proteoforms (x 10^3)") +
             xlab(NULL)
 
-        ggsave("transcript_classification_hist.png", width=7, height=4)
+        ggsave(save_path, width=7, height=6)
         """
     )
 
@@ -227,4 +228,4 @@ def plot_transcript_class_abundance(classification, expression):
             scale_fill_manual("Structural Category", values=colorVector)    
 
         """
-    )        
+    )
