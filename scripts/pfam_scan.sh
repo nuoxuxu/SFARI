@@ -5,6 +5,11 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 
-mamba activate pfam_scan
+mamba activate ./envs/pfam_scan
 export PERL5LIB=/home/s/shreejoy/nxu/tools/PfamScan:$PERL5LIB
-/home/s/shreejoy/nxu/tools/PfamScan/pfam_scan.pl -fasta full_AA.fasta -dir /home/s/shreejoy/nxu/tools/Pfam_flat_files -cpu 40 -outfile full_pfam_scan_results.txt
+
+/home/s/shreejoy/nxu/tools/PfamScan/pfam_scan.pl \
+    -fasta nextflow_results/V47/orfanage/orfanage_peptide.fasta \
+    -dir /home/s/shreejoy/nxu/tools/Pfam_flat_files \
+    -cpu 40 \
+    -outfile full_pfam_scan_results.txt
