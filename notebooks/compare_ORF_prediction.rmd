@@ -1,0 +1,205 @@
+# Preparation
+
+```{r}
+#| label: import-r
+library(GenomicAlignments)
+library(GenomicFeatures)
+library(rtracklayer)
+library(dplyr)
+library(arrow)
+library(ggplot2)
+library(readr)
+library(VennDiagram)
+```
+
+```{r}
+#| label: import-data
+lr_bulk_var <- read_parquet("nextflow_results/pbid_orf.parquet")
+
+genome_gff3_gtf <- read_csv("transcript_vis_app/genome_gff3_gtf.csv") %>% 
+    distinct(transcript_id, .keep_all = TRUE)
+
+GENCODE_CDS <- makeTxDbFromGFF(paste0(Sys.getenv("GENOMIC_DATA_DIR"), "/GENCODE/gencode.v39.annotation.gtf")) %>% 
+    cdsBy(by="tx", use.names=TRUE)
+
+GENCODCE_tx <- rtracklayer::import(paste0(Sys.getenv("GENOMIC_DATA_DIR"), "/GENCODE/gencode.v39.annotation.gtf")) %>% 
+    as_tibble() %>%
+    filter(type == "transcript")
+```
+
+# Looking at known tx that have CDS prediction unmatching GENCODE reference
+
+```{r}
+#| label: define-function
+get_unmatched_known_transcripts <- function(path_to_predicted_CDS_gtf) {
+    predicted_CDS_gtf <- makeTxDbFromGFF(path_to_predicted_CDS_gtf)  %>% 
+        cdsBy(by="tx", use.names=TRUE)
+    predicted_CDS_gtf <- predicted_CDS_gtf[names(predicted_CDS_gtf) %in% known_pbids]
+
+    # Find TransDecoder-predicted CDS that overlap with GENCODE CDS
+
+    hits <- findOverlaps(predicted_CDS_gtf, GENCODE_CDS, type="equal")
+
+    # Get the list of TransDecoder-predicted SFARI transcripts whose CDS does not match the GENCODE CDS
+
+    CDS_missing <- predicted_CDS_gtf[!(seq_along(predicted_CDS_gtf) %in% unique(queryHits(hits)))]
+
+    pbid_missing <- names(CDS_missing)
+
+    # Add metadata to the missing TransDecoder-predicted SFARI transcripts
+
+    lr_bulk_var %>%
+        mutate(
+            matching_GENCODE = !(isoform %in% pbid_missing)
+        ) %>%
+        select(isoform, structural_category, associated_gene, associated_transcript, subcategory, FSM_class, ORF_type, matching_GENCODE) %>% 
+        left_join(
+            GENCODCE_tx[, c("transcript_id", "transcript_type", "gene_type")] %>% 
+                rename(associated_transcript = transcript_id),
+            by = "associated_transcript"
+        ) %>%
+        left_join(
+            genome_gff3_gtf %>% rename(isoform = transcript_id) %>%
+                select(isoform, containing_novel_spl),
+            by = "isoform"
+        )
+}
+```
+
+```{r}
+known_pbids <- lr_bulk_var %>% 
+    filter(structural_category == "full-splice_match") %>% 
+    pull(isoform)
+
+TD_df <- get_unmatched_known_transcripts("nextflow_results/transcripts_filtered.fasta.transdecoder.genome.gff3.gtf")
+
+ORFanage_df <- get_unmatched_known_transcripts("nextflow_results/orfanage_output.gtf")
+```
+
+```{r}
+TD_df %>%
+    filter(
+        subcategory == "reference_match"
+    ) %>%
+    group_by(matching_GENCODE) %>%
+    summarise(n = n())
+
+ORFanage_df %>%
+    filter(
+        subcategory == "reference_match"
+    ) %>%
+    group_by(matching_GENCODE) %>%
+    summarise(n = n())
+```
+
+# Looking at unknown tx that have unmatching CDS prediction using TransDecoder or ORFanage
+
+```{r}
+#| label: define-function
+get_unknown_tx_unmatched_in_two_methods <- function(TD_gr, ORFanage_gr) {
+    unknown_pbids <- lr_bulk_var %>% 
+        filter(structural_category %in% c("novel_not_in_catalog", "novel_in_catalog")) %>% 
+        pull(isoform)
+
+    TD_gr <- TD_gr[names(TD_gr) %in% unknown_pbids]
+    ORFanage_gr <- ORFanage_gr[names(ORFanage_gr) %in% unknown_pbids]
+    TD_gr[!(seq_along(TD_gr) %in% unique(queryHits(findOverlaps(TD_gr, ORFanage_gr, type="equal"))))] %>% names()
+}
+
+collapse_duplicated_isoforms <- function(gr) {
+    hits <- findOverlaps(gr, gr, type="equal")
+
+    unique_ORF_i <- split(queryHits(hits), subjectHits(hits)) %>% 
+        sapply(function(x) x[1]) %>% 
+        unique()
+
+    gr[unique_ORF_i]
+}
+```
+
+```{r}
+#| label: collapse-isoforms
+TD_gr <- makeTxDbFromGFF("nextflow_results/transcripts_filtered.fasta.transdecoder.genome.gff3.gtf") %>% 
+    cdsBy(by="tx", use.names=TRUE)
+TD_gr <- TD_gr[names(TD_gr) %in% pull(filter(lr_bulk_var, ORF_type == "complete"), isoform)] %>% 
+    collapse_duplicated_isoforms()
+
+ORFanage_gr <- makeTxDbFromGFF("nextflow_results/orfanage_output.gtf")%>%
+    cdsBy(by="tx", use.names=TRUE) %>% 
+    collapse_duplicated_isoforms()
+```
+```{r}
+incomplete_pbids <- lr_bulk_var %>% 
+    filter(ORF_type != "complete") %>%
+    pull(isoform)
+
+sum(names(ORFanage_gr) %in% incomplete_pbids) / length(incomplete_pbids) * 100
+```
+```{r}
+plot_ggvenn_tx <- function(grl1, grl2, name1, name2) {
+    overlapped_tx <- seq_along(grl1) %in% unique(queryHits(findOverlaps(grl1, grl2,  type="equal")))
+
+    # Numbers for the Venn diagram
+    A_only <- length(grl1) - sum(overlapped_tx)      # Unique to set A
+    B_only <- length(grl2) - sum(overlapped_tx)      # Unique to set B
+    A_and_B <- sum(overlapped_tx)      # Shared between A and B
+    # Draw the Venn diagram
+    draw.pairwise.venn(
+        area1 = A_only + A_and_B,   # Total size of Set A
+        area2 = B_only + A_and_B,   # Total size of Set B
+        cross.area = A_and_B,       # Overlap size
+        category = c(name1, name2),  # Labels for the sets
+        fill = c("skyblue", "orange"),   # Colors for the sets
+        lty = "blank"                   # Line type for the circles
+    )
+}
+g <- plot_ggvenn_tx(TD_gr, ORFanage_gr, "TransDecoder", "ORFanage")
+ggsave("figures/venn_tx.png", g, width = 5, height = 5)
+```
+
+```{r}
+missing_pbids <- get_unknown_tx_unmatched_in_two_methods(TD_gr, ORFanage_gr)
+
+unmatched_transcripts <- lr_bulk_var %>%
+    filter(isoform %in% missing_pbids) %>%
+    left_join(
+        GENCODCE_tx[, c("gene_type", "gene_name")] %>% rename(associated_gene = gene_name)  %>% distinct(associated_gene, .keep_all = TRUE),
+        by = "associated_gene"
+    )
+
+unmatched_transcripts %>%
+    filter(gene_type == "protein_coding") %>%
+    distinct(associated_gene, .keep_all = TRUE) %>%
+    pull(isoform) %>%
+    sample(20) %>%
+    writeLines("pbid_to_test_colabfold.txt")
+```
+
+```{bash}
+~/miniforge3/envs/patch_seq_spl/bin/seqkit grep -f pbid_to_test_colabfold.txt nextflow_results/orphanage_peptide.fasta > colabfold/orphanage_colabfold.fasta
+sed -E 's/^(>[^.]+.[^.]+.[^.]+)\.p[1-9].*/\1/' nextflow_results/transcripts_filtered.fasta.transdecoder.pep | ~/miniforge3/envs/patch_seq_spl/bin/seqkit grep -f pbid_to_test_colabfold.txt > colabfold/TD_colabfold.fasta
+~/miniforge3/envs/patch_seq_spl/bin/seqkit grep -f pbid_to_test_colabfold.txt nextflow_results/transcripts_filtered.fasta > colabfold/TD_colabfold.fasta
+
+```
+
+# Write individual peptides to individual fasta files
+
+```{r}
+library(GenomicRanges)
+library(BSgenome)       # Provides access to genome sequences
+library(Biostrings)      # Handles sequence extraction and translation
+library(BSgenome.Hsapiens.UCSC.hg38)
+```
+
+```{r}
+genome <- BSgenome.Hsapiens.UCSC.hg38
+```
+
+```{r}
+test <- TD_gr[names(TD_gr) %in% missing_pbids][1]
+```
+
+```{r}
+dna_seqs <- getSeq(genome, test)
+dna_seqs <- ifelse(strand(test) == "-", reverseComplement(dna_seqs), dna_seqs)
+```

@@ -390,6 +390,7 @@ gencode_gtf.write_csv("transcript_vis_app/GENCODE_v39.csv")
 
 ```{python}
 from src.ryp import r, to_r
+import os
 ```
 
 ```{r}
@@ -478,7 +479,7 @@ CDS_gtf  = read_gtf(
 
 protein_classification = pl.read_csv("nextflow_results/SFARI_unfiltered.protein_classification.tsv", separator = "\t").rename({"pb": "transcript_id"})["transcript_id", "pr_gene", "protein_classification_base"]
 
-gene_id_to_gene_name = read_gtf(paste0(Sys.getenv("GENCODE/gencode.v39.annotation.gtf")), attributes = ["gene_name", "gene_id"]).unique("gene_id")["gene_name", "gene_id"]
+gene_id_to_gene_name = read_gtf(os.getenv("GENOMIC_DATA_DIR") + "GENCODE/gencode.v39.annotation.gtf", attributes = ["gene_name", "gene_id"]).unique("gene_id")["gene_name", "gene_id"]
 ```
 
 ```{python}
