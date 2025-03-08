@@ -49,7 +49,7 @@ IsoseqsSwitchList <- importRdata(
     designMatrix = myDesign,
     isoformExonAnnoation = "isoformExonAnnoation.gtf",
     isoformNtFasta = "{params.fasta_file}",
-    addAnnotatedORFs = FALSE,
+    addAnnotatedORFs = TRUE,
     fixStringTieAnnotationProblem = FALSE
 )
 saveRDS(IsoseqsSwitchList, "{params.rds_file}")
