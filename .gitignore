@@ -1,9 +1,11 @@
 # data files
 proc/*
+figures/**
 data/
 envs/
 garbage/
 results/*
+export/*
 
 # Workflow managers
 .snakemake
