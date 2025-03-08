@@ -1,6 +1,5 @@
 # data files
 proc/*
-figures/
 data/
 envs/
 garbage/
@@ -32,3 +31,9 @@ transcript_vis_app/*.csv
 slurm_logs/*
 
 **/.ipynb_checkpoints/
+
+STAR_results
+scripts/STAR_scripts
+
+export/
+figures/**
