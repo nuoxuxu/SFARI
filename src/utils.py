@@ -7011,7 +7011,7 @@ def collapse_isoforms_to_proteoforms(gtf):
             pl.col("transcript_id")
         )\
         .with_columns(
-            base_isoform = pl.col("transcript_id").map_elements(lambda x: x[0])
+            base_isoform = pl.col("transcript_id").map_elements(lambda x: x[0], return_dtype=pl.String)
         )\
         .explode("transcript_id")\
         .rename({"transcript_id": "isoform"})\
