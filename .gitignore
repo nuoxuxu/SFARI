@@ -1,7 +1,7 @@
 # data files
 proc/*
 figures/**
-data/
+data/**
 envs/
 garbage/
 results/*
@@ -13,7 +13,7 @@ export/*
 conf/
 work/
 .nextflow.log*
-nextflow_results/
+nextflow_results/**
 nextflow.config
 
 # macOS
