@@ -1,7 +1,7 @@
 #!/usr/bin/env nextflow
 
 params.datadir = "/scratch/s/shreejoy/nxu/SFARI/data/"
-params.output_dir = "proc/"
+params.output_dir = "nextflow_results/"
 
 process getIDToSample {
     publishDir "${params.output_dir}", mode: 'copy'
