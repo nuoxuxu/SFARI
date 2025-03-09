@@ -1,41 +1,35 @@
-# data files
-proc/*
-figures/**
-data/**
-envs/
-garbage/
-results/*
-export/*
+# Ignore everything (files)
+*
 
-# Workflow managers
-.snakemake
-.nextflow
-conf/
-work/
+# Keep directories (to preserve folder structure)
+!*/
+
+# Include all files in the root directory (no slashes)
+!/*
+
+# Explicitly include .gitignore itself
+!.gitignore
+
+# Exclude log files
 .nextflow.log*
-nextflow_results/**
-nextflow.config
 
-# macOS
-.DS_Store
-
-# .vscode
+# Exclude directories
+work/
+.ipynb_checkpoints/
+.nextflow/
 .vscode/
+src.egg-info
 
-# python
-*.egg-info/
-**/__pycache__/
-**.pyc
-
-transcript_vis_app/*.csv
-**.dcf
-
-slurm_logs/*
-
-**/.ipynb_checkpoints/
-
-STAR_results
-scripts/STAR_scripts
-
-export/
-figures/**
+# Include files in specific folders:
+!bin/*
+!docs/*
+!scripts/*
+!notebooks/*
+!conf/*
+!src/*
+__init__.pyc
+!transcript_vis_app/*
+transcript_vis_app/genome_gff3_gtf.csv
+transcript_vis_app/SFARI_peptides.csv
+!nextflow.config
+!*.nf
