@@ -19,8 +19,11 @@ slurm_logs/
 garbage/
 
 # Ignore raw data files
+proc/
 data/
 export/
 figures/
-transcript_vis_app/genome_gff3_gtf.csv
-transcript_vis_app/SFARI_peptides.csv
+transcript_vis_app/*.csv
+
+# Ignore .DS_Store
+.DS_Store
