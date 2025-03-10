@@ -5,10 +5,10 @@ from src.utils import collapse_isoforms_to_proteoforms
 import polars.selectors as cs
 import argparse
 
-def format_gtf_for_RiboTIE(gtf):
+def format_gtf_for_RiboTIE(gtf_path):
     # Get level 1 and level 2 features
 
-    gtf = read_gtf("nextflow_results/V47/final_transcripts.gtf")
+    gtf = read_gtf(gtf_path)
 
     level_1_2_feature = gtf\
         .filter(
@@ -78,8 +78,7 @@ def main():
     parser.add_argument("outpath", type=str)
     args = parser.parse_args()
     
-    gtf = read_gtf(args.inpath)
-    gtf_RiboTIE = format_gtf_for_RiboTIE(gtf)
+    gtf_RiboTIE = format_gtf_for_RiboTIE(args.inpath)
     gtf_RiboTIE.write_csv(args.outpath, separator="\t", include_header=False, quote_style="never")
 
 if __name__ == "__main__":
