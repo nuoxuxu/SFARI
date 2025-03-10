@@ -147,7 +147,7 @@ count_vs_abundance <- read_parquet("nextflow_results/V47/final_classification.pa
     geom_histogram(position = position_fill(), alpha = .75) +
     scale_x_log10() +
     scale_fill_manual("Structural Category", values = colorVector) +
-    labs(x = "Min observed counts", y = "Transcript proportion")
+    labs(x = "Total observed counts", y = "Transcript proportion")
 ggsave("figures/figure_1/count_vs_abundance.pdf", width = 8, height = 7)
 
 # Transcript classification for the transcripts in the Other category
