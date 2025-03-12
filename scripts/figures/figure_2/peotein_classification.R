@@ -43,7 +43,7 @@ summary_df %>%
     filter(structural_category2 %in% c("pFSM", "pNIC", "pNNC", "Other")) %>%
     ggplot(aes(x = structural_category2, y = len, fill = structural_category2)) +
     geom_bar(stat = "identity") +
-    geom_text(aes(label = paste0(round(percentage, 1), "%")), vjust = 2, colour = "white", size = 5) +
+    geom_text(aes(label = paste0(round(percentage, 1), "%")), vjust = 2, colour = "white", size = 4) +
     scale_fill_manual("Structural Category", values = colorVector) +
     scale_y_continuous(labels = function(x) x / 1000) +
     labs(
@@ -51,4 +51,4 @@ summary_df %>%
         y = expression("Proteins (x" ~ 10^3 * ")")
         )
 
-ggsave("figures/figure_2/protein_class.pdf", width = 4, height = 2.5)
+ggsave("figures/figure_2/protein_class.pdf", width = 3, height = 2.5)

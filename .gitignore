@@ -23,6 +23,7 @@ proc/
 data/
 export/
 figures/
+!scripts/figures
 transcript_vis_app/*.csv
 
 # Ignore .DS_Store
