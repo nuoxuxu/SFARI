@@ -138,19 +138,12 @@ workflow proteoform_classification {
     predicted_cds_gtf
     peptide_fasta
     best_orf
-
     main:
     renameCdsToExon(predicted_cds_gtf, params.annotation_gtf)
     sqantiProtein(renameCdsToExon.out.sample_cds_renamed, renameCdsToExon.out.sample_transcript_exon_only, renameCdsToExon.out.ref_cds_renamed, renameCdsToExon.out.ref_transcript_exon_only, best_orf, predicted_cds_gtf)
     fivePrimeUtr(params.annotation_gtf, predicted_cds_gtf, sqantiProtein.out)
     proteinClassification(fivePrimeUtr.out)
     makeProteinSearchDatabase(params.searchDB, proteinClassification.out, predicted_cds_gtf, peptide_fasta, params.translation_fasta)
-}
-
-workflow {
-    predicted_cds_gtf = Channel.fromPath("nextflow_results/V47/orfanage/orfanage.gtf")
-    peptide_fasta = Channel.fromPath("nextflow_results/V47/orfanage/orfanage_peptide.fasta")
-    best_orf = Channel.fromPath("nextflow_results/V47/orfanage/best_orf.tsv")
-    
-    proteoform_classification(predicted_cds_gtf, peptide_fasta, best_orf)
+    emit:
+    protein_database = makeProteinSearchDatabase.out
 }

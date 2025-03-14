@@ -116,13 +116,19 @@ process getBestOrfCsv {
     """
 }
 
-workflow {
-    final_sample_gtf = Channel.fromPath("nextflow_results/V47/final_transcripts.gtf")
-    final_sample_classification = Channel.fromPath("nextflow_results/V47/final_classification.parquet")
-    final_sample_fasta = Channel.fromPath("nextflow_results/V47/final_transcripts.fasta")
+workflow ORFanage {
+    take:
+    final_sample_gtf
+    final_sample_classification
+    final_sample_fasta
+    main:
     runORFanage(params.genome_fasta, params.annotation_gtf, final_sample_gtf)
     fixORFanageFormat(runORFanage.out.orfanage_gtf, params.genome_fasta)
     extractORFanageCdsFasta(params.genome_fasta, fixORFanageFormat.out)
     extractORFanageTranslationFasta(params.genome_fasta, fixORFanageFormat.out)
     getBestOrfCsv(final_sample_classification, final_sample_fasta, extractORFanageCdsFasta.out)
+    emit:
+    predicted_cds_gtf = fixORFanageFormat.out
+    peptide_fasta = extractORFanageTranslationFasta.out
+    best_orf = getBestOrfCsv.out
 }

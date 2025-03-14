@@ -54,17 +54,7 @@ workflow peptide {
     predicted_cds_gtf
     protein_search_database
     peptides
-
     main:
     peptideTrackUCSC(params.searchDB, params.annotation_gtf, final_sample_classification, predicted_cds_gtf, protein_search_database, peptides)
     addPeptideAnnotation(params.searchDB, params.annotation_gtf, predicted_cds_gtf, peptideTrackUCSC.out)
-}
-
-workflow {
-    final_sample_classification = Channel.fromPath("nextflow_results/V47/final_classification.parquet")
-    predicted_cds_gtf = Channel.fromPath("nextflow_results/V47/orfanage/orfanage.gtf")
-    protein_search_database = Channel.fromPath("nextflow_results/V47/orfanage/hybrid.fasta")
-    peptides = Channel.fromPath("nextflow_results/V47/orfanage/hybrid_percolator.tsv")
-
-    peptide(final_sample_classification, predicted_cds_gtf, protein_search_database, peptides)
 }

@@ -105,12 +105,18 @@ process filterByExpression {
     """
 }
 
-workflow {
-    isoform_gff = Channel.fromPath("nextflow_results/merged_collapsed.gff")
-    getIDToSample = channel.fromPath("nextflow_results/id_to_sample.txt")
-    read_stat = channel.fromPath("nextflow_results/merged_collapsed.read_stat.txt")
+workflow classify_and_count {
+    take:
+    isoform_gff
+    id_to_sample
+    read_stat
+    main:
     pigeonPrepare(isoform_gff, params.annotation_gtf, params.genome_fasta)
     pigeonClassify(pigeonPrepare.out.sorted_isoform_gff, pigeonPrepare.out.sorted_isoform_gff_pgi, pigeonPrepare.out.sorted_annotation, pigeonPrepare.out.sorted_annotation_gtf_pgi, params.genome_fasta, pigeonPrepare.out.reference_fasta_pgi)
     pigeonFilter(pigeonClassify.out.classification, pigeonClassify.out.junctions, pigeonPrepare.out.sorted_isoform_gff)
-    filterByExpression(params.annotation_gtf, params.genome_fasta, getIDToSample, pigeonFilter.out.filtered_classification, read_stat, pigeonFilter.out.filtered_gff, params.min_reads, params.min_n_sample)    
+    filterByExpression(params.annotation_gtf, params.genome_fasta, id_to_sample, pigeonFilter.out.filtered_classification, read_stat, pigeonFilter.out.filtered_gff, params.min_reads, params.min_n_sample)    
+    emit:
+    final_sample_gtf = filterByExpression.out
+    final_sample_classification = filterByExpression.out.final_sample_classification
+    final_sample_fasta = filterByExpression.out.final_sample_fasta
 }
