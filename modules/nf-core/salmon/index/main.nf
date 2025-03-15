@@ -1,6 +1,6 @@
 process SALMON_INDEX {
     tag "$transcript_fasta"
-    label "process_medium"
+    label "short_slurm_job"
 
     conda "${moduleDir}/environment.yml"
     container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
