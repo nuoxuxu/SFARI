@@ -6,7 +6,6 @@ params.final_transcript_gtf = "/scratch/s/shreejoy/nxu/SFARI/nextflow_results/V4
 process extractFinalTranscriptsFasta {
     label "short_slurm_job"
     conda "/home/s/shreejoy/nxu/miniforge3/envs/SQANTI3.env"
-    label "short_slurm_job"
     input:
     path genome_fasta
     path final_transcript_gtf
