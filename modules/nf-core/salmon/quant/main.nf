@@ -5,7 +5,7 @@ process SALMON_QUANT {
     conda "${moduleDir}/environment.yml"
     container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
         'https://depot.galaxyproject.org/singularity/salmon:1.10.3--h6dccd9a_2' :
-        'biocontainers/salmon:1.10.3--h6dccd9a_2' }"
+        'combinelab/salmon:1.10.3' }"
 
     input:
     tuple val(meta), path(reads)
@@ -29,7 +29,8 @@ process SALMON_QUANT {
     prefix   = task.ext.prefix ?: "${meta.id}"
 
     def reference   = "--index $index"
-    def reads1 = [], reads2 = []
+    def reads1 = []
+    def reads2 = []
     meta.single_end ? [reads].flatten().each{reads1 << it} : reads.eachWithIndex{ v, ix -> ( ix & 1 ? reads2 : reads1) << v }
     def input_reads = meta.single_end ? "-r ${reads1.join(" ")}" : "-1 ${reads1.join(" ")} -2 ${reads2.join(" ")}"
     if (alignment_mode) {
