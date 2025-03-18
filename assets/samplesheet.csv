@@ -1,0 +1,16 @@
+sample,fastq_1,fastq_2,strandedness
+CN_1_1,data/SFARI_data/CN_1_1_previous_tube_label_CN_1_2_S3_L001_R1_001.fastq.gz,data/SFARI_data/CN_1_1_previous_tube_label_CN_1_2_S3_L001_R2_001.fastq.gz,unstranded
+CN_1_2,data/SFARI_data/CN_1_2_previous_tube_label_CN_1_3_S4_L001_R1_001.fastq.gz,data/SFARI_data/CN_1_2_previous_tube_label_CN_1_3_S4_L001_R2_001.fastq.gz,unstranded
+CN_2_1,data/SFARI_data/CN_2_1_S8_L001_R1_001.fastq.gz,data/SFARI_data/CN_2_1_S8_L001_R2_001.fastq.gz,unstranded
+CN_2_2,data/SFARI_data/CN_2_2_S9_L001_R1_001.fastq.gz,data/SFARI_data/CN_2_2_S9_L001_R2_001.fastq.gz,unstranded
+CN_3_1,data/SFARI_data/CN_3_1_S13_L001_R1_001.fastq.gz,data/SFARI_data/CN_3_1_S13_L001_R2_001.fastq.gz,unstranded
+CN_3_2,data/SFARI_data/CN_3_2_S14_L001_R1_001.fastq.gz,data/SFARI_data/CN_3_2_S14_L001_R2_001.fastq.gz,unstranded
+NPC_1_1,data/SFARI_data/NPC_1_1_resub_S15_L001_R1_001.fastq.gz,data/SFARI_data/NPC_1_1_resub_S15_L001_R2_001.fastq.gz,unstranded
+NPC_1_2,data/SFARI_data/NPC_1_2_previous_tube_label_NPC_1_3_S2_L001_R1_001.fastq.gz,data/SFARI_data/NPC_1_2_previous_tube_label_NPC_1_3_S2_L001_R2_001.fastq.gz,unstranded
+NPC_2_1,data/SFARI_data/NPC_2_1_S6_L001_R1_001.fastq.gz,data/SFARI_data/NPC_2_1_S6_L001_R2_001.fastq.gz,unstranded
+NPC_2_2,data/SFARI_data/NPC_2_2_S7_L001_R1_001.fastq.gz,data/SFARI_data/NPC_2_2_S7_L001_R2_001.fastq.gz,unstranded
+NPC_3_1,data/SFARI_data/NPC_3_1_S11_L001_R1_001.fastq.gz,data/SFARI_data/NPC_3_1_S11_L001_R2_001.fastq.gz,unstranded
+NPC_3_2,data/SFARI_data/NPC_3_2_previous_tube_label_NPC_3_3_S12_L001_R1_001.fastq.gz,data/SFARI_data/NPC_3_2_previous_tube_label_NPC_3_3_S12_L001_R2_001.fastq.gz,unstranded
+iPSC_1,data/SFARI_data/iPSC_1_S1_L001_R1_001.fastq.gz,data/SFARI_data/iPSC_1_S1_L001_R2_001.fastq.gz,unstranded
+iPSC_2,data/SFARI_data/iPSC_2_S5_L001_R1_001.fastq.gz,data/SFARI_data/iPSC_2_S5_L001_R2_001.fastq.gz,unstranded
+iPSC_3,data/SFARI_data/iPSC_3_S10_L001_R1_001.fastq.gz,data/SFARI_data/iPSC_3_S10_L001_R2_001.fastq.gz,unstranded
