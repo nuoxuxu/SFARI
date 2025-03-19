@@ -59,14 +59,15 @@ workflow proteomic {
     take:
     protein_database
     mzXMLfiles
-
     main:
     cometSearch(params.comet_params, protein_database, mzXMLfiles)
     runPercolator(params.searchDB, cometSearch.out)
+    emit:
+    peptides = runPercolator.out
 }
 
-workflow {
-    protein_database = Channel.fromPath("nextflow_results/V47/orfanage/hybrid.fasta")
-    Channel.fromPath(params.datadir + "tc-1154/*.mzXML").collect().set { mzXMLfiles }
-    proteomic(protein_database, mzXMLfiles)
-}
+// workflow {
+//     protein_database = Channel.fromPath("nextflow_results/V47/orfanage/hybrid.fasta")
+//     Channel.fromPath(params.datadir + "tc-1154/*.mzXML").collect().set { mzXMLfiles }
+//     proteomic(protein_database, mzXMLfiles)
+// }

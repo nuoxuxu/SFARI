@@ -70,16 +70,14 @@ workflow merge_and_collapse {
     take:
     flnc_bam
     mapped_bam
-    
     main:
     getIDToSample(params.datadir + flnc_bam)
     Channel.fromPath(params.datadir + mapped_bam).collect().set { bamFiles }
     mergeBamFiles(bamFiles)
-    isoseqCollapse(mergeBamFiles.out)    
-}
+    isoseqCollapse(mergeBamFiles.out)
+    emit:
+    isoform_gff = isoseqCollapse.out.isoform_gff
+    id_to_sample = getIDToSample.out
+    read_stat = isoseqCollapse.out.read_stat
 
-workflow {
-    flnc_bam = "long_read/LUO26876.20240514/*/outputs/flnc.bam"
-    mapped_bam = "long_read/LUO26876.20240514/*/outputs/mapped.bam"
-    merge_and_collapse(flnc_bam, mapped_bam)
 }
