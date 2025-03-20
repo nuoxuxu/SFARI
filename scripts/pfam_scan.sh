@@ -1,15 +1,18 @@
 #!/bin/bash
 #SBATCH --job-name=pfam_scan
-#SBATCH --output=slurm_logs/pfam_scan.out
-#SBATCH --time=1-0:0
+#SBATCH --output=pfam_scan.out
+#SBATCH --time=2-0:0
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
+#SBATCH --cpus-per-task=64
+#SBATCH --mem=249G
+#SBATCH --mail-user=nuoxu.xu@mail.utoronto.ca
+#SBATCH --mail-type=FAIL,END
 
-mamba activate ./envs/pfam_scan
-export PERL5LIB=/home/s/shreejoy/nxu/tools/PfamScan:$PERL5LIB
-
-/home/s/shreejoy/nxu/tools/PfamScan/pfam_scan.pl \
-    -fasta nextflow_results/V47/orfanage/orfanage_peptide.fasta \
-    -dir /home/s/shreejoy/nxu/tools/Pfam_flat_files \
-    -cpu 40 \
-    -outfile full_pfam_scan_results.txt
+export PERL5LIB=/scratch/nxu/SFARI/PfamScan:$PERL5LIB
+module load hmmer/3.4
+pfam_scan/pfam_scan.py \
+    -out full_pfam_scan_results.txt \
+    -cpu 64 \
+    orfanage_peptide.fasta \
+    Pfam_flat_files
