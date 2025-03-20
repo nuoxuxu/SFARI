@@ -5,16 +5,6 @@
     "https://github.com/nf-core/modules.git": {
       "modules": {
         "nf-core": {
-          "custom/tx2gene": {
-            "branch": "master",
-            "git_sha": "49f4e50534fe4b64101e62ea41d5dc43b1324358",
-            "installed_by": ["quantify_pseudo_alignment"]
-          },
-          "kallisto/quant": {
-            "branch": "master",
-            "git_sha": "81880787133db07d9b4c1febd152c090eb8325dc",
-            "installed_by": ["quantify_pseudo_alignment"]
-          },
           "salmon/index": {
             "branch": "master",
             "git_sha": "81880787133db07d9b4c1febd152c090eb8325dc",
@@ -22,27 +12,8 @@
           },
           "salmon/quant": {
             "branch": "master",
-            "git_sha": "81880787133db07d9b4c1febd152c090eb8325dc",
-            "installed_by": ["modules", "quantify_pseudo_alignment"]
-          },
-          "summarizedexperiment/summarizedexperiment": {
-            "branch": "master",
-            "git_sha": "81880787133db07d9b4c1febd152c090eb8325dc",
-            "installed_by": ["quantify_pseudo_alignment"]
-          },
-          "tximeta/tximport": {
-            "branch": "master",
-            "git_sha": "81880787133db07d9b4c1febd152c090eb8325dc",
-            "installed_by": ["quantify_pseudo_alignment"]
-          }
-        }
-      },
-      "subworkflows": {
-        "nf-core": {
-          "quantify_pseudo_alignment": {
-            "branch": "master",
-            "git_sha": "a1abf90966a2a4016d3c3e41e228bfcbd4811ccc",
-            "installed_by": ["subworkflows"]
+            "git_sha": "85b5f8a0d9df9ce7587af50e2ee75b37c97515c6",
+            "installed_by": ["modules"]
           }
         }
       }
