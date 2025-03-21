@@ -1,11 +1,11 @@
 process SALMON_INDEX {
     tag "$transcript_fasta"
-    label "short_slurm_job"
+    label "process_medium"
 
     conda "${moduleDir}/environment.yml"
     container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
         'https://depot.galaxyproject.org/singularity/salmon:1.10.3--h6dccd9a_2' :
-        'combinelab/salmon:1.10.3' }"
+        'biocontainers/salmon:1.10.3--h6dccd9a_2' }"
 
     input:
     path genome_fasta

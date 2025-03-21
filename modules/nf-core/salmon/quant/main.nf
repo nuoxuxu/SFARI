@@ -1,11 +1,12 @@
 process SALMON_QUANT {
     tag "$meta.id"
     label "process_medium"
+    publishDir "${params.output_dir}", mode: 'copy'
 
     conda "${moduleDir}/environment.yml"
     container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
         'https://depot.galaxyproject.org/singularity/salmon:1.10.3--h6dccd9a_2' :
-        'combinelab/salmon:1.10.3' }"
+        'biocontainers/salmon:1.10.3--h6dccd9a_2' }"
 
     input:
     tuple val(meta), path(reads)
