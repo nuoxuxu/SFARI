@@ -1,10 +1,8 @@
 #!/usr/bin/env nextflow
 
-params.datadir = "/scratch/s/shreejoy/nxu/SFARI/data/"
-params.output_dir = "nextflow_results/"
-
 process getIDToSample {
     publishDir "${params.output_dir}", mode: 'copy'
+
     input:
     val x
 
@@ -15,7 +13,7 @@ process getIDToSample {
     """
     for file in $x; do
         if [[ -f "\$file" ]]; then
-            first_field=\$(~/miniforge3/envs/SQANTI3.env/bin/samtools view "\$file" | head -1 | cut -f1)
+            first_field=\$(samtools view "\$file" | head -1 | cut -f1)
             if [[ -n "\$first_field" ]]; then
                 echo -e "\$first_field\\t\$file" >> id_to_sample.txt
             else
@@ -29,8 +27,9 @@ process getIDToSample {
 }
 
 process mergeBamFiles {
-
     label "short_slurm_job"
+
+    conda "${moduleDir}/environment.yml"
     
     input:
     path "bam"
@@ -39,14 +38,16 @@ process mergeBamFiles {
     path "merged.bam"
 
     script:
-    """
-    ~/miniforge3/envs/SQANTI3.env/bin/samtools merge bam* -o merged.bam -@ $task.cpus
+    """mamba 
+    samtools merge bam* -o merged.bam -@ $task.cpus
     """
 }
 
 process isoseqCollapse {
     publishDir "${params.output_dir}", mode: 'copy'
     label "short_slurm_job"
+
+    conda "${moduleDir}/environment.yml"
     
     input:
     path merged_bam
@@ -62,7 +63,7 @@ process isoseqCollapse {
 
     script:
     """
-    ~/miniforge3/envs/isoseq/bin/isoseq collapse -j $task.cpus $merged_bam merged_collapsed.gff
+    isoseq collapse -j $task.cpus $merged_bam merged_collapsed.gff
     """
 }
 
@@ -70,14 +71,22 @@ workflow merge_and_collapse {
     take:
     flnc_bam
     mapped_bam
+
     main:
-    getIDToSample(params.datadir + flnc_bam)
-    Channel.fromPath(params.datadir + mapped_bam).collect().set { bamFiles }
+    getIDToSample(flnc_bam)
+    Channel.fromPath(mapped_bam).collect().set { bamFiles }
     mergeBamFiles(bamFiles)
     isoseqCollapse(mergeBamFiles.out)
+
     emit:
     isoform_gff = isoseqCollapse.out.isoform_gff
     id_to_sample = getIDToSample.out
     read_stat = isoseqCollapse.out.read_stat
+}
 
+workflow {
+    getIDToSample(params.flnc_bam)
+    Channel.fromPath(params.mapped_bam).collect().set { bamFiles }
+    mergeBamFiles(bamFiles)
+    isoseqCollapse(mergeBamFiles.out)
 }
