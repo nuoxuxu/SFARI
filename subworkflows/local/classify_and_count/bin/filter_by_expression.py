@@ -1,8 +1,19 @@
 #!/usr/bin/env python
 import polars as pl
-from src.utils import read_gtf
 import polars.selectors as cs
 import argparse
+
+def read_gtf(file, attributes=["transcript_id"], keep_attributes=True):
+    if keep_attributes:
+        return pl.read_csv(file, separator="\t", comment_prefix="#", schema_overrides = {"seqname": pl.String}, has_header = False, new_columns=["seqname","source","feature","start","end","score","strand","frame","attributes"])\
+            .with_columns(
+                [pl.col("attributes").str.extract(rf'{attribute} "([^;]*)";').alias(attribute) for attribute in attributes]
+                )
+    else:
+        return pl.read_csv(file, separator="\t", comment_prefix="#", schema_overrides = {"seqname": pl.String}, has_header = False, new_columns=["seqname","source","feature","start","end","score","strand","frame","attributes"])\
+            .with_columns(
+                [pl.col("attributes").str.extract(rf'{attribute} "([^;]*)";').alias(attribute) for attribute in attributes]
+                ).drop("attributes")
 
 def get_expression(read_stat_path, id_to_sample_path):
     
@@ -14,6 +25,8 @@ def get_expression(read_stat_path, id_to_sample_path):
             pl.col("sample").map_elements(lambda s: s.rsplit("/")[9].rsplit("_", 2)[0], return_dtype = pl.String)
         )\
         .to_pandas().set_index("id").to_dict()["sample"]    
+
+    assert len(id_to_sample.items()) == 15, "There should be 15 samples in the id_to_sample file"
 
     print("Computing expression count matrix...")
 
