@@ -1,10 +1,10 @@
 #!/home/s/shreejoy/nxu/miniforge3/envs/patch_seq_spl/bin/python
 import polars as pl
-from src.single_cell import SingleCell
 import argparse
 from src.utils import read_fasta, write_fasta, read_gtf, collapse_isoforms_to_proteoforms
 
 def main():
+    
     parser = argparse.ArgumentParser(description='Filter genome_gffs from TransDecoder with novel transripts')
     parser.add_argument('--mode', action='store', type=str, required=True)
     parser.add_argument('--protein_classification', action='store', type=str, required=True)
