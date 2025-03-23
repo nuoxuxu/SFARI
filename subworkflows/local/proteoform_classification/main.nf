@@ -1,8 +1,9 @@
 #!/usr/bin/env nextflow
 
 process renameCdsToExon {
-    conda "/home/s/shreejoy/nxu/miniforge3/envs/SQANTI3.env"
     label "short_slurm_job"
+
+    conda "$moduleDir/environment.yml"
 
     input:
     path predicted_cds_gtf
@@ -26,8 +27,9 @@ process renameCdsToExon {
 }
 
 process sqantiProtein {
-    conda "/home/s/shreejoy/nxu/miniforge3/envs/SQANTI3.env"
     label "short_slurm_job"
+
+    container "gsheynkmanlab/sqanti_protein:sing"
 
     input:
     path sample_cds_renamed
@@ -56,8 +58,9 @@ process sqantiProtein {
 }
 
 process fivePrimeUtr {
-    conda "/home/s/shreejoy/nxu/miniforge3/envs/SQANTI3.env"
     label "short_slurm_job"
+
+    conda "$moduleDir/environment.yml"
 
     input:
     path annotation_gtf
@@ -87,10 +90,10 @@ process fivePrimeUtr {
 }
 
 process proteinClassification {
-
     publishDir "${params.output_dir}/${params.orf_prediction}", mode: 'copy'
     label "short_slurm_job"
-    conda "/home/s/shreejoy/nxu/miniforge3/envs/SQANTI3.env"
+
+    conda "$moduleDir/environment.yml"
 
     input:
     path protein_classification_w_5utr
@@ -109,7 +112,7 @@ process proteinClassification {
 process makeProteinSearchDatabase {
     publishDir "${params.output_dir}/${params.orf_prediction}", mode: 'copy'
 
-    conda "/home/s/shreejoy/nxu/miniforge3/envs/SQANTI3.env"
+    conda "$moduleDir/environment.yml"
 
     input:
     val mode
@@ -138,12 +141,27 @@ workflow proteoform_classification {
     predicted_cds_gtf
     peptide_fasta
     best_orf
+    
     main:
     renameCdsToExon(predicted_cds_gtf, params.annotation_gtf)
     sqantiProtein(renameCdsToExon.out.sample_cds_renamed, renameCdsToExon.out.sample_transcript_exon_only, renameCdsToExon.out.ref_cds_renamed, renameCdsToExon.out.ref_transcript_exon_only, best_orf, predicted_cds_gtf)
     fivePrimeUtr(params.annotation_gtf, predicted_cds_gtf, sqantiProtein.out)
     proteinClassification(fivePrimeUtr.out)
     makeProteinSearchDatabase(params.searchDB, proteinClassification.out, predicted_cds_gtf, peptide_fasta, params.translation_fasta)
+    
     emit:
     protein_database = makeProteinSearchDatabase.out
+}
+
+workflow {
+
+    predicted_cds_gtf = "/scratch/s/shreejoy/nxu/SFARI/nextflow_results/V47/orfanage/orfanage.gtf"
+    peptide_fasta = "/scratch/s/shreejoy/nxu/SFARI/nextflow_results/V47/orfanage/orfanage_peptide.fasta"
+    best_orf = "/scratch/s/shreejoy/nxu/SFARI/nextflow_results/V47/orfanage/best_orf.tsv"
+    
+    renameCdsToExon(predicted_cds_gtf, params.annotation_gtf)
+    sqantiProtein(renameCdsToExon.out.sample_cds_renamed, renameCdsToExon.out.sample_transcript_exon_only, renameCdsToExon.out.ref_cds_renamed, renameCdsToExon.out.ref_transcript_exon_only, best_orf, predicted_cds_gtf)
+    fivePrimeUtr(params.annotation_gtf, predicted_cds_gtf, sqantiProtein.out)
+    proteinClassification(fivePrimeUtr.out)
+    makeProteinSearchDatabase(params.searchDB, proteinClassification.out, predicted_cds_gtf, peptide_fasta, params.translation_fasta)
 }
