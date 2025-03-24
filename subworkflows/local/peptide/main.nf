@@ -1,6 +1,6 @@
 process peptideTrackUCSC {
     
-    conda "$moduleDir/environment.yml"
+    conda "$moduleDir/python.yml"
     
     input:
     val mode
@@ -28,7 +28,7 @@ process peptideTrackUCSC {
 process addPeptideAnnotation {
     publishDir "${params.output_dir}/${params.orf_prediction}", mode: 'copy'
     
-    conda "$moduleDir/environment.yml"
+    conda "$moduleDir/R.yml"
 
     input:
     val mode

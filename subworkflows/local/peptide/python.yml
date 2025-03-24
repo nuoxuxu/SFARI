@@ -1,5 +1,6 @@
 ---
 # yaml-language-server: $schema=https://raw.githubusercontent.com/nf-core/modules/master/modules/environment-schema.json
+name: peptide-python
 channels:
   - conda-forge
   - bioconda
@@ -8,9 +9,4 @@ dependencies:
   - conda-forge::biopython=1.84
   - conda-forge::pandas=2.2.2
   - conda-forge::pyarrow
-  - conda-forge::r-dplyr
-  - bioconda::bioconductor-genomicfeatures
-  - bioconda::bioconductor-genomicalignments
-  - bioconda::bioconductor-rtracklayer
-  - conda-forge::r-readr
   
