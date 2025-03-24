@@ -19,7 +19,7 @@ process runPercolator {
     publishDir "${params.output_dir}/${params.orf_prediction}", mode: 'copy'
     label "short_slurm_job"
     
-    conda "/home/s/shreejoy/nxu/miniforge3/envs/patch_seq_spl"
+    conda "$moduleDir/environment.yml"
     
     input:
     val mode
@@ -66,8 +66,9 @@ workflow proteomic {
     peptides = runPercolator.out
 }
 
-// workflow {
-//     protein_database = Channel.fromPath("nextflow_results/V47/orfanage/hybrid.fasta")
-//     Channel.fromPath(params.datadir + "tc-1154/*.mzXML").collect().set { mzXMLfiles }
-//     proteomic(protein_database, mzXMLfiles)
-// }
+workflow {
+
+    protein_database = Channel.fromPath("nextflow_results/V47/orfanage/hybrid.fasta")
+    Channel.fromPath(params.datadir + "tc-1154/*.mzXML").collect().set { mzXMLfiles }
+    proteomic(protein_database, mzXMLfiles)
+}
