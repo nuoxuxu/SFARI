@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from src.utils import read_fasta
 import polars as pl
 import argparse
 
@@ -12,6 +11,44 @@ def main():
 
     params = parser.parse_args()
     
+    def read_fasta(fasta_file, gencode = False):
+        """
+        Reads a FASTA file and converts it into a Polars DataFrame.
+        Removes '*' from sequences.
+        
+        Args:
+            fasta_file (str): Path to the FASTA file.
+        
+        Returns:
+            polars.DataFrame: A DataFrame with 'transcript_id' and 'seq' columns.
+        """
+        sequences = []
+        transcript_id = None
+        seq = []
+        
+        with open(fasta_file, "r") as file:
+            for line in file:
+                line = line.strip()
+                if line.startswith(">"):  # Header line
+                    if transcript_id is not None:  # Save previous entry
+                        sequences.append((transcript_id, "".join(seq).replace("*", "")))  # Strip '*'
+                    # Extract transcript_id (substring before the first space)
+                    if gencode is False:
+                        transcript_id = line[1:].split(" ", 1)[0]
+                    else:
+                        transcript_id = line[1:].split("|")[1]
+                    seq = []  # Reset sequence
+                else:
+                    seq.append(line)  # Collect sequence lines
+
+        # Add the last sequence
+        if transcript_id is not None:
+            sequences.append((transcript_id, "".join(seq).replace("*", "")))  # Strip '*'
+        
+        # Convert to Polars DataFrame
+        df = pl.DataFrame(sequences, schema=["transcript_id", "seq"], orient="row")
+        return df
+
     def get_CDS_start_end_coord(transcript_seq, CDS_seq):
         
         # Find start position

@@ -1,9 +1,9 @@
 #!/usr/bin/env nextflow
 
 process runORFanage {
-
     label "short_slurm_job"
-    conda "/home/s/shreejoy/nxu/miniforge3/envs/patch_seq_spl"
+
+    conda "$moduleDir/environment.yml"
 
     input:
     path genome_fasta
@@ -16,14 +16,14 @@ process runORFanage {
 
     script:
     """
-    /home/s/shreejoy/nxu/miniforge3/envs/SQANTI3.env/bin/gffread \\
+    gffread \\
         -g $genome_fasta \\
         --adj-stop \\
         -T -F -J \\
         -o corrected.gtf \\
         $final_sample_gtf
 
-    /home/s/shreejoy/nxu/miniforge3/envs/patch_seq_spl/bin/orfanage \\
+    orfanage \\
         --reference $genome_fasta \\
         --query corrected.gtf \\
         --output orfanage_without_gene_id.gtf \\
@@ -32,7 +32,7 @@ process runORFanage {
         --stats orfanage.stats \\
         $annotation_gtf
 
-    /home/s/shreejoy/nxu/miniforge3/envs/SQANTI3.env/bin/gffread \\
+    gffread \\
         -g $genome_fasta \\
         --adj-stop \\
         -T -F -J -C \\
@@ -44,6 +44,8 @@ process runORFanage {
 process fixORFanageFormat {
     publishDir "${params.output_dir}/orfanage", mode: 'copy'
     label "short_slurm_job"
+
+    container "quay.io/biocontainers/agat:1.4.2--pl5321hdfd78af_0"
 
     input:
     path orfanage_gtf
@@ -61,8 +63,9 @@ process fixORFanageFormat {
 }
 
 process extractORFanageCdsFasta {
-
     label "short_slurm_job"
+
+    container "quay.io/biocontainers/agat:1.4.2--pl5321hdfd78af_0"
 
     input:
     path genome_fasta
@@ -81,6 +84,8 @@ process extractORFanageTranslationFasta {
     publishDir "${params.output_dir}/orfanage", mode: 'copy'
     label "short_slurm_job"
 
+    container "quay.io/biocontainers/agat:1.4.2--pl5321hdfd78af_0"
+
     input:
     path genome_fasta
     path orfanage_gtf
@@ -96,7 +101,8 @@ process extractORFanageTranslationFasta {
 
 process getBestOrfCsv {
     publishDir "${params.output_dir}/orfanage", mode: 'copy'
-    conda "/home/s/shreejoy/nxu/miniforge3/envs/patch_seq_spl"
+
+    conda "$moduleDir/environment.yml"
 
     input:
     path final_sample_classification
@@ -131,4 +137,17 @@ workflow ORFanage {
     predicted_cds_gtf = fixORFanageFormat.out
     peptide_fasta = extractORFanageTranslationFasta.out
     best_orf = getBestOrfCsv.out
+}
+
+workflow {
+
+    final_sample_gtf = "/scratch/s/shreejoy/nxu/SFARI/nextflow_results/V47/final_transcripts.gtf" 
+    final_sample_classification = "/scratch/s/shreejoy/nxu/SFARI/nextflow_results/V47/final_classification.parquet"
+    final_sample_fasta = "/scratch/s/shreejoy/nxu/SFARI/nextflow_results/V47/final_transcripts.fasta"
+
+    runORFanage(params.genome_fasta, params.annotation_gtf, final_sample_gtf)
+    fixORFanageFormat(runORFanage.out.orfanage_gtf, params.genome_fasta)
+    extractORFanageCdsFasta(params.genome_fasta, fixORFanageFormat.out)
+    extractORFanageTranslationFasta(params.genome_fasta, fixORFanageFormat.out)
+    getBestOrfCsv(final_sample_classification, final_sample_fasta, extractORFanageCdsFasta.out)
 }
