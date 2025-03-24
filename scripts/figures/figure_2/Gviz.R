@@ -1,83 +1,42 @@
----
-title: "Figure 2 - NF1 Locus"
-author: "Pan Zhang"
-execute:
-  cache: true
-editor: source
-editor_options:
-  chunk_output_type: console
----
-
-Required libraries
-
-```{r}
 library(Gviz)
 library(GenomicFeatures)
 library(GenomicRanges)
 library(GenomicInteractions)
+library(glue)
 library(rtracklayer)
 library(dplyr)
 library(data.table)
-```
 
-options
-
-```{r}
 options(stringsAsFactors = F)
 options(Gviz.scheme = "myScheme")
 options(ucscChromosomeNames = F)
-```
 
-global themes
+args <- commandArgs(trailingOnly = TRUE)
 
-```{r}
 scheme <- getScheme()
 scheme$GeneRegionTrack$col <- NULL
 addScheme(scheme, "myScheme")
-```
 
-prepare gencode
-
-```{r}
 gencode= paste0(Sys.getenv("GENOMIC_DATA_DIR"), "/GENCODE/gencode.v47.annotation.gtf")
 gencode_txdb=makeTxDbFromGFF(gencode, format="gtf")
 gencode_transcript=exonsBy(gencode_txdb,by="tx",use.names=T)
-```
 
-prepare isoseq
-
-```{r}
 isoseq="nextflow_results/V47/orfanage/orfanage.gtf"
 isoseq_txdb=makeTxDbFromGFF(isoseq, format="gtf")
-isoseq_transcript=exonsBy(isoseq_txdb,by="tx",use.names=T)
-```
+isoseq_transcript=exonsBy(isoseq_txdb,by="tx", use.names=T)
 
-Prepare peptide
-
-```{r}
 peptide_txdb <- makeTxDbFromGFF("nextflow_results/V47/orfanage/annot_peptides_hybrid.gtf", format="gtf")
 peptide_transcript=exonsBy(peptide_txdb,by="tx",use.names=T)
 peptide_annot <- rtracklayer::import("nextflow_results/V47/orfanage/annot_peptides_hybrid.gtf") %>% as_tibble()
-```
-genes of interest
 
-```{r}
+current_gene=args[1]
 genes_to_plot=read.delim("export/plotgene_transcripts_codingOnly.txt",header = F)
-
-current_gene="HSPD1"
 chr=unique(genes_to_plot$V1[genes_to_plot$V2 == current_gene])
 strd=unique(genes_to_plot$V4[genes_to_plot$V2 == current_gene])
-```
 
-GRange object for transcripts
-
-```{r}
 options(ucscChromosomeNames=FALSE)
-
 gencode_only=base::setdiff(with(genes_to_plot,V3[V2 == current_gene & V5=="gencode"]) , with(genes_to_plot,V3[V2 == current_gene & V5=="isoseq"]))
 shared=base::intersect(with(genes_to_plot,V3[V2 == current_gene & V5=="gencode"]) , with(genes_to_plot,V3[V2 == current_gene & V5=="isoseq"]))
-novel=base::setdiff(with(genes_to_plot,V3[V2 == current_gene & V5=="isoseq"]) , with(genes_to_plot,V3[V2 == current_gene & V5=="gencode"]))
-# novel = novel[c(1, 2, 3, 4)]
 
 peptides <- peptide_annot %>% 
   dplyr::filter(
@@ -97,13 +56,7 @@ gencode_only_track <- GeneRegionTrack(gencode_only_transcript_onegene, name="Kno
 # ranges(geneTrack)$feature <- as.character(ranges(geneTrack)$feature)
 ranges(gencode_only_track)$transcript <- rep("transcript", length(ranges(gencode_only_track)))
 
-
-# shared_transcript=gencode_transcript[shared,]
-# shared_transcript=unlist(shared_transcript)
-# elementMetadata(shared_transcript)$transcript=names(shared_transcript)
-# shared_track=GeneRegionTrack(shared_transcript,group = "transcript",name = "Gencode detected")
-
-novel <- "PB.16589.675"
+novel <- args[2]
 isoseq_transcript_onegene=isoseq_transcript[novel,]
 isoseq_transcript_onegene=unlist(isoseq_transcript_onegene)
 elementMetadata(isoseq_transcript_onegene)$transcript=names(isoseq_transcript_onegene)
@@ -112,44 +65,32 @@ isoseq_track=GeneRegionTrack(isoseq_transcript_onegene,group = "transcript",name
 peptide_onegene <- peptide_transcript[peptides,]
 peptide_onegene <- unlist(peptide_onegene)
 elementMetadata(peptide_onegene)$transcript=names(peptide_onegene)
-peptide_track=GeneRegionTrack(peptide_onegene,group = "transcript",name = "Peptides")
-```
+peptide_track=GeneRegionTrack(peptide_onegene,group = "transcript",name = "Novel\nPeptides")
 
-DisplayPars
-
-```{r}
 displayPars(gencode_only_track)=list(
   stacking="squish",
-  background.panel = "#ffffb2",
-  fill="#006d2c",
-  col="#006d2c",
+  background.panel="transparent",
+  fill="#009E73",
+  col="#009E73",
   lwd=0.3,
   col.line="black",
   fontcolor.title="black",
   background.title="#d1861d")
-displayPars(shared_track)=list(
-  stacking="squish",
-  background.panel = "#f1eef6",
-  fill="#d62424",
-  col="#d62424",
-  lwd=0.3,
-  col.line="black",
-  fontcolor.title="black",
-  background.title="#756e72")
+
 displayPars(isoseq_track)=list(
   stacking="squish",
-  background.panel = "#bcbddc",
-  fill="#171cc7",
-  col="#171cc7",
+  fill="#E69F00",
+  col="#E69F00",
   lwd=0.3,
   col.line="black",
   showId = TRUE,
+  background.panel="transparent",
   transcriptAnnotation = "transcript",
   fontcolor.title="black",
   background.title="#045a8d")
 displayPars(peptide_track)=list(
   stacking="squish",
-  background.panel = "#fee0d2",
+  background.panel="transparent",
   fill="black",
   col="black",
   lwd=0.3,
@@ -159,28 +100,17 @@ displayPars(peptide_track)=list(
   fontcolor.title="black",
   background.title="#ef6548"
   )                               
-```
 
-universal tracks
-
-```{r}
 axisTrack <- GenomeAxisTrack()
-ideoTrack <- IdeogramTrack(genome = "hg19", chromosome = chr)
-```
+ideoTrack <- IdeogramTrack(genome = "hg38", chromosome = chr)
 
-find plot range
-
-```{r}
 leftmost=min(c(gencode_only_transcript_onegene@ranges@start,isoseq_transcript_onegene@ranges@start))
 rightmost=max(c(gencode_only_transcript_onegene@ranges@start,isoseq_transcript_onegene@ranges@start))
-```
 
-plot
-
-```{r}
 extra=(rightmost - leftmost)*0.05
 
-pdf("figures/figure_2/genome_track_HSPD1.pdf", width = 9, height = 3)
+
+pdf(glue("figures/figure_2/genome_track_{current_gene}.pdf"), width = 9, height = 3)
 plotTracks(
   list(ideoTrack,axisTrack,gencode_only_track,isoseq_track, peptide_track),
   chromosome = chr,
@@ -191,4 +121,3 @@ plotTracks(
     )
   )
 dev.off()
-```
