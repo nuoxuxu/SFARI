@@ -1,6 +1,7 @@
 library(arrow)
 library(readr)
 library(dplyr)
+library(ggplot2)
 
 colorVector <- c(
     "FSM" = "#009E73",
@@ -104,3 +105,23 @@ ggsave("figures/supplementary/long_read_saturation_y_percentage.pdf", width = 4,
 
 plot_saturation(sum_to_100 = TRUE)
 ggsave("figures/supplementary/long_read_saturation_y_number.pdf", width = 4, height = 3)
+
+df <- tibble(
+    x = seq(0, 1, 0.01),
+    y = sapply(x, function(x) get_n_isoforms(full_expression, x))
+)
+total_n_tx <- full_expression %>%
+    filter(rowSums(across(everything(), ~ . > 5)) > 2) %>%
+    nrow()
+df %>%
+    mutate(
+        y = y / filter(df, x == 1)$y * 100
+    ) %>% 
+    ggplot(aes(x, y)) +
+    geom_line() +
+    # scale_y_continuous(labels = function(x) x / 1000) +
+    labs(
+        x = "Percentage of subsampled reads",
+        y = "Percentage of transcripts"
+    )
+ggsave("figures/supplementary/long_read_saturation_all.pdf", width = 4, height = 3)
