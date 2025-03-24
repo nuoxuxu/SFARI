@@ -1,6 +1,8 @@
 #!/usr/bin/env nextflow
 
 process pigeonPrepare {
+    conda "${moduleDir}/environment.yml"
+
     input:
     path isoform_gff
     path annotation_gtf
@@ -21,6 +23,8 @@ process pigeonPrepare {
 
 process pigeonClassify {
     label "short_slurm_job"
+
+    conda "${moduleDir}/environment.yml"
     
     input:
     path sorted_isoform_gff
@@ -44,6 +48,8 @@ process pigeonClassify {
 
 process pigeonFilter {
     publishDir "${params.output_dir}", mode: 'copy'
+
+    conda "${moduleDir}/environment.yml"
     
     input:
     path classification
@@ -66,9 +72,10 @@ process pigeonFilter {
 }
 
 process filterByExpression {
-    conda "/home/s/shreejoy/nxu/miniforge3/envs/patch_seq_spl"
     label "short_slurm_job"
     publishDir "${params.output_dir}", mode: 'copy'
+
+    conda "${moduleDir}/environment.yml"
 
     input:
     path annotation_gtf
@@ -84,8 +91,7 @@ process filterByExpression {
     path "final_classification.parquet", emit: final_sample_classification
     path "final_transcripts.gtf", emit: final_sample_gtf
     path "final_expression.parquet", emit: final_sample_expression
-    path "fulll_expression.parquet"
-    path "final_transcripts.fasta", emit: final_sample_fasta
+    path "full_expression.parquet"
     
     script:
     """
@@ -100,8 +106,22 @@ process filterByExpression {
         --classification_output "final_classification.parquet" \\
         --gtf_output "final_transcripts.gtf" \\
         --expression_output "final_expression.parquet"
+    """
+}
 
-    ~/miniforge3/envs/SQANTI3.env/bin/gffread -w final_transcripts.fasta -g $genome_fasta "final_transcripts.gtf"
+process extractTranscriptFasta {
+    conda "${moduleDir}/environment.yml"
+
+    input:
+    path final_sample_gtf
+    path genome_fasta
+
+    output:
+    path "final_transcripts.fasta", emit: final_sample_fasta
+
+    script:
+    """
+    gffread -w final_transcripts.fasta -g $genome_fasta $final_sample_gtf
     """
 }
 
@@ -110,13 +130,24 @@ workflow classify_and_count {
     isoform_gff
     id_to_sample
     read_stat
+
     main:
     pigeonPrepare(isoform_gff, params.annotation_gtf, params.genome_fasta)
     pigeonClassify(pigeonPrepare.out.sorted_isoform_gff, pigeonPrepare.out.sorted_isoform_gff_pgi, pigeonPrepare.out.sorted_annotation, pigeonPrepare.out.sorted_annotation_gtf_pgi, params.genome_fasta, pigeonPrepare.out.reference_fasta_pgi)
     pigeonFilter(pigeonClassify.out.classification, pigeonClassify.out.junctions, pigeonPrepare.out.sorted_isoform_gff)
-    filterByExpression(params.annotation_gtf, params.genome_fasta, id_to_sample, pigeonFilter.out.filtered_classification, read_stat, pigeonFilter.out.filtered_gff, params.min_reads, params.min_n_sample)    
+    filterByExpression(params.annotation_gtf, params.genome_fasta, id_to_sample, pigeonFilter.out.filtered_classification, read_stat, pigeonFilter.out.filtered_gff, params.min_reads, params.min_n_sample)
+    extractTranscriptFasta(filterByExpression.out.final_sample_gtf, params.genome_fasta)
+
     emit:
     final_sample_gtf = filterByExpression.out
     final_sample_classification = filterByExpression.out.final_sample_classification
-    final_sample_fasta = filterByExpression.out.final_sample_fasta
+    final_sample_fasta = extractTranscriptFasta.out.final_sample_fasta
+}
+
+workflow {
+    pigeonPrepare(params.isoform_gff, params.annotation_gtf, params.genome_fasta)
+    pigeonClassify(pigeonPrepare.out.sorted_isoform_gff, pigeonPrepare.out.sorted_isoform_gff_pgi, pigeonPrepare.out.sorted_annotation, pigeonPrepare.out.sorted_annotation_gtf_pgi, params.genome_fasta, pigeonPrepare.out.reference_fasta_pgi)
+    pigeonFilter(pigeonClassify.out.classification, pigeonClassify.out.junctions, pigeonPrepare.out.sorted_isoform_gff)
+    filterByExpression(params.annotation_gtf, params.genome_fasta, params.id_to_sample, pigeonFilter.out.filtered_classification, params.read_stat, pigeonFilter.out.filtered_gff, params.min_reads, params.min_n_sample)
+    extractTranscriptFasta(filterByExpression.out.final_sample_gtf, params.genome_fasta)
 }
