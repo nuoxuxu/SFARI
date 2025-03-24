@@ -85,8 +85,9 @@ workflow merge_and_collapse {
 }
 
 workflow {
-    getIDToSample(params.flnc_bam)
+    getIDToSample(Channel.fromPath(params.flnc_bam))
     Channel.fromPath(params.mapped_bam).collect().set { bamFiles }
     mergeBamFiles(bamFiles)
     isoseqCollapse(mergeBamFiles.out)
+    
 }
