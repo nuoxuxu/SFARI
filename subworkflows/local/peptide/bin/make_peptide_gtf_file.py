@@ -1,11 +1,22 @@
-#!/home/s/shreejoy/nxu/miniforge3/envs/patch_seq_spl/bin/python
-import polars as pl
-from collections import defaultdict, namedtuple
-from Bio import SeqIO
-import pandas as pd
+#!/bin/env python
+from collections import defaultdict
 import copy
 import argparse
-from src.utils import read_gtf
+from Bio import SeqIO
+import pandas as pd
+import polars as pl
+
+def read_gtf(file, attributes=["transcript_id"], keep_attributes=True):
+    if keep_attributes:
+        return pl.read_csv(file, separator="\t", comment_prefix="#", schema_overrides = {"seqname": pl.String}, has_header = False, new_columns=["seqname","source","feature","start","end","score","strand","frame","attributes"])\
+            .with_columns(
+                [pl.col("attributes").str.extract(rf'{attribute} "([^;]*)";').alias(attribute) for attribute in attributes]
+                )
+    else:
+        return pl.read_csv(file, separator="\t", comment_prefix="#", schema_overrides = {"seqname": pl.String}, has_header = False, new_columns=["seqname","source","feature","start","end","score","strand","frame","attributes"])\
+            .with_columns(
+                [pl.col("attributes").str.extract(rf'{attribute} "([^;]*)";').alias(attribute) for attribute in attributes]
+                ).drop("attributes")
 
 def read_fasta(fasta_file):
     seqs = defaultdict()
@@ -74,7 +85,7 @@ def process_gtf(gtf):
     return pbs
 
 def read_reference_gtf(gtf_file):
-    gtf = pd.read_table(gtf_file, skiprows=5, header=None)
+    gtf = pd.read_table(gtf_file, skiprows=5, header=None, comment='#')
     gtf = gtf[[0, 2, 3, 4, 6, 8]]
     gtf.columns = ['chr', 'feat', 'start', 'end', 'strand', 'acc']
     gtf = gtf.loc[gtf['feat']=='CDS']
@@ -84,7 +95,7 @@ def read_reference_gtf(gtf_file):
     return gtf
 
 def read_sample_gtf(gtf_file):
-    gtf = pd.read_table(gtf_file, skiprows=1, header=None)
+    gtf = pd.read_table(gtf_file, skiprows=1, header=None, comment='#')
     gtf = gtf[[0, 2, 3, 4, 6, 8]]
     gtf.columns = ['chr', 'feat', 'start', 'end', 'strand', 'acc']
     gtf = gtf.loc[gtf['feat']=='CDS']
@@ -214,3 +225,4 @@ if __name__ == "__main__":
     sample_gtf = read_sample_gtf(params.predicted_cds_gtf)
     reference_gtf = read_reference_gtf(params.annotation_gtf)
     pbs = process_gtf(pd.concat([sample_gtf, reference_gtf], ignore_index=True))
+    write_peptide_gtf(params.output, pep_ranges.to_pandas(), pbs)

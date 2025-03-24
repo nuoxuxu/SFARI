@@ -1,5 +1,7 @@
 process peptideTrackUCSC {
-    conda "/home/s/shreejoy/nxu/miniforge3/envs/patch_seq_spl"
+    
+    conda "$moduleDir/environment.yml"
+    
     input:
     val mode
     path annotation_gtf
@@ -24,9 +26,9 @@ process peptideTrackUCSC {
 }
 
 process addPeptideAnnotation {
-    conda "/home/s/shreejoy/nxu/miniforge3/envs/patch_seq_spl"
     publishDir "${params.output_dir}/${params.orf_prediction}", mode: 'copy'
-    conda
+    
+    conda "$moduleDir/environment.yml"
 
     input:
     val mode
@@ -55,6 +57,16 @@ workflow peptide {
     protein_search_database
     peptides
     main:
+    peptideTrackUCSC(params.searchDB, params.annotation_gtf, final_sample_classification, predicted_cds_gtf, protein_search_database, peptides)
+    addPeptideAnnotation(params.searchDB, params.annotation_gtf, predicted_cds_gtf, peptideTrackUCSC.out)
+}
+
+workflow {
+    final_sample_classification = "/scratch/s/shreejoy/nxu/SFARI/nextflow_results/V47/final_classification.parquet"
+    predicted_cds_gtf = "/scratch/s/shreejoy/nxu/SFARI/nextflow_results/V47/orfanage/orfanage.gtf"
+    protein_search_database = "/scratch/s/shreejoy/nxu/SFARI/nextflow_results/V47/orfanage/hybrid.fasta"
+    peptides = "/scratch/s/shreejoy/nxu/SFARI/nextflow_results/V47/orfanage/hybrid_percolator.tsv"
+
     peptideTrackUCSC(params.searchDB, params.annotation_gtf, final_sample_classification, predicted_cds_gtf, protein_search_database, peptides)
     addPeptideAnnotation(params.searchDB, params.annotation_gtf, predicted_cds_gtf, peptideTrackUCSC.out)
 }
