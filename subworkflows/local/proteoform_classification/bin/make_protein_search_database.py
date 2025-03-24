@@ -27,7 +27,7 @@ def main():
     if params.mode == "hybrid":
         novel_pbids = protein_classification\
             .join(
-                isoforms_to_proteoforms.rename({"transcript_id": "pb"}),
+                isoforms_to_proteoforms.rename({"isoform": "pb"}),
                 on = "pb",
                 how = "left"
             )\
