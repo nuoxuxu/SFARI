@@ -1,24 +1,22 @@
 #!/bin/sh
-mamba deactivate
-module load NiaEnv/2019b python/3.11.5
-source .virtualenvs/DeepTMHMM/bin/activate
+if [ "$(hostname)" == "xunuos-MacBook-Air.local" ]; then
+  mamba activate deeptmhmm
+else
+  mamba deactivate
+  module load NiaEnv/2019b python/3.11.5
+  source .virtualenvs/DeepTMHMM/bin/activate
+fi
 
-DIRECTORY="DeepTMHMM_input"
-i=0
+DIRECTORY="assets/DeepTMHMM_input"
 
 for file in "$DIRECTORY"/*
 do
-  i=$((i+1))  # Increment the counter
+  i="${file##*_}"
   echo "File #$i: $file"
-  if [ "$i" -gt 6 ]; then
-    if [ "$(hostname)" == "xunuos-MacBook-Air.local" ]; then
-      biolib run --local 'DTU/DeepTMHMM:1.0.24' --fasta "${file}"
-      mv "biolib_results" "export/DeepTMHMM_outputs/${i}_output"
-    else
-      biolib run DTU/DeepTMHMM --fasta "${file}"
-      mv "biolib_results" "export/DeepTMHMM_outputs/${i}_output"
-    fi
+  if [ -d "export/DeepTMHMM_outputs/${i}_output" ]; then
+    echo "Skipping $file (alread processed)"
   else
-    echo "Skipping $file (i <= 6)"
+    biolib run DTU/DeepTMHMM --fasta "${file}"
+    mv "biolib_results" "export/DeepTMHMM_outputs/${i}_output"
   fi    
 done
