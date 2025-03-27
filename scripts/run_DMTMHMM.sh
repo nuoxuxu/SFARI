@@ -1,9 +1,13 @@
 #!/bin/sh
-if [ "$(hostname)" == "xunuos-MacBook-Air.local" ]; then
-  mamba activate deeptmhmm
-else
+export BIOLIB_LOG="debug"
+if [[ "$(hostname)" == nia* ]]; then
+  echo "We are on Niagara"
   mamba deactivate
   module load NiaEnv/2019b python/3.11.5
+  source .virtualenvs/DeepTMHMM/bin/activate  
+else
+  echo "We are on narval"
+  module load python/3.11.5
   source .virtualenvs/DeepTMHMM/bin/activate
 fi
 
