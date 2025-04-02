@@ -114,80 +114,73 @@ peptide_mapping <- peptide_mapping %>%
         join_by(pb == pb)
     )
 
-plot_percent_validated <- function(peptide_mapping) {
-    all <- peptide_mapping %>% 
-        distinct(pb) %>% 
-        nrow()
-
-    detected <- peptide_mapping %>% 
-        filter(detected == "True") %>%
-        distinct(pb) %>% 
-        nrow()
-
-    undetected <- all - detected
-
-    p1 <- tibble(
-        is_detected = c(TRUE, FALSE),
-        len = c(detected, undetected)
-        ) %>% 
-        mutate(
-            percent = len / sum(len) * 100, # calculate percentage over all groups
-            type = "known" # add literal column type
-        ) %>% 
-        arrange(desc(is_detected)) %>%
-        mutate(ypos = cumsum(percent) - 0.5 * percent) %>% 
-        ggplot(aes(x="", y=percent, fill=is_detected)) +
-        geom_bar(width=1, stat="identity", color = "white") +
-        coord_polar("y", start=0) +
-        theme_void() +
-        geom_text(aes(y = ypos, label = sprintf("%.1f%%", percent)), color = "white", size = 9) +
-        theme(
-            legend.position = "none"
-        )    
-
-    # Plot percentage of transcripts that are validated by novel peptides only
-
-    all <- peptide_mapping %>% 
-        filter(GENCODE == FALSE) %>%
-        distinct(pb) %>% 
-        nrow()
-
-    detected <- peptide_mapping %>% 
-        filter(GENCODE == FALSE) %>%
-        filter(detected == "True") %>%
-        distinct(pb) %>% 
-        nrow()
-
-    undetected <- all - detected
-
-    p2 <- tibble(
-        is_detected = c(TRUE, FALSE),
-        len = c(detected, undetected)
-        ) %>% 
-        mutate(
-            percent = len / sum(len) * 100, # calculate percentage over all groups
-            type = "known" # add literal column type
-        ) %>% 
-        arrange(desc(is_detected)) %>%
-        mutate(ypos = cumsum(percent) - 0.5 * percent) %>% 
-        ggplot(aes(x="", y=percent, fill=is_detected)) +
-        geom_bar(width=1, stat="identity", color = "white") +
-        coord_polar("y", start=0) +
-        theme_void() +
-        geom_text(aes(y = ypos, label = sprintf("%.1f%%", percent)), color = "white", size = 9) +
-        theme(
-            legend.position = "none"
-        )    
-
-    p1 + p2    
-}
-
-peptide_mapping %>% 
+all <- peptide_mapping %>% 
+    filter(!GENCODE) %>% 
     filter(protein_classification_base == "pNNC") %>%
-    plot_percent_validated()
-ggsave("figures/figure_2/validation_by_peptide_pNNC.pdf", width = 10, height = 5)
+    distinct(pb) %>% 
+    nrow()
 
-peptide_mapping %>% 
+detected <- peptide_mapping %>% 
+    filter(!GENCODE) %>% 
+    filter(protein_classification_base == "pNNC") %>%
+    filter(detected == "True") %>%
+    distinct(pb) %>% 
+    nrow()
+
+undetected <- all - detected
+
+p1 <- tibble(
+    is_detected = c(TRUE, FALSE),
+    len = c(detected, undetected)
+    ) %>% 
+    mutate(
+        percent = len / sum(len) * 100, # calculate percentage over all groups
+        type = "known" # add literal column type
+    ) %>% 
+    arrange(desc(is_detected)) %>%
+    mutate(ypos = cumsum(percent) - 0.5 * percent) %>% 
+    ggplot(aes(x="", y=percent, fill=is_detected)) +
+    geom_bar(width=1, stat="identity", color = "white") +
+    coord_polar("y", start=0) +
+    theme_void() +
+    geom_text(aes(y = ypos, label = sprintf("%.1f%%", percent)), color = "white", size = 9) +
+    theme(
+        legend.position = "none"
+    )    
+
+# Plot percentage of transcripts that are validated by novel peptides only
+
+all <- peptide_mapping %>% 
+    filter(GENCODE == FALSE) %>%
     filter(protein_classification_base == "pNIC") %>%
-    plot_percent_validated()
-ggsave("figures/figure_2/validation_by_peptide_pNIC.pdf", width = 10, height = 5)
+    distinct(pb) %>% 
+    nrow()
+
+detected <- peptide_mapping %>% 
+    filter(GENCODE == FALSE) %>%
+    filter(protein_classification_base == "pNIC") %>%
+    filter(detected == "True") %>%
+    distinct(pb) %>% 
+    nrow()
+
+undetected <- all - detected
+
+p2 <- tibble(
+    is_detected = c(TRUE, FALSE),
+    len = c(detected, undetected)
+    ) %>% 
+    mutate(
+        percent = len / sum(len) * 100, # calculate percentage over all groups
+        type = "known" # add literal column type
+    ) %>% 
+    arrange(desc(is_detected)) %>%
+    mutate(ypos = cumsum(percent) - 0.5 * percent) %>% 
+    ggplot(aes(x="", y=percent, fill=is_detected)) +
+    geom_bar(width=1, stat="identity", color = "white") +
+    coord_polar("y", start=0) +
+    theme_void() +
+    geom_text(aes(y = ypos, label = sprintf("%.1f%%", percent)), color = "white", size = 9)
+
+p1 + p2
+
+ggsave("figures/figure_2/validation_by_novel_peptides.pdf", width = 10, height = 5)

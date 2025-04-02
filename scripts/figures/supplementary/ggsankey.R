@@ -65,4 +65,4 @@ protein_class %>%
     ) +
     geom_text(stat = "stratum", aes(label = after_stat(stratum)), size = 3) +
     ggtitle("Transcript and Protein Classification")
-ggsave("figures/figure_2/sankey.pdf", width = 6, height = 5)
+ggsave("figures/supplementary/sankey.pdf", width = 6, height = 5)
