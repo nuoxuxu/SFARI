@@ -7,19 +7,26 @@ library(arrow)
 library(dplyr)
 library(RColorBrewer)
 library(pheatmap)
+library(reticulate)
+
+classification <- read_parquet("nextflow_results/V47/final_classification.parquet")
+
+# Get short-read count matrix
 
 txdb <- makeTxDbFromGFF("nextflow_results/V47/final_transcripts.gtf")
 
-tx2gene <- select(txdb, keys = transcripts(txdb)$tx_name, columns = "GENEID", keytype = "TXNAME")
+tx2gene <- AnnotationDbi::select(txdb, keys = transcripts(txdb)$tx_name, columns = "GENEID", keytype = "TXNAME")
 
 files <- Sys.glob("nextflow_results/salmon_results/*/quant.sf")
 
 names(files) <- str_split(files, "/") %>%
     map_chr(3)
 
-txi <- tximport(files, type = "salmon", tx2gene = tx2gene, countsFromAbundance = "scaledTPM", txOut = TRUE, txIdCol = "isoform")
+txi <- tximport(files, type = "salmon", tx2gene = tx2gene, txOut = TRUE, txIdCol = "isoform")
 
 sr_expression <- txi$counts %>% as_tibble(rownames = "isoform")
+
+# Get long-read count matrix
 
 lr_expression <- read_parquet("nextflow_results/V47/final_expression.parquet") %>% 
     rename(
@@ -29,15 +36,21 @@ lr_expression <- read_parquet("nextflow_results/V47/final_expression.parquet") %
         CN_1_2 = CN_1_3
     )
 
-cor_matrix <- sr_expression %>%
-    left_join(lr_expression, join_by(isoform == isoform), suffix = c("", "_illumina")) %>%
-    select(where(is.numeric)) %>%
+# Get correlation matrix
+
+cor_matrix <- lr_expression %>%
+    left_join(sr_expression, join_by(isoform == isoform), suffix = c("", "_illumina")) %>%
+    left_join(select(classification, c(structural_category, isoform)), join_by(isoform == isoform)) %>% 
+    filter(structural_category=="full-splice_match") %>% 
+    dplyr::select(where(is.numeric)) %>%
     cor()
 
 sample_names <- c("iPSC_1", "iPSC_2", "iPSC_3", "CN_1_1", "CN_1_2", "CN_2_1", "CN_2_2", "CN_3_1", "CN_3_2", "NPC_1_1", "NPC_1_2", "NPC_2_1", "NPC_2_2", "NPC_3_1", "NPC_3_2")
 sample_names <- c(sample_names, str_c(sample_names, "_illumina"))
 
 cor_matrix <- cor_matrix[sample_names, sample_names]
+
+# Plotting using pheatmap
 
 annotation <- data.frame(
     row.names = rownames(cor_matrix),
