@@ -2,6 +2,9 @@ library(reticulate)
 library(dplyr)
 library(ggplot2)
 library(patchwork)
+library(Rsamtools)
+
+#-------------------------------------Get annotated long-read splice junctions----------------------------
 
 py_run_string("
 from src.utils import read_gtf, read_SJ, gtf_to_SJ
@@ -28,7 +31,7 @@ LR_SJ = (
 
 gencode_V47_SJ = (
     read_gtf(''.join([os.getenv('GENOMIC_DATA_DIR'), '/GENCODE/gencode.v47.annotation.gtf']))
-    .filter(pl.col('feature') == 'exon')
+    .filter(pl.col('feature') == 'CDS')
     .pipe(gtf_to_SJ)
 )
 
@@ -62,9 +65,23 @@ LR_SJ_novel = (
 )
 ")
 
-LR_SJ_novel <- as_tibble(py$LR_SJ_novel$to_pandas())
+LR_SJ <- as_tibble(py$LR_SJ_novel$to_pandas()) %>% distinct(start, end, chrom, strand, .keep_all = TRUE)
+
+#-------------------------------------Get annotated long-read exons----------------------------
+
+ribo <- BamFile("data/riboseq/merged.sorted.bam") %>% 
+    scanBam(param = ScanBamParam(what = c("pos", "rname", "strand", "qwidth")))
+
+ribo <- GRanges(
+    seqnames = Rle(ribo[[1]]$rname), 
+    ranges = IRanges(start = ribo[[1]]$pos, 
+    width = ribo[[1]]$qwidth), 
+    strand = ribo[[1]]$strand
+    ) %>% 
+    unique()
 
 df_p1 <- LR_SJ_novel %>%
+    distinct(start, end, chrom, strand, .keep_all = TRUE) %>% 
     filter(LR, GENCODE) %>%
     count(SR, name = "len") %>%
     mutate(
@@ -77,6 +94,7 @@ df_p1 <- LR_SJ_novel %>%
     mutate(ypos = cumsum(percent) - 0.5 * percent)
 
 df_p2 <- LR_SJ_novel %>%
+    distinct(start, end, chrom, strand, .keep_all = TRUE) %>% 
     filter(LR, !GENCODE) %>%
     count(SR, name = "len") %>%
     mutate(
