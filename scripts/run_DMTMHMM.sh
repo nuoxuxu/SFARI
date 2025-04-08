@@ -11,16 +11,16 @@ else
   source .virtualenvs/DeepTMHMM/bin/activate
 fi
 
-DIRECTORY="assets/DeepTMHMM_input"
+DIRECTORY="assets/DeepTMHMM_input_new"
 
 for file in "$DIRECTORY"/*
 do
   i="${file##*_}"
   echo "File #$i: $file"
-  if [ -d "export/DeepTMHMM_outputs/${i}_output" ]; then
+  if [ -d "export/DeepTMHMM_outputs_new/${i}_output" ]; then
     echo "Skipping $file (alread processed)"
   else
     biolib run DTU/DeepTMHMM --fasta "${file}"
-    mv "biolib_results" "export/DeepTMHMM_outputs/${i}_output"
+    mv "biolib_results" "export/DeepTMHMM_outputs_new/${i}_output"
   fi    
 done
