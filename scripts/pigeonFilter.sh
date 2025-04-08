@@ -1,1 +1,0 @@
-sbatch -t 0-5:0 -N 1 -n 1 -J pigeonFilter -o slurm_logs/pigeonFilter.out --wrap="~/miniforge3/envs/SQANTI3.env/bin/pigeon filter --isoforms proc/merged_collapsed.sorted.gff -j 40 proc/merged_collapsed_classification.txt"
