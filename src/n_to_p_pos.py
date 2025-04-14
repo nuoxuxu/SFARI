@@ -4,32 +4,33 @@ from Bio import SeqIO
 from Bio.Seq import Seq
 import random
 
-records = list(SeqIO.parse("/project/s/shreejoy/Genomic_references/GENCODE/GRCh38.primary_assembly.genome.fa", "fasta"))
-
-orfanage_CDS = read_gtf("nextflow_results/V47/orfanage/orfanage.gtf")\
-    .filter(feature="CDS")
-
-pep_dict = read_fasta("nextflow_results/V47/orfanage/orfanage_peptide_formatted.fasta")\
-    .to_pandas()\
-    .set_index("transcript_id")\
-    .to_dict()["seq"]
-
-CDS_coords = orfanage_CDS\
-    .sort("transcript_id", "start")\
-    .with_columns(
-        pl.struct(["start", "end"]).
-        map_elements(lambda s: range(s["start"]-1, s["end"]), return_dtype=pl.List(pl.Int64)).alias("coords")
-    )\
-    .group_by("transcript_id")\
-    .agg(
-        pl.col("coords").flatten()
-    )
-
-def get_nucleotide_pos(query_seq, pb_id):
+def get_nucleotide_pos(genome_fasta, peptide_fasta, CDS_gtf, query_seq, pb_id):
     """
     Get the nucleotide positions of a peptide sequence in a protein coding gene.
     """
+
     # Find the start and end indices of the peptide sequence in the protein coding gene
+    records = list(SeqIO.parse(genome_fasta, "fasta"))
+
+    orfanage_CDS = read_gtf(CDS_gtf)\
+        .filter(feature="CDS")
+
+    pep_dict = read_fasta(peptide_fasta)\
+        .to_pandas()\
+        .set_index("transcript_id")\
+        .to_dict()["seq"]
+
+    CDS_coords = orfanage_CDS\
+        .sort("transcript_id", "start")\
+        .with_columns(
+            pl.struct(["start", "end"]).
+            map_elements(lambda s: range(s["start"]-1, s["end"]), return_dtype=pl.List(pl.Int64)).alias("coords")
+        )\
+        .group_by("transcript_id")\
+        .agg(
+            pl.col("coords").flatten()
+        )
+    
     pep_seq = pep_dict[pb_id]
     chromosome = orfanage_CDS\
         .filter(pl.col("transcript_id")==pb_id)\
