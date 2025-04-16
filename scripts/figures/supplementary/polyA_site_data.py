@@ -2,7 +2,10 @@ import polars as pl
 from src.utils import read_gtf
 
 classification = pl.read_parquet("nextflow_results/V47/final_classification.parquet")
-polyA_site = pl.read_csv("data/atlas.clusters.2.0.GRCh38.96.bed", separator="\t", new_columns=["seqname", "start", "end", "name", "score", "strand"], schema_overrides={"seqname": pl.String})\
+polyA_site = pl.read_csv(
+    "data/atlas.clusters.2.0.GRCh38.96.bed", 
+    separator="\t", new_columns=["seqname", "start", "end", "name", "score", "strand"], 
+    schema_overrides={"seqname": pl.String})\
     .with_columns(
         pl.col("seqname").map_elements(lambda x: "".join(["chr", x]), return_dtype=pl.String).alias("seqname")
     )
@@ -24,14 +27,11 @@ validated_pbids = gtf\
             .then(pl.col("end"))\
             .otherwise(pl.col("start"))
     )\
-    .join(
+    .join_where(
         polyA_site,
-        on = "seqname",
-        how = "inner"
-    )\
-    .filter(
-        (pl.col("start") <= pl.col("pos")) &
-        (pl.col("end")   >= pl.col("pos"))
+        (pl.col("seqname") == pl.col("seqname")) &
+        (pl.col("pos") >= pl.col("start")) &
+        (pl.col("pos") <= pl.col("end"))
     )\
     .unique("transcript_id")\
     .select("transcript_id")
@@ -59,12 +59,3 @@ classification\
     ]).with_columns(
         (pl.col("true_len") / pl.col("total_len") * 100).alias("polyA_site_percentage")
     ).write_csv("data/structural_category_polyA_site_percentage.csv")
-
-
-
-
-
-
-
-
-

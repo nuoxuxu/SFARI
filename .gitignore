@@ -28,3 +28,7 @@ transcript_vis_app/*.csv
 
 # Ignore .DS_Store
 .DS_Store
+
+.virtualenvs/
+assets/
+envs/
