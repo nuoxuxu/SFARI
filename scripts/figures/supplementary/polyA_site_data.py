@@ -4,22 +4,15 @@ from src.utils import read_gtf
 classification = pl.read_parquet("nextflow_results/V47/final_classification.parquet")
 polyA_site = pl.read_csv(
     "data/atlas.clusters.2.0.GRCh38.96.bed", 
-    separator="\t", new_columns=["seqname", "start", "end", "name", "score", "strand"], 
-    schema_overrides={"seqname": pl.String})\
+    separator="\t", new_columns=["chrom", "start", "end", "name", "score", "strand"], 
+    schema_overrides={"chrom": pl.String})\
     .with_columns(
-        pl.col("seqname").map_elements(lambda x: "".join(["chr", x]), return_dtype=pl.String).alias("seqname")
+        pl.col("chrom").map_elements(lambda x: "".join(["chr", x]), return_dtype=pl.String).alias("chrom")
     )
 gtf = read_gtf("nextflow_results/V47/final_transcripts.gtf")
 
 validated_pbids = gtf\
-    .filter(pl.col("feature")=="exon")\
-    .group_by("transcript_id")\
-    .agg(
-        pl.col("seqname").map_elements(lambda x : x[0], return_dtype=pl.String),
-        pl.col("strand").map_elements(lambda x : x[0], return_dtype=pl.String),
-        pl.col("start").min(),
-        pl.col("end").max()
-    )\
+    .filter(pl.col("feature")=="transcript")\
     .select(
         pl.col("seqname"),
         pl.col("transcript_id"),
@@ -29,12 +22,12 @@ validated_pbids = gtf\
     )\
     .join_where(
         polyA_site,
-        (pl.col("seqname") == pl.col("seqname")) &
         (pl.col("pos") >= pl.col("start")) &
         (pl.col("pos") <= pl.col("end"))
     )\
-    .unique("transcript_id")\
-    .select("transcript_id")
+    .filter(
+        pl.col("seqname")==pl.col("chrom")
+    )
 
 classification\
     .with_columns(

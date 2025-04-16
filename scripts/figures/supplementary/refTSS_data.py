@@ -1,20 +1,12 @@
 import polars as pl
-import seaborn as sns
 from src.utils import read_gtf
 
 classification = pl.read_parquet("nextflow_results/V47/final_classification.parquet")
-reftss = pl.read_csv("data/liftovered_mm39_to_hg38_peaks_overlapped_reftss_hg38_500bp.bed", separator="\t", has_header = False, new_columns=["seqname", "start", "end", "name", "score", "strand"])
+reftss = pl.read_csv("data/liftovered_mm39_to_hg38_peaks_overlapped_reftss_hg38_500bp.bed", separator="\t", has_header = False, new_columns=["chrom", "start", "end", "name", "score", "strand"])
 gtf = read_gtf("nextflow_results/V47/final_transcripts.gtf")
 
 validated_pbids = gtf\
-    .filter(pl.col("feature")=="exon")\
-    .group_by("transcript_id")\
-    .agg(
-        pl.col("seqname").map_elements(lambda x : x[0], return_dtype=pl.String),
-        pl.col("strand").map_elements(lambda x : x[0], return_dtype=pl.String),
-        pl.col("start").min(),
-        pl.col("end").max()
-    )\
+    .filter(pl.col("feature")=="transcript")\
     .select(
         pl.col("seqname"),
         pl.col("transcript_id"),
@@ -22,17 +14,14 @@ validated_pbids = gtf\
             .then(pl.col("start"))\
             .otherwise(pl.col("end"))
     )\
-    .join(
+    .join_where(
         reftss,
-        on = "seqname",
-        how = "inner"
-    )\
-    .filter(
-        (pl.col("start") <= pl.col("pos") + 100) &
-        (pl.col("end")   >= pl.col("pos") - 100)
+        (pl.col("seqname") == pl.col("chrom")) &
+        (pl.col("pos") >= (pl.col("start")-100)) &
+        (pl.col("pos") <= (pl.col("end")+100))
     )\
     .unique("transcript_id")\
-    .select("transcript_id")
+    ["transcript_id"].to_list()
 
 classification\
     .with_columns(
