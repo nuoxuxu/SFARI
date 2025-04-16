@@ -1,8 +1,6 @@
 include {SALMON_INDEX} from '../../../modules/nf-core/salmon/index'
 include {SALMON_QUANT} from '../../../modules/nf-core/salmon/quant'
-include {samplesheetToList} from 'plugin/nf-schema'
-
-params.final_sample_gtf = "nextflow_results/V47/final_transcripts.gtf"
+include {samplesheetToList} from 'plugin/nf-schema' 
 
 process extractFinalTranscriptsFasta {
     label "short_slurm_job"
@@ -19,7 +17,8 @@ process extractFinalTranscriptsFasta {
     }
 
 workflow {
-    extractFinalTranscriptsFasta(params.genome_fasta, params.final_sample_gtf)
+    final_sample_gtf = "nextflow_results/V47/final_transcripts.gtf"
+    extractFinalTranscriptsFasta(params.genome_fasta, final_sample_gtf)
     SALMON_INDEX(params.genome_fasta, extractFinalTranscriptsFasta.out)
     input_reads = Channel
         .fromList(samplesheetToList("assets/samplesheet.csv", "${projectDir}/assets/schema_input.json"))
