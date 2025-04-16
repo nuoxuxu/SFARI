@@ -1,0 +1,1 @@
+signalp -fasta nextflow_results/V47/orfanage/orfanage_peptide.fasta
