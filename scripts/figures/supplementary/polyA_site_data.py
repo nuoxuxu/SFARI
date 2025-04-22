@@ -22,12 +22,13 @@ validated_pbids = gtf\
     )\
     .join_where(
         polyA_site,
-        (pl.col("pos") >= pl.col("start")) &
-        (pl.col("pos") <= pl.col("end"))
+        (pl.col("pos") >= (pl.col("start"))) &
+        (pl.col("pos") <= (pl.col("end")))
     )\
     .filter(
         pl.col("seqname")==pl.col("chrom")
-    )
+    ).unique("transcript_id")\
+    ["transcript_id"].to_list()
 
 classification\
     .with_columns(

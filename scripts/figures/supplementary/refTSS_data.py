@@ -16,9 +16,11 @@ validated_pbids = gtf\
     )\
     .join_where(
         reftss,
-        (pl.col("seqname") == pl.col("chrom")) &
         (pl.col("pos") >= (pl.col("start")-100)) &
         (pl.col("pos") <= (pl.col("end")+100))
+    )\
+    .filter(
+        (pl.col("seqname") == pl.col("chrom"))
     )\
     .unique("transcript_id")\
     ["transcript_id"].to_list()
