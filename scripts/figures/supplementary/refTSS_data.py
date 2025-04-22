@@ -1,5 +1,4 @@
 import polars as pl
-import seaborn as sns
 from src.utils import read_gtf
 
 classification = pl.read_parquet("nextflow_results/V47/final_classification.parquet")
