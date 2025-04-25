@@ -87,16 +87,16 @@ def main():
     params = parser.parse_args()
 
     # Read in datasets
-    classification = get_classification("nextflow_results/V47/merged_collapsed_classification.filtered_lite_classification.txt")
-    filtered_gff = read_gtf("nextflow_results/V47/merged_collapsed.sorted.filtered_lite.gff")
-    expression = pl.read_parquet("nextflow_results/V47/full_expression.parquet")
+    classification = get_classification(params.classification)
+    filtered_gff = read_gtf(params.filtered_gff)
+    expression = pl.read_parquet(params.full_expression)
     reftss = pl.read_csv(
-            "data/refTSS_v3.3_human_coordinate.hg38.sorted.bed", 
+            params.refTSS, 
             separator="\t", has_header = False, 
             new_columns=["chrom", "start", "end", "name", "score", "strand"]
         )
     polyA_site = pl.read_csv(
-            "data/atlas.clusters.2.0.GRCh38.96.bed", 
+            params.polyA_site, 
             separator="\t", new_columns=["chrom", "start", "end", "name", "score", "strand"], 
             schema_overrides={"chrom": pl.String}
         )\
@@ -112,7 +112,7 @@ def main():
 
     expression = expression\
         .filter(
-            pl.col("isoform").is_in(get_exp_tx(expression, params.min_reads, params.min_n_sample)["isoform"])
+            pl.col("isoform").is_in(get_exp_tx(expression, 5, 2))
         )
 
     print(f"We have {classification.shape[0]} isoforms in the classification file")
@@ -122,7 +122,7 @@ def main():
             pl.col("isoform").is_in(expression["isoform"])
         )
 
-    print(f"Keeping isofroms that have at least {params.min_reads} reads in at least {params.min_n_sample} samples, remaining {classification.shape[0]} isoforms")
+    print(f"Keeping isofroms that have at least {5} reads in at least {2} samples, remaining {classification.shape[0]} isoforms")
 
     # For 5prime_fragment, keep those with polyA site support, for 3prime_fragment, keep those with CAGE peak support
 
