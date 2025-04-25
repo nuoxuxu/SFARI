@@ -8,12 +8,12 @@ def read_gtf(file, attributes=["transcript_id"], keep_attributes=True):
         return pl.read_csv(file, separator="\t", comment_prefix="#", schema_overrides = {"seqname": pl.String}, has_header = False, new_columns=["seqname","source","feature","start","end","score","strand","frame","attributes"])\
             .with_columns(
                 [pl.col("attributes").str.extract(rf'{attribute} "([^;]*)";').alias(attribute) for attribute in attributes]
-                )
+            )
     else:
         return pl.read_csv(file, separator="\t", comment_prefix="#", schema_overrides = {"seqname": pl.String}, has_header = False, new_columns=["seqname","source","feature","start","end","score","strand","frame","attributes"])\
             .with_columns(
                 [pl.col("attributes").str.extract(rf'{attribute} "([^;]*)";').alias(attribute) for attribute in attributes]
-                ).drop("attributes")
+            ).drop("attributes")
 
 def get_classification(classification_path):
     print("Reading isoform classification file...")
@@ -21,80 +21,61 @@ def get_classification(classification_path):
     print(f"{classification.shape[0]} isoforms are in classification file, these are the isoforms that passes pigeon filter")
     return classification
 
-def remove_ISM_no_polyA(classification, gtf, polyA_site_path):
+def get_polyA_tx(gtf, polyA_site):
+    validated_pbids = gtf\
+        .filter(pl.col("feature")=="transcript")\
+        .select(
+            pl.col("seqname"),
+            pl.col("transcript_id"),
+            pos = pl.when(pl.col("strand")=="+")\
+                .then(pl.col("end"))\
+                .otherwise(pl.col("start"))
+        )\
+        .join_where(
+            polyA_site,
+            (pl.col("pos") >= pl.col("start")) &
+            (pl.col("pos") <= pl.col("end"))
+        )\
+        .filter(
+            pl.col("seqname")==pl.col("chrom")
+        )\
+        ["transcript_id"].to_list()
+    return validated_pbids
+    
+def get_CAGE_tx(gtf, reftss):
+    validated_pbids = gtf\
+        .filter(pl.col("feature")=="transcript")\
+        .select(
+            pl.col("seqname"),
+            pl.col("transcript_id"),
+            pos = pl.when(pl.col("strand")=="+")\
+                .then(pl.col("start"))\
+                .otherwise(pl.col("end"))
+        )\
+        .join_where(
+            reftss,
+            (pl.col("pos") >= (pl.col("start")-100)) &
+            (pl.col("pos") <= (pl.col("end")+100))
+        )\
+        .filter(
+            (pl.col("seqname") == pl.col("chrom"))
+        )\
+        .unique("transcript_id")\
+        ["transcript_id"].to_list()
+    return validated_pbids
 
-    print(f"{classification.shape[0]} isoforms are in classification file")
-
-    polyA_site = pl.read_csv(
-        polyA_site_path, 
-        separator="\t", new_columns=["chrom", "start", "end", "name", "score", "strand"], 
-        schema_overrides={"chrom": pl.String})\
+def get_exp_tx(expression, min_reads=5, min_n_sample=2):
+    return expression\
         .with_columns(
-            pl.col("chrom").map_elements(lambda x: "".join(["chr", x]), return_dtype=pl.String).alias("chrom")
-        )
-
-    validated_pbids = gtf\
-    .filter(pl.col("feature")=="transcript")\
-    .select(
-        pl.col("seqname"),
-        pl.col("transcript_id"),
-        pos = pl.when(pl.col("strand")=="+")\
-            .then(pl.col("end"))\
-            .otherwise(pl.col("start"))
-    )\
-    .join_where(
-        polyA_site,
-        (pl.col("pos") >= pl.col("start")) &
-        (pl.col("pos") <= pl.col("end"))
-    )\
-    .filter(
-        pl.col("seqname")==pl.col("chrom")
-    )\
-    ["transcript_id"].to_list()
-    
-    classification =  classification\
+            cs.numeric() > min_reads
+        )\
         .filter(
-            (pl.col("structural_category") != "incomplete-splice_match") | (pl.col("isoform").is_in(validated_pbids))
-        )
-    print(f"After filtering out ISM transcripts that don't have polyA site support, there remaining {classification.shape[0]} isoforms")
-    return classification
-
-def remove_ISM_no_refTSS(classification, gtf, refTSS_path):
-
-    print(f"{classification.shape[0]} isoforms are in classification file")
-
-    reftss = pl.read_csv(
-        refTSS_path, 
-        separator="\t", has_header = False, 
-        new_columns=["chrom", "start", "end", "name", "score", "strand"]
-        )
-    
-    validated_pbids = gtf\
-    .filter(pl.col("feature")=="transcript")\
-    .select(
-        pl.col("seqname"),
-        pl.col("transcript_id"),
-        pos = pl.when(pl.col("strand")=="+")\
-            .then(pl.col("start"))\
-            .otherwise(pl.col("end"))
-    )\
-    .join_where(
-        reftss,
-        (pl.col("pos") >= (pl.col("start")-100)) &
-        (pl.col("pos") <= (pl.col("end")+100))
-    )\
-    .filter(pl.col("seqname") == pl.col("chrom"))\
-    ["transcript_id"].to_list()
-    
-    classification =  classification\
-        .filter(
-            (pl.col("structural_category") != "incomplete-splice_match") | (pl.col("isoform").is_in(validated_pbids))
-        )
-    print(f"After filtering out ISM that don't have rerfTSS support, there remaining {classification.shape[0]} isoforms")
-    return classification    
+            pl.sum_horizontal(cs.boolean()) > min_n_sample
+        )\
+        ["isoform"].to_list()
 
 def main():
-    parser = argparse.ArgumentParser(description='Get single_cell object from long read data')
+    parser = argparse.ArgumentParser(description='Filter isoforms based on expression and external support')
     parser.add_argument('--classification', action='store', dest='classification', type=str, required=True)
     parser.add_argument('--filtered_gff', action='store', dest='filtered_gff', type=str, required=True)
     parser.add_argument('--full_expression', action='store', dest='full_expression', type=str, required=True)
@@ -105,74 +86,93 @@ def main():
     
     params = parser.parse_args()
 
-    classification = get_classification(params.classification)
-    filtered_gff = read_gtf(params.filtered_gff)
-    expression = pl.read_parquet(params.full_expression)
-    
-    print(f"Filter out {expression.shape[0]-classification.shape[0]} that did not pass pigeon filter, remaining {classification.shape[0]} isoforms")
-    
-    expression = classification\
-        .join(expression, on = "isoform", how = "left")\
-        .select(expression.columns)
-    
-    classification = classification\
-        .join(expression, on = "isoform", how = "left")\
-        .select(classification.columns)
-    
-    print(f"Keeping isofroms that have at least {params.min_reads} reads in at least {params.min_n_sample} samples...")
-    
-    before = expression.shape[0]
-
-    isoform = expression\
+    # Read in datasets
+    classification = get_classification("nextflow_results/V47/merged_collapsed_classification.filtered_lite_classification.txt")
+    filtered_gff = read_gtf("nextflow_results/V47/merged_collapsed.sorted.filtered_lite.gff")
+    expression = pl.read_parquet("nextflow_results/V47/full_expression.parquet")
+    reftss = pl.read_csv(
+            "data/refTSS_v3.3_human_coordinate.hg38.sorted.bed", 
+            separator="\t", has_header = False, 
+            new_columns=["chrom", "start", "end", "name", "score", "strand"]
+        )
+    polyA_site = pl.read_csv(
+            "data/atlas.clusters.2.0.GRCh38.96.bed", 
+            separator="\t", new_columns=["chrom", "start", "end", "name", "score", "strand"], 
+            schema_overrides={"chrom": pl.String}
+        )\
         .with_columns(
-            cs.numeric() > 5
-        )\
-        .filter(
-            pl.sum_horizontal(cs.boolean()) > 2
-        )\
-        .select("isoform")
-    
-    expression = expression.filter(pl.col("isoform").is_in(isoform["isoform"]))
-    
-    after = expression.shape[0]
-    
-    print(f"Filtered out {before - after} isoforms, remaining {expression.shape[0]} isoforms")
+            pl.col("chrom").map_elements(lambda x: "".join(["chr", x]), return_dtype=pl.String).alias("chrom")
+        )
 
-    print("Filtering the classification file based on the expression file...")
-
-    classification = classification.filter(pl.col("isoform").is_in(expression["isoform"]))
-
-    print("Filtering the filtered gff file based on the expression file...")
-
-    filtered_gff = filtered_gff.filter(pl.col("transcript_id").is_in(expression["isoform"]))
-    
-    classification = remove_ISM_no_polyA(classification, filtered_gff, params.polyA_site)
-
-    classification = remove_ISM_no_refTSS(classification, filtered_gff, params.refTSS)
-
-    print("Filtering the filtered gff file based on the classification file accordingly...")
-    filtered_gff = filtered_gff\
-        .filter(pl.col("transcript_id").is_in(classification["isoform"]))
-    
-    print("Filtering the expression file based on the classification file accordingly...")
+    # Filtering isoforms based on expression
     expression = expression\
-        .filter(pl.col("isoform").is_in(classification["isoform"]))
+        .filter(
+            pl.col("isoform").is_in(classification["isoform"])
+        )
+
+    expression = expression\
+        .filter(
+            pl.col("isoform").is_in(get_exp_tx(expression, params.min_reads, params.min_n_sample)["isoform"])
+        )
+
+    print(f"We have {classification.shape[0]} isoforms in the classification file")
+
+    classification = classification\
+        .filter(
+            pl.col("isoform").is_in(expression["isoform"])
+        )
+
+    print(f"Keeping isofroms that have at least {params.min_reads} reads in at least {params.min_n_sample} samples, remaining {classification.shape[0]} isoforms")
+
+    # For 5prime_fragment, keep those with polyA site support, for 3prime_fragment, keep those with CAGE peak support
+
+    classification = classification\
+        .with_columns(
+            within_CAGE_peak = pl.col("isoform").is_in(get_CAGE_tx(filtered_gff, reftss)),
+            within_polyA_site = pl.col("isoform").is_in(get_polyA_tx(filtered_gff, polyA_site))
+        )
     
+    five_prime_fragment_with_polyA = classification\
+        .filter(
+            pl.col("subcategory") == "5prime_fragment",
+            pl.col("within_polyA_site")
+        )["isoform"].to_list()
+        
+    three_prime_fragment_with_CAGE = classification\
+        .filter(
+            pl.col("subcategory") == "3prime_fragment",
+            pl.col("within_CAGE_peak")
+        )["isoform"].to_list()
+
+    ISM_to_keep = five_prime_fragment_with_polyA + three_prime_fragment_with_CAGE
+
+    classification = classification\
+        .filter(
+                (pl.col("structural_category") != "incomplete-splice_match") | (pl.col("isoform").is_in(ISM_to_keep))
+            )
+
+    print(f"Keeping ISMs without external support, remaining {classification.shape[0]} isoforms")
+
     # Write classification file
-    
-    print(f"Writing classification file to final_classification.parquet...")
     classification.write_parquet("final_classification.parquet")
+
+    print(f"Writing classification file to final_classification.parquet...")
 
     # Write gtf file
 
     print(f"Writing gtf file to final_transcripts.gtf...")
+
     filtered_gff\
+        .filter(
+            pl.col("transcript_id").is_in(classification["isoform"])
+        )\
         .drop("transcript_id")\
         .write_csv("final_transcripts.gtf", separator="\t", include_header=False, quote_style="never")
-    
+
     # Write expression file
 
     print(f"Writing expression file to final_expression.parquet...")
+
     expression\
         .filter(pl.col("isoform").is_in(classification["isoform"]))\
         .write_parquet("final_expression.parquet")
