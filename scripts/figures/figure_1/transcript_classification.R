@@ -57,12 +57,11 @@ transcript_classification_hist <- read_parquet("nextflow_results/V47/final_class
     ) %>%
     ggplot(aes(x = structural_category2, y = len, fill = structural_category2)) +
         geom_bar(stat = "identity") +
-        geom_text(aes(label = paste0(round(percentage, 1), "%")), vjust = 2, colour = "white", size = 2.5) +
+        geom_text(aes(label = paste0(round(percentage, 1), "%")), vjust = 2, colour = "black", size = 3.5) +
         scale_y_continuous(labels = function(x) x / 1000) +
         scale_fill_manual("Structural Category", values = colorVector) +
-        labs(x = "Structural Category", y = expression("Transcripts (x" ~ 10^3 * ")")) +
-        xlab(NULL)
-ggsave("figures/figure_1/transcript_classification_hist.pdf", width = 8, height = 7)
+        labs(x = "Structural Category", y = expression("Transcripts (x" ~ 10^3 * ")"))
+# ggsave("figures/figure_1/transcript_classification_hist.pdf", width = 8, height = 7)
 
 # Length vs abundance
 
@@ -90,7 +89,7 @@ read_parquet("nextflow_results/V47/final_classification.parquet") %>%
         y = expression("Transcripts (x" ~ 10^3 * ")")
     ) +
     ggtitle("Transcript length distribution")
-ggsave("figures/figure_1/length_vs_abundance.pdf", width = 8, height = 7)
+# ggsave("figures/figure_1/length_vs_abundance.pdf", width = 8, height = 7)
 
 # Number of exons vs abudance
 
@@ -117,15 +116,14 @@ nexon_vs_abundance <- read_parquet("nextflow_results/V47/final_classification.pa
         x = "# Exons",
         y = expression("Transcripts (x" ~ 10^3 * ")")
     )
-ggsave("figures/figure_1/nexon_vs_abundance.pdf", width = 8, height = 7)
+# ggsave("figures/figure_1/nexon_vs_abundance.pdf", width = 8, height = 7)
 
 # Counts vs abundance
 
 row_sum <- read_parquet("nextflow_results/V47/final_expression.parquet") %>%
     mutate(
         row_sum = rowSums(across(where(is.numeric)))
-    ) %>%
-    dplyr::select(row_sum)
+    )
 
 count_vs_abundance <- read_parquet("nextflow_results/V47/final_classification.parquet") %>%
     mutate(
@@ -141,14 +139,14 @@ count_vs_abundance <- read_parquet("nextflow_results/V47/final_classification.pa
         ),
         structural_category2 = structural_category_labels[structural_category2]
     ) %>%
-    bind_cols(row_sum) %>%
+    left_join(row_sum[c("isoform", "row_sum")], by = "isoform") %>%
     filter(row_sum > 10) %>%
     ggplot(aes(x = row_sum, fill = structural_category2)) +
     geom_histogram(position = position_fill(), alpha = .75) +
     scale_x_log10() +
     scale_fill_manual("Structural Category", values = colorVector) +
     labs(x = "Total observed counts", y = "Transcript proportion")
-ggsave("figures/figure_1/count_vs_abundance.pdf", width = 8, height = 7)
+# ggsave("figures/figure_1/count_vs_abundance.pdf", width = 8, height = 7)
 
-transcript_classification_hist + count_vs_abundance + nexon_vs_abundance + plot_layout(widths = c(1.5, 1, 1))
-ggsave("figures/figure_1/transcript_fig_combined.pdf", width = 7, height = 2.5)
+transcript_classification_hist + count_vs_abundance + nexon_vs_abundance + plot_layout(widths = c(1, 1, 1))
+ggsave("figures/figure_1/transcript_fig_combined.pdf", width = 7.5, height = 2.5)

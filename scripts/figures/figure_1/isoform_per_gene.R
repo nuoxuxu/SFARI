@@ -48,46 +48,46 @@ classification %>%
         )
 ggsave("figures/figure_1/isoforms_per_gene.pdf", width = 3, height = 2.5)
 
-classification <- read_tsv("nextflow_results/V47/merged_collapsed_classification.filtered_lite_classification.txt")
+# classification <- read_tsv("nextflow_results/V47/merged_collapsed_classification.filtered_lite_classification.txt")
 
-classification %>%
-    filter(structural_category %in% c(
-        "full-splice_match",
-        "incomplete-splice_match",
-        "novel_in_catalog",
-        "novel_not_in_catalog"
-    )) %>%
-    group_by(associated_gene) %>%
-    summarise(len = n(), .groups = "drop") %>%
-    group_by(len) %>%
-    summarise(count = n(), .groups = "drop") %>%
-    mutate(
-        len = case_when(
-            len == 1 ~ "1",
-            len %in% c(2, 3) ~ "2-3",
-            len %in% c(4, 5) ~ "4-5",
-            len %in% c(6, 7) ~ "6-7",
-            len >= 8 ~ ">=8"
-        )
-    ) %>%
-    group_by(len) %>%
-    summarise(count = sum(count), .groups = "drop") %>%
-    mutate(
-        len = factor(len, levels = c("1", "2-3", "4-5", "6-7", ">=8"))
-    ) %>%
-    ggplot(aes(x = len, y = count)) +
-    geom_col()
+# classification %>%
+#     filter(structural_category %in% c(
+#         "full-splice_match",
+#         "incomplete-splice_match",
+#         "novel_in_catalog",
+#         "novel_not_in_catalog"
+#     )) %>%
+#     group_by(associated_gene) %>%
+#     summarise(len = n(), .groups = "drop") %>%
+#     group_by(len) %>%
+#     summarise(count = n(), .groups = "drop") %>%
+#     mutate(
+#         len = case_when(
+#             len == 1 ~ "1",
+#             len %in% c(2, 3) ~ "2-3",
+#             len %in% c(4, 5) ~ "4-5",
+#             len %in% c(6, 7) ~ "6-7",
+#             len >= 8 ~ ">=8"
+#         )
+#     ) %>%
+#     group_by(len) %>%
+#     summarise(count = sum(count), .groups = "drop") %>%
+#     mutate(
+#         len = factor(len, levels = c("1", "2-3", "4-5", "6-7", ">=8"))
+#     ) %>%
+#     ggplot(aes(x = len, y = count)) +
+#     geom_col()
 
-classification %>%
-    filter(structural_category %in% c(
-        "full-splice_match",
-        "incomplete-splice_match",
-        "novel_in_catalog",
-        "novel_not_in_catalog"
-    )) %>%
-    group_by(associated_gene) %>%
-    summarise(len = n(), .groups = "drop") %>%
-    group_by(len) %>%
-    summarise(count = n(), .groups = "drop") %>%
-    ggplot(aes(len, count)) +
-        geom_col()
+# classification %>%
+#     filter(structural_category %in% c(
+#         "full-splice_match",
+#         "incomplete-splice_match",
+#         "novel_in_catalog",
+#         "novel_not_in_catalog"
+#     )) %>%
+#     group_by(associated_gene) %>%
+#     summarise(len = n(), .groups = "drop") %>%
+#     group_by(len) %>%
+#     summarise(count = n(), .groups = "drop") %>%
+#     ggplot(aes(len, count)) +
+#         geom_col()
