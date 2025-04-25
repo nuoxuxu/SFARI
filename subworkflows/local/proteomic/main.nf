@@ -58,8 +58,9 @@ process runPercolator {
 workflow proteomic {
     take:
     protein_database
-    mzXMLfiles
+    mzXMLfilesPath
     main:
+    Channel.fromPath(mzXMLfilesPath).collect().set { mzXMLfiles }
     cometSearch(params.comet_params, protein_database, mzXMLfiles)
     runPercolator(params.searchDB, cometSearch.out)
     emit:
