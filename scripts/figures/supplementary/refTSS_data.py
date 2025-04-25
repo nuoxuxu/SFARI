@@ -108,30 +108,4 @@ classification\
         pl.col("len").sum().alias("total_len")
     ]).with_columns(
         (pl.col("true_len") / pl.col("total_len") * 100).alias("polyA_site_percentage")
-    ).write_csv("data/structural_category_polyA_site_percentage.csv")    
-
-# Annotate classification with polyA peak information
-classification = classification\
-    .with_columns(
-        within_polyA_site = pl.col("isoform").is_in(validated_pbids)
-    )
-
-five_prime_fragment_with_polyA = classification\
-    .filter(
-        pl.col("subcategory") == "5prime_fragment",
-        pl.col("within_polyA_site")
-    )["isoform"].to_list()
-    
-three_prime_fragment_with_CAGE = classification\
-    .filter(
-        pl.col("subcategory") == "3prime_fragment",
-        pl.col("within_CAGE_peak")
-    )["isoform"].to_list()
-
-ISM_to_keep = five_prime_fragment_with_polyA + three_prime_fragment_with_CAGE
-
-classification\
-    .filter(
-            (pl.col("structural_category") != "incomplete-splice_match") | (pl.col("isoform").is_in(ISM_to_keep))
-        )\
-    .write_parquet("nextflow_results/V47/final_classification.parquet")
+    ).write_csv("data/structural_category_polyA_site_percentage.csv")
