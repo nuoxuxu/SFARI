@@ -3,7 +3,6 @@ import polars as pl
 import sys
 import glob
 from collections import defaultdict
-from bx.intervals.intersection import Interval,IntervalTree
 
 pl.enable_string_cache()
 
