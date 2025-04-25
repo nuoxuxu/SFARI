@@ -3,6 +3,8 @@ library(dplyr)
 library(ggplot2)
 library(patchwork)
 
+use_condaenv("/scratch/s/shreejoy/nxu/SFARI/envs/r_env")
+
 py_run_string("
 from src.utils import read_gtf, read_SJ, gtf_to_SJ
 import polars as pl
@@ -10,7 +12,7 @@ from pathlib import Path
 import os
 
 SR_SJ = (
-    pl.concat([read_SJ(file) for file in Path('STAR_results').rglob('*_SJ.out.tab')], how='vertical')
+    pl.concat([read_SJ(file) for file in Path('export/STAR_results').rglob('*_SJ.out.tab')], how='vertical')
     .unique(['chrom', 'start', 'end', 'strand'])
     .select(['chrom', 'start', 'end', 'strand'])
     .with_columns(
@@ -105,4 +107,4 @@ p2 <- df %>%
     geom_text(aes(y = ypos, label = sprintf("%.1f%%", percent)), color = "white", size = 5)
 
 p1 + p2
-ggsave("test.pdf", width = 200, height = 100, units ="mm")
+ggsave("figures/figure_1/sr_validation_pie.pdf", width = 200, height = 100, units ="mm")
