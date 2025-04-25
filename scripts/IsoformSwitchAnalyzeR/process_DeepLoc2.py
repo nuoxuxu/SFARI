@@ -14,4 +14,4 @@ signalp_res\
     .filter(
         pl.col("Protein_ID").is_in(pbids)
     )\
-    .write_csv("export/signal_res.csv", include_header=True)
+    .write_csv("export/deeploc2.csv", include_header=True)
