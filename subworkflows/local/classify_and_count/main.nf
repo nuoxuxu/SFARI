@@ -87,7 +87,7 @@ process getFullExpression {
     script:
     """
     get_full_expression.py \\
-        --read_stat $read_stat
+        --read_stat $read_stat \\
         --id_to_sample $id_to_sample
     """
 }
@@ -96,7 +96,7 @@ process filterByExpressionExternalSupport {
     label "short_slurm_job"
     publishDir "${params.output_dir}", mode: 'copy'
 
-    conda "${moduleDir}/environment.yml"
+    conda "/home/s/shreejoy/nxu/miniforge3/envs/patch_seq_spl"
 
     input:
     path classification
@@ -117,7 +117,7 @@ process filterByExpressionExternalSupport {
     filter_by_exp_ext.py \\
         --classification $classification \\
         --filtered_gff $filtered_gff \\
-        --full_expression $full_expression \\        
+        --full_expression $full_expression \\
         --min_reads $min_reads \\
         --min_n_sample $min_n_sample \\
         --polyA_site $polyA_site \\
@@ -146,6 +146,7 @@ workflow classify_and_count {
     isoform_gff
     id_to_sample
     read_stat
+
 
     main:
     pigeonPrepare(isoform_gff, params.annotation_gtf, params.genome_fasta)
