@@ -3,6 +3,27 @@ library(ggplot2)
 library(readr)
 library(stringr)
 library(rtracklayer)
+library(reticulate)
+
+use_condaenv("/scratch/s/shreejoy/nxu/SFARI/envs/r_env")
+
+py_run_string("
+from src.utils import collapse_isoforms_to_proteoforms, read_gtf
+import polars as pl
+
+tx_classification = pl.read_parquet('nextflow_results/V47/final_classification.parquet')
+
+orfanage_gtf = read_gtf('nextflow_results/V47/orfanage/orfanage.gtf', attributes=['gene_id', 'transcript_id'])
+protein_classification = pl.read_csv('nextflow_results/V47/orfanage/SFARI.protein_classification.tsv', separator='\t')
+protein_classification = (
+    protein_classification
+    .join(
+        collapse_isoforms_to_proteoforms(orfanage_gtf).rename({'isoform': 'pb'}),
+        on = 'pb',
+        how = 'left'        
+    )
+)
+")
 
 my_theme <- theme_classic() +
     theme(
@@ -15,8 +36,7 @@ my_theme <- theme_classic() +
 
 theme_set(my_theme)
 
-protein_classification <- read_tsv("nextflow_results/V47/orfanage/SFARI.protein_classification.tsv") %>%
-    # distinct(base_isoform, .keep_all = TRUE) %>%
+protein_classification <- as_tibble(py$protein_classification$to_pandas()) %>%
     mutate(structural_category2 = if_else(
         protein_classification_base %in% c("pNIC", "pFSM", "pISM", "pNNC"),
         protein_classification_base,
@@ -43,7 +63,7 @@ summary_df %>%
     filter(structural_category2 %in% c("pFSM", "pNIC", "pNNC", "Other")) %>%
     ggplot(aes(x = structural_category2, y = len, fill = structural_category2)) +
     geom_bar(stat = "identity") +
-    geom_text(aes(label = paste0(round(percentage, 1), "%")), vjust = 2, colour = "white", size = 4) +
+    geom_text(aes(label = paste0(round(percentage, 1), "%")), position = position_dodge(0.9), vjust = 0, colour = "black", size = 4) +
     scale_fill_manual("Structural Category", values = colorVector) +
     scale_y_continuous(labels = function(x) x / 1000) +
     labs(
