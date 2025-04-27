@@ -28,7 +28,7 @@ process peptideTrackUCSC {
 process addPeptideAnnotation {
     publishDir "${params.output_dir}/${params.orf_prediction}", mode: 'copy'
     
-    conda "$moduleDir/R.yml"
+    conda "/scratch/s/shreejoy/nxu/SFARI/envs/r_env"
 
     input:
     val mode
@@ -47,7 +47,29 @@ process addPeptideAnnotation {
         $peptides_gtf \\
         "annot_peptides_${mode}.gtf"
     """
+}
+
+process peptideMapping {
+    publishDir "${params.output_dir}/${params.orf_prediction}", mode: 'copy'
     
+    conda "/scratch/s/shreejoy/nxu/SFARI/envs/r_env"
+
+    input:
+    path annotation_gtf
+    path predicted_cds_gtf
+    path peptides_gtf
+    
+    output:
+    path "peptide_mapping.parquet"
+    
+    script:
+    """
+    peptide_mapping.R \\
+        $annotation_gtf \\
+        $predicted_cds_gtf \\
+        $peptides_gtf \\
+        "peptide_mapping.parquet"
+    """
 }
 
 workflow peptide {
@@ -59,6 +81,7 @@ workflow peptide {
     main:
     peptideTrackUCSC(params.searchDB, params.annotation_gtf, final_sample_classification, predicted_cds_gtf, protein_search_database, peptides)
     addPeptideAnnotation(params.searchDB, params.annotation_gtf, predicted_cds_gtf, peptideTrackUCSC.out)
+    peptideMapping(params.annotation_gtf, predicted_cds_gtf, peptideTrackUCSC.out)
 }
 
 workflow {
@@ -69,4 +92,5 @@ workflow {
 
     peptideTrackUCSC(params.searchDB, params.annotation_gtf, final_sample_classification, predicted_cds_gtf, protein_search_database, peptides)
     addPeptideAnnotation(params.searchDB, params.annotation_gtf, predicted_cds_gtf, peptideTrackUCSC.out)
+    peptideMapping(params.annotation_gtf, predicted_cds_gtf, peptideTrackUCSC.out)
 }

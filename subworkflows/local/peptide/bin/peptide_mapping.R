@@ -1,4 +1,3 @@
-#!/usr/bin/env Rscript
 library(arrow)
 library(dplyr)
 library(GenomicFeatures)
@@ -6,12 +5,10 @@ library(GenomicAlignments)
 library(rtracklayer)
 library(readr)
 
-args <- commandArgs(trailingOnly=TRUE)
-
 #-----------------------------------Load Datasets-----------------------------------#
-annotation_gtf <- args[1]
-predicted_cds_gtf <- args[2]
-peptides_gtf <- args[3]
+annotation_gtf <- paste0(Sys.getenv("GENOMIC_DATA_DIR"), "/GENCODE/gencode.v47.annotation.gtf")
+predicted_cds_gtf <- "nextflow_results/V47/orfanage/orfanage.gtf"
+peptides_gtf <- "nextflow_results/V47/orfanage/annot_peptides_hybrid.gtf"
 
 #-----------------------------------Processing-----------------------------------#
 # Splice junctions
@@ -90,4 +87,4 @@ peptide_exon_mapping <- bind_rows(in_GENCODE_df, not_GENCODE_df)
 # Combine two types of peptides
 
 out <- bind_rows(peptide_SJ_mapping, peptide_exon_mapping)
-out %>% write_parquet("peptide_mapping.parquet")
+out %>% write_parquet("nextflow_results/V47/orfanage/peptide_mapping.parquet")
