@@ -77,6 +77,49 @@ def read_SJ(file):
             schema_overrides={"chrom": pl.String}
         )
 
+def read_vv_table(file):
+    variant_columns = [
+        "Variant ID",
+        "Location",
+        "Variant type",
+        "Gene",
+        "Molecular consequences",
+        "Most severe clinical significance",
+        "1000G MAF",
+        "GO-ESP MAF",
+        "ExAC MAF",
+        "Publications (PMIDs)"
+    ]
+
+    vv_table = pl.read_csv(
+        file,
+        separator="\t",
+        comment_prefix="#",
+        new_columns=variant_columns
+    )
+    return vv_table
+
+def read_vcf(file, info=["CLNVC", "GENEINFO"]):
+    """
+    Reads a VCF file and converts it into a Polars DataFrame.
+    
+    Args:
+        file (str): Path to the VCF file.
+    
+    Returns:
+        polars.DataFrame: A DataFrame with 'chrom', 'start', 'end', 'ref', and 'alt' columns.
+    """
+    return pl.read_csv(
+        file,
+        comment_prefix="#",
+        separator="\t",
+        new_columns=["chrom", "pos", "id", "ref", "alt", "qual", "filter", "info"],
+        schema_overrides={"chrom": pl.String}
+    )\
+    .with_columns(
+        [pl.col("info").str.extract(rf"{attribute}=([^;]+)").alias(attribute) for attribute in info]
+        )
+
 def gtf_to_SJ(gtf):
     import numpy as np
     return gtf\
