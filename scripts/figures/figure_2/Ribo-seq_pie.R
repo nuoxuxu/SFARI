@@ -152,4 +152,4 @@ p2 <- novel.summary_df %>%
     geom_text(aes(y = ypos, label = sprintf("%.1f%%", percent)), color = "white", size = 6)
 
 p1 + p2
-ggsave("figures/supplementary/Ribo-seq_pie.pdf", width = 200, height = 100, units ="mm")
+ggsave("figures/figure_2/Ribo-seq_pie.pdf", width = 200, height = 100, units ="mm")
