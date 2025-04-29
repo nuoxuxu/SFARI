@@ -1,1 +1,0 @@
-gffread -w transcripts.fasta -g /project/s/shreejoy/Genomic_references/GENCODE/GRCh38.primary_assembly.genome.fa merged_collapsed.sorted.filtered_lite.gff
