@@ -5,7 +5,7 @@ from src.ryp import r, to_r
 
 #--------------------------------Read the CSV with the defined column names--------------------------------
 # ClinVar coordinates are 1-based
-variants = read_vcf("data/clinvar_20250409.vcf", info=["CLNVC", "GENEINFO", "ALLELEID", "CLNSIG", "MC", "CLNDISDB", "CLNDN", "CLNDNINCL"])
+variants = read_vcf("data/clinvar_20250421.vcf", info=["CLNVC", "GENEINFO", "ALLELEID", "CLNSIG", "MC", "CLNDISDB", "CLNDN"])
 
 variants = variants\
     .with_columns(
