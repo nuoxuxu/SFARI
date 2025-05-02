@@ -10,13 +10,20 @@ variants = read_vcf("data/clinvar_20250421.vcf", info=["CLNVC", "GENEINFO", "ALL
 variants = variants\
     .with_columns(
         pl.col("chrom").map_elements(lambda x: "".join(["chr", x]), return_dtype=pl.String)
-        )\
+    )\
     .filter(
         pl.col("chrom").str.contains("_").not_()
+    )\
+    .with_columns(
+        n_ref = pl.col("ref").str.len_chars(),
+        n_alt = pl.col("alt").str.len_chars()
+    )\
+    .filter(
+        (pl.col("n_ref")==1) & (pl.col("n_alt")==1)
     )
 
 #--------------------------------Read in final_transcripts and GENCODE SJ--------------------------------
-final_transcripts_SJ = read_gtf("nextflow_results/V47/final_transcripts.gtf")\
+final_transcripts_SJ = read_gtf("nextflow_results/V47/orfanage/orfanage.gtf")\
     .filter(pl.col("feature") == "exon")\
     .pipe(gtf_to_SJ)\
     .unpivot(
@@ -52,23 +59,33 @@ novel_splice_sites = final_transcripts_SJ\
             .otherwise(pl.col("coord") - 1).alias("coord_1")
     )
 
-variants = variants\
-    .filter(
-        pl.col("pos").is_in(novel_splice_sites.filter(pl.col("coord").is_in(variants["pos"]))["coord"]) |   
-        pl.col("pos").is_in(novel_splice_sites.filter(pl.col("coord_1").is_in(variants["pos"]))["coord_1"])
+novel_splice_sites = novel_splice_sites\
+    .with_columns(
+        pl.when(pl.col("start_or_end") == "start").then(pl.col("coord")).otherwise(pl.col("coord_1")).alias("start"),
+        pl.when(pl.col("start_or_end") == "end").then(pl.col("coord")).otherwise(pl.col("coord_1")).alias("end")
+    )\
+    .drop("start_or_end", "coord", "coord_1")
+
+novel_splice_sites.write_csv("export/novel_splice_sites.csv")
+
+#----------------------Get ClinVar variants in novel canonical splice sites------------------
+start_variants = variants\
+    .join_where(
+        novel_splice_sites,
+        ((pl.col("chrom") == pl.col("chrom_right")) & (pl.col("pos") == pl.col("start")))
     )
 
-variants = variants\
-    .with_columns(
-        pl.col("MC").str.split_exact("|", 1).struct.rename_fields(["SO", "MC"]).alias("MC")
-    ).unnest("MC")\
-    .with_columns(
-        pl.col("MC").str.split_exact(",", 1).struct.rename_fields(["MC", "SO_2"]).alias("MC")
-    ).unnest("MC")
+end_variants = variants\
+    .join_where(
+        novel_splice_sites,
+        ((pl.col("chrom") == pl.col("chrom_right")) & (pl.col("pos") == pl.col("end")))
+    )
 
-variants.drop("info", "SO", "SO_2").write_csv("export/novel_canonical_splice_variants.csv")
+variants = pl.concat([start_variants, end_variants], how="vertical").unique("id")
 
+variants['chrom', 'pos', 'id', 'ref', 'alt', 'qual', 'filter', 'info'].write_csv("export/novel_canonical_splice_variants.vcf", separator="\t", include_header=False, quote_style="never")
 #--------------------------------------------Visualization--------------------------------
+
 to_r(variants, "variants")
 r(
 """
