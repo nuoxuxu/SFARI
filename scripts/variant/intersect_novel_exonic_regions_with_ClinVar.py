@@ -1,7 +1,6 @@
 import polars as pl
-from src.utils import read_vcf, read_gtf
+from src.utils import read_vcf
 from src.ryp import r, to_r, to_py
-import os
 
 r(
 """
@@ -38,6 +37,19 @@ id_list = to_py("id_list")
 
 variants = read_vcf("data/clinvar_20250421.vcf", info=["CLNVC", "GENEINFO", "ALLELEID", "CLNDN", "CLNSIG", "MC"])
 
+variants\
+    .drop(["CLNVC", "GENEINFO", "ALLELEID", "CLNDN", "CLNSIG", "MC"])\
+    .filter(
+        pl.col("id").is_in(id_list)
+    )\
+    .with_columns(
+        pl.col("chrom").map_elements(lambda x: "".join(["chr", x]), return_dtype=pl.String)
+        )\
+    .filter(
+        pl.col("chrom").str.contains("_").not_()
+    )\
+    .write_csv("export/variant/novel_exonic_regions_clinvar.vcf", include_header=False, separator="\t", quote_style="never")
+        
 variants = variants\
     .filter(
         pl.col("id").is_in(id_list)
