@@ -6,46 +6,28 @@ library(VariantAnnotation)
 library(tidyr)
 library(parallel)
 
+source("src/utils.R")
+
+novel_exonic_regions <- readRDS("export/variant/novel_exonic_regions.rds")
+
 gencode_exons <- makeTxDbFromGFF(paste0(Sys.getenv("GENOMIC_DATA_DIR"), "/GENCODE/gencode.v47.annotation.gtf")) %>% 
     exonsBy(by = "tx", use.names = TRUE) %>% 
     unlist() %>% 
     unique()
 
-SFARI_exons <- rtracklayer::import("nextflow_results/V47/orfanage/orfanage.gtf") %>%
-    subset(type == "exon") %>% 
-    unique()
+clinvar_vcf <- readVcf("data/clinvar_20250421.vcf")
+clinvar_vcf_gr <- rowRanges(clinvar_vcf)
+seqlevelsStyle(clinvar_vcf_gr) <- "UCSC"
 
-novel_exonic_regions <- GenomicRanges::subtract(SFARI_exons, gencode_exons, ignore.strand=TRUE) %>% unlist() %>% unique() %>% reduce(ignore.strand=TRUE)
+novel_exonic_regions_hits <- findOverlaps(clinvar_vcf_gr, novel_exonic_regions)
+gencode_exons_hits <- findOverlaps(clinvar_vcf_gr, gencode_exons)
+clinvar_vcf_gr <- clinvar_vcf_gr[setdiff(queryHits(novel_exonic_regions_hits), queryHits(gencode_exons_hits))]
+clinvar_vcf_gr <- clinvar_vcf_gr[width(clinvar_vcf_gr) == 1]
 
-novel_exonic_regions %>% saveRDS("export/variant/novel_exonic_regions.rds")
+id_list <- as.integer(names(clinvar_vcf_gr))
+ClinVar_df <- read_vcf("data/clinvar_20250421.vcf")
+ClinVar_df <- ClinVar_df %>% 
+    filter(id %in% id_list)
 
-# Is it possible for all the coordinates in a gene to be 1 bp apart?
-# Use GENCODE to test this
-
-SFARI_exons <- rtracklayer::import(paste0(Sys.getenv("GENOMIC_DATA_DIR"), "/GENCODE/gencode.v47.annotation.gtf"))
-
-sample(pull(distinct(as_tibble(mcols(SFARI_exons)), gene_id), gene_id), size=10) %>% 
-    mclapply(get_dcoord_per_gene_id) %>% 
-    bind_rows() %>% 
-    filter(dcoord < 200)  %>% 
-    ggplot(aes(dcoord)) +
-    geom_bar()
-
-
-
-
-
-get_dcoord_per_gene_id <- function(gene_id) {
-    subset(SFARI_exons, (gene_id=={{gene_id}})&(type=="exon")) %>% 
-        as_tibble() %>% 
-        dplyr::select(start, end) %>% 
-        pivot_longer(cols=c(start, end), names_to="start_end", values_to="coord") %>% 
-        arrange(coord) %>% 
-        distinct(coord) %>% 
-        mutate(dcoord = coord - lag(coord))
-}
-
-data.frame(width = width(novel_exonic_regions)) %>%
-    filter(width < 200)  %>% 
-    ggplot(aes(width)) +
-    geom_bar()
+ClinVar_df %>% dplyr::select(-c(CLNVC, GENEINFO)) %>% 
+    write_tsv("export/variant/novel_exonic_regions_ClinVar.vcf")
