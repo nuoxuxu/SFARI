@@ -37,5 +37,5 @@ read_vcf <- function(file, info = c("CLNVC", "GENEINFO")) {
 
   ## 4.  tidy output ----------------------------------------------------------
   vcf %>%
-    select(chrom, start, end, ref, alt, everything(), all_of(info))
+    dplyr::select(chrom, start, end, ref, alt, everything(), all_of(info))
 }
