@@ -1,5 +1,5 @@
 #!/bin/bash
-export PATH="${PATH}:/home/s/shreejoy/nxu/tools/annovar"
+export PATH="${PATH}:${HOME}/tools/annovar"
 
 # Building the annovar database for Orfanage
 gtfToGenePred -genePredExt data/orfanage.gtf data/annovar_orfanage_db/hg38_refGene.txt
