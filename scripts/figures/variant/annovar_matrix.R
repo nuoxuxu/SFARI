@@ -50,10 +50,7 @@ gencode_predicted <- gencode_predicted %>%
     )
 
 gencode_vt_ranked_by_severity <- c("splicing", "frameshift substitution", "stopgain", "stoploss", "startloss", "nonframeshift substitution", "nonsynonymous SNV", "synonymous SNV", "unknown", "ncRNA_splicing", "nc_RNA_exonic", "nc_RNA_exonic;splicing", "UTR5;UTR3", "UTR5", "UTR3", "intronic", "ncRNA_intronic", "upstream;downstream", "upstream", "downstream", "intergenic")
-orfanage_vt_ranked_by_severity <- c("splicing", "frameshift substitution", "stopgain", "stoploss", "startloss", "nonframeshift substitution", "nonsynonymous SNV", "synonymous SNV", "unknown", "UTR5;UTR3", "UTR5", "UTR3", "upstream;downstream", "intronic", "upstream", "downstream", "intergenic")
-
-gencode_predicted %>% distinct(gencode_variant_type) %>% View()
-orfanage_predicted %>% distinct(orfanage_variant_type) %>% View()
+orfanage_vt_ranked_by_severity <- c("splicing", "frameshift substitution", "stopgain", "stoploss", "startloss", "nonframeshift substitution", "nonsynonymous SNV", "synonymous SNV", "unknown", "UTR5;UTR3", "UTR5", "UTR3", "intronic", "upstream;downstream", "upstream", "downstream", "intergenic")
 
 df <- bind_cols(original[, "ASD status"], gencode_predicted[, "gencode_variant_type"], orfanage_predicted[, "orfanage_variant_type"]) %>%
     group_by(gencode_variant_type, orfanage_variant_type, `ASD status`) %>%
