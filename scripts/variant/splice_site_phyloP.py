@@ -78,7 +78,34 @@ def filter_for_canonical(df):
             (pl.col("acceptor_seq")=="AG") & (pl.col("donor_seq")=="GT")
         )
 
-def export_phyloP(feature, out, canonical_ss=False):
+def filter_for_translational_evidence(df):
+    annot_peptides_hybrid = read_gtf("nextflow_results/V47/orfanage/annot_peptides_hybrid.gtf", attributes=["detected", "type", "transcript_id"])
+    annot_peptides_hybrid = annot_peptides_hybrid\
+        .filter(
+            (pl.col("detected") == "True") & (pl.col("type") == "splice-junction")
+        )
+    peptide_SJ = gtf_to_SJ(annot_peptides_hybrid)
+
+    return df\
+        .join(
+            peptide_SJ.drop("transcript_id", "strand"),
+            on=["chrom", "start", "end"],
+            how="inner"
+        )
+
+def filter_combined(df, canonical_ss=False, translational_evidence=False):
+    """ Filter the splice junctions for canonical splice sites and/or translational evidence.
+    """
+    if canonical_ss and translational_evidence:
+        return filter_for_translational_evidence(filter_for_canonical(df))
+    elif canonical_ss:
+        return filter_for_canonical(df)
+    elif translational_evidence:
+        return filter_for_translational_evidence(df)
+    else:
+        return lambda df: df
+    
+def export_phyloP(feature, out, canonical_ss=False, translational_evidence=False):
     """ Export the phyloP scores to a CSV file.
     """
     final_transcripts_SJ = read_gtf("nextflow_results/V47/orfanage/orfanage.gtf")\
@@ -92,99 +119,57 @@ def export_phyloP(feature, out, canonical_ss=False):
         .pipe(gtf_to_SJ)\
         .select("transcript_id", "chrom", "start", "end")
     
-    if canonical_ss:
-        known_SJ_ss = GENCODE_SJ\
-            .unique(["chrom", "start", "end"])\
-            .pipe(filter_for_canonical)\
-            .pipe(add_phylop_to_df)\
-            .with_columns(
-                spl_type = pl.lit("known")
-            )
+    
+    known_SJ_ss = GENCODE_SJ\
+        .unique(["chrom", "start", "end"])\
+        .pipe(filter_combined, canonical_ss=canonical_ss, translational_evidence=translational_evidence)\
+        .pipe(add_phylop_to_df)\
+        .with_columns(
+            spl_type = pl.lit("known")
+        )
 
-        novel_3prime_ss = final_transcripts_SJ\
-            .join(
-                    GENCODE_SJ,
-                    on=["chrom", "start"]
-                )\
-            .filter(
-                pl.col("end").is_in(GENCODE_SJ["end"]).not_()
-            ).\
-            unique(["chrom", "start", "end"])\
-            .pipe(filter_for_canonical)\
-            .pipe(add_phylop_to_df)\
-            .with_columns(
-                spl_type = pl.lit("novel_3prime")
-            )
-
-        novel_5prime_ss = final_transcripts_SJ\
-            .join(
-                    GENCODE_SJ,
-                    on=["chrom", "end"]
-                )\
-            .filter(
-                pl.col("start").is_in(GENCODE_SJ["start"]).not_()
+    novel_3prime_ss = final_transcripts_SJ\
+        .join(
+                GENCODE_SJ,
+                on=["chrom", "start"]
             )\
-            .unique(["chrom", "start", "end"])\
-            .pipe(filter_for_canonical)\
-            .pipe(add_phylop_to_df)\
-            .with_columns(
-                spl_type = pl.lit("novel_5prime")
-            )
+        .filter(
+            pl.col("end").is_in(GENCODE_SJ["end"]).not_()
+        ).\
+        unique(["chrom", "start", "end"])\
+        .pipe(filter_combined, canonical_ss=canonical_ss, translational_evidence=translational_evidence)\
+        .pipe(add_phylop_to_df)\
+        .with_columns(
+            spl_type = pl.lit("novel_3prime")
+        )
 
-        novel_both_ss = final_transcripts_SJ\
-            .filter(
-                pl.col("start").is_in(GENCODE_SJ["start"]).not_() &
-                pl.col("end").is_in(GENCODE_SJ["end"]).not_()
+    novel_5prime_ss = final_transcripts_SJ\
+        .join(
+                GENCODE_SJ,
+                on=["chrom", "end"]
             )\
-            .unique(["chrom", "start", "end"])\
-            .pipe(filter_for_canonical)\
-            .pipe(add_phylop_to_df)\
-            .with_columns(
-                spl_type = pl.lit("novel_both")
-            )
-    else:
-        known_SJ_ss = GENCODE_SJ\
-            .unique(["chrom", "start", "end"])\
-            .pipe(add_phylop_to_df)\
-            .with_columns(
-                spl_type = pl.lit("known")
-            )
+        .filter(
+            pl.col("start").is_in(GENCODE_SJ["start"]).not_()
+        )\
+        .unique(["chrom", "start", "end"])\
+        .pipe(filter_combined, canonical_ss=canonical_ss, translational_evidence=translational_evidence)\
+        .pipe(add_phylop_to_df)\
+        .with_columns(
+            spl_type = pl.lit("novel_5prime")
+        )
 
-        novel_3prime_ss = final_transcripts_SJ\
-            .join(
-                    GENCODE_SJ,
-                    on=["chrom", "start"]
-                )\
-            .filter(
-                pl.col("end").is_in(GENCODE_SJ["end"]).not_()
-            ).unique(["chrom", "start", "end"])\
-            .pipe(add_phylop_to_df)\
-            .with_columns(
-                spl_type = pl.lit("novel_3prime")
-            )
-
-        novel_5prime_ss = final_transcripts_SJ\
-            .join(
-                    GENCODE_SJ,
-                    on=["chrom", "end"]
-                )\
-            .filter(
-                pl.col("start").is_in(GENCODE_SJ["start"]).not_()
-            ).unique(["chrom", "start", "end"])\
-            .pipe(add_phylop_to_df)\
-            .with_columns(
-                spl_type = pl.lit("novel_5prime")
-            )
-
-        novel_both_ss = final_transcripts_SJ\
-            .filter(
-                pl.col("start").is_in(GENCODE_SJ["start"]).not_() &
-                pl.col("end").is_in(GENCODE_SJ["end"]).not_()
-            ).unique(["chrom", "start", "end"])\
-            .pipe(add_phylop_to_df)\
-            .with_columns(
-                spl_type = pl.lit("novel_both")
-            )        
+    novel_both_ss = final_transcripts_SJ\
+        .filter(
+            pl.col("start").is_in(GENCODE_SJ["start"]).not_() &
+            pl.col("end").is_in(GENCODE_SJ["end"]).not_()
+        )\
+        .unique(["chrom", "start", "end"])\
+        .pipe(filter_combined, canonical_ss=canonical_ss, translational_evidence=translational_evidence)\
+        .pipe(add_phylop_to_df)\
+        .with_columns(
+            spl_type = pl.lit("novel_both")
+        )
+        
     export = pl.concat([known_SJ_ss, novel_3prime_ss, novel_5prime_ss, novel_both_ss], how="vertical")
     export.write_csv(out)
 
@@ -192,3 +177,5 @@ export_phyloP("exon", "export/variant/exon_ss_phyloP.csv")
 export_phyloP("CDS", "export/variant/CDS_ss_phyloP.csv")
 export_phyloP("exon", "export/variant/exon_ss_phyloP_canonical.csv", canonical_ss=True)
 export_phyloP("CDS", "export/variant/CDS_ss_phyloP_canonical.csv", canonical_ss=True)
+export_phyloP("exon", "export/variant/exon_ss_phyloP_canonical_translational.csv", canonical_ss=True, translational_evidence=True)
+export_phyloP("CDS", "export/variant/CDS_ss_phyloP_canonical_translational.csv", canonical_ss=True, translational_evidence=True)
