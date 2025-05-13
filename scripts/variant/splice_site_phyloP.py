@@ -109,27 +109,37 @@ def filter_for_peptide_evidence(df):
             how="inner"
         )
 
-def filter_combined(df, canonical_ss=False, riboseq_evidence = False, translational_evidence=False):
+def filter_for_short_read_support(df):
+    
+    short_read_SJ = pl.concat([read_SJ(file) for file in Path('nextflow_results/STAR_results').rglob('*_SJ.out.tab')], how='vertical')\
+        .unique(['chrom', 'start', 'end', 'strand'])\
+        .select(['chrom', 'start', 'end', 'strand'])\
+        .with_columns(
+            strand = pl.col('strand').map_elements(lambda s: '+' if s == 1 else '-', return_dtype=pl.String)
+        )
+
+    return df\
+        .join(
+            short_read_SJ.drop("strand"),
+            on=["chrom", "start", "end"],
+            how="inner"
+        )
+
+def filter_combined(df, canonical_ss=False, riboseq_evidence = False, translational_evidence=False, short_read_evidence=False):
     """ Filter the splice junctions for canonical splice sites and/or translational evidence.
     """
-    if canonical_ss and riboseq_evidence and translational_evidence:
-        return filter_for_peptide_evidence(filter_for_riboseq_evidence(filter_for_canonical(df)))
-    if canonical_ss and riboseq_evidence:
-        return filter_for_riboseq_evidence(filter_for_canonical(df))
-    if canonical_ss and translational_evidence:
-        return filter_for_peptide_evidence(filter_for_canonical(df))    
-    elif riboseq_evidence and translational_evidence:
-        return filter_for_peptide_evidence(filter_for_riboseq_evidence(df))
-    elif canonical_ss:
-        return filter_for_canonical(df)
-    elif translational_evidence:
-        return filter_for_peptide_evidence(df)
-    elif riboseq_evidence:
-        return filter_for_riboseq_evidence(df)
-    else:
-        return lambda df: df
+    if canonical_ss:
+        df = filter_for_canonical(df)
+    if riboseq_evidence:
+        df = filter_for_riboseq_evidence(df)
+    if translational_evidence:
+        df = filter_for_peptide_evidence(df)
+    if short_read_evidence:
+        df = filter_for_short_read_support(df)
 
-def export_phyloP(feature, out, canonical_ss=False, riboseq_evidence=False, translational_evidence=False):
+    return df
+
+def export_phyloP(feature, out, canonical_ss=False, riboseq_evidence=False, translational_evidence=False, short_read_evidence=False):
     """ Export the phyloP scores to a CSV file.
     """
     final_transcripts_SJ = read_gtf("nextflow_results/V47/orfanage/orfanage.gtf")\
@@ -146,7 +156,7 @@ def export_phyloP(feature, out, canonical_ss=False, riboseq_evidence=False, tran
     
     known_SJ_ss = GENCODE_SJ\
         .unique(["chrom", "start", "end"])\
-        .pipe(filter_combined, canonical_ss=canonical_ss, translational_evidence=translational_evidence, riboseq_evidence= riboseq_evidence)\
+        .pipe(filter_combined, canonical_ss=canonical_ss, translational_evidence=translational_evidence, riboseq_evidence= riboseq_evidence, short_read_evidence=short_read_evidence)\
         .pipe(add_phylop_to_df)\
         .with_columns(
             spl_type = pl.lit("known")
@@ -161,7 +171,7 @@ def export_phyloP(feature, out, canonical_ss=False, riboseq_evidence=False, tran
             pl.col("end").is_in(GENCODE_SJ["end"]).not_()
         ).\
         unique(["chrom", "start", "end"])\
-        .pipe(filter_combined, canonical_ss=canonical_ss, translational_evidence=translational_evidence, riboseq_evidence= riboseq_evidence)\
+        .pipe(filter_combined, canonical_ss=canonical_ss, translational_evidence=translational_evidence, riboseq_evidence= riboseq_evidence, short_read_evidence=short_read_evidence)\
         .pipe(add_phylop_to_df)\
         .with_columns(
             spl_type = pl.lit("novel_3prime")
@@ -176,7 +186,7 @@ def export_phyloP(feature, out, canonical_ss=False, riboseq_evidence=False, tran
             pl.col("start").is_in(GENCODE_SJ["start"]).not_()
         )\
         .unique(["chrom", "start", "end"])\
-        .pipe(filter_combined, canonical_ss=canonical_ss, translational_evidence=translational_evidence, riboseq_evidence= riboseq_evidence)\
+        .pipe(filter_combined, canonical_ss=canonical_ss, translational_evidence=translational_evidence, riboseq_evidence= riboseq_evidence, short_read_evidence=short_read_evidence)\
         .pipe(add_phylop_to_df)\
         .with_columns(
             spl_type = pl.lit("novel_5prime")
@@ -188,7 +198,7 @@ def export_phyloP(feature, out, canonical_ss=False, riboseq_evidence=False, tran
             pl.col("end").is_in(GENCODE_SJ["end"]).not_()
         )\
         .unique(["chrom", "start", "end"])\
-        .pipe(filter_combined, canonical_ss=canonical_ss, translational_evidence=translational_evidence, riboseq_evidence= riboseq_evidence)\
+        .pipe(filter_combined, canonical_ss=canonical_ss, translational_evidence=translational_evidence, riboseq_evidence= riboseq_evidence, short_read_evidence=short_read_evidence)\
         .pipe(add_phylop_to_df)\
         .with_columns(
             spl_type = pl.lit("novel_both")
@@ -205,3 +215,5 @@ export_phyloP("exon", "export/variant/exon_ss_phyloP_canonical_translational.csv
 export_phyloP("CDS", "export/variant/CDS_ss_phyloP_canonical_translational.csv", canonical_ss=True, translational_evidence=True)
 export_phyloP("exon", "export/variant/exon_ss_phyloP_canonical_riboseq.csv", canonical_ss=True, riboseq_evidence=True)
 export_phyloP("CDS", "export/variant/CDS_ss_phyloP_canonical_riboseq.csv", canonical_ss=True, riboseq_evidence=True)
+export_phyloP("exon", "export/variant/exon_ss_phyloP_canonical_short_read.csv", canonical_ss=True, short_read_evidence=True)
+export_phyloP("CDS", "export/variant/CDS_ss_phyloP_canonical_short_read.csv", canonical_ss=True, short_read_evidence=True)
