@@ -31,7 +31,7 @@ read_csv("export/variant/CDS_ss_phyloP.csv") %>%
             rows = vars(factor(spl_type, levels = c("known", "novel_5prime", "novel_3prime", "novel_both"))),
             scale = "free", space = "free_x"
         ) +
-    ggtitle("PhyloP scores for splice sites and near-splice regions in CDS") +
+    ggtitle("PhyloP scores for splice sites") +
     labs(x=NULL, y=NULL)
 ggsave(filename = "figures/variant/CDS_ss_phyloP.pdf", width = 12, height = 9, dpi = 300)
 
@@ -50,7 +50,7 @@ read_csv("export/variant/exon_ss_phyloP.csv") %>%
             rows = vars(factor(spl_type, levels = c("known", "novel_5prime", "novel_3prime", "novel_both"))),
             scale = "free", space = "free_x"
         ) +
-    ggtitle("PhyloP scores for splice sites and near-splice regions") +
+    ggtitle("PhyloP scores for splice sites") +
     labs(x=NULL, y=NULL)        
 ggsave(filename = "figures/variant/exon_ss_phyloP.pdf", width = 12, height = 9, dpi = 300)
 
@@ -69,7 +69,7 @@ read_csv("export/variant/exon_ss_phyloP_canonical.csv") %>%
             rows = vars(factor(spl_type, levels = c("known", "novel_5prime", "novel_3prime", "novel_both"))),
             scale = "free", space = "free_x"
         ) +
-    ggtitle("PhyloP scores for all canonical splice sites and their near-splice regions") +
+    ggtitle("PhyloP scores for all canonical splice sites") +
     labs(x=NULL, y=NULL)
 ggsave(filename = "figures/variant/exon_ss_phyloP_canonical.pdf", width = 12, height = 9, dpi = 300)
 
@@ -88,7 +88,7 @@ read_csv("export/variant/CDS_ss_phyloP_canonical.csv") %>%
             rows = vars(factor(spl_type, levels = c("known", "novel_5prime", "novel_3prime", "novel_both"))),
             scale = "free", space = "free_x"
         ) +
-    ggtitle("PhyloP scores for CDS canonical splice sites and their near-splice regions") +
+    ggtitle("PhyloP scores for CDS canonical splice sites") +
     labs(x=NULL, y=NULL)
 ggsave(filename = "figures/variant/CDS_ss_phyloP_canonical.pdf", width = 12, height = 9, dpi = 300)
 
@@ -107,7 +107,7 @@ read_csv("export/variant/CDS_ss_phyloP_canonical_translational.csv") %>%
             rows = vars(factor(spl_type, levels = c("known", "novel_5prime", "novel_3prime", "novel_both"))),
             scale = "free", space = "free_x"
         ) +
-    ggtitle("PhyloP scores for CDS canonical splice sites with translational evidence and their near-splice regions") +
+    ggtitle("PhyloP scores for CDS canonical splice sites with translational evidence") +
     labs(x=NULL, y=NULL)
 ggsave(filename = "figures/variant/CDS_ss_phyloP_canonical_translational.pdf", width = 12, height = 9, dpi = 300)
 
@@ -126,6 +126,44 @@ read_csv("export/variant/exon_ss_phyloP_canonical_translational.csv") %>%
             rows = vars(factor(spl_type, levels = c("known", "novel_5prime", "novel_3prime", "novel_both"))),
             scale = "free", space = "free_x"
         ) +
-    ggtitle("PhyloP scores for all canonical splice sites with translational evidence and their near-splice regions") +
+    ggtitle("PhyloP scores for all canonical splice sites with translational evidence") +
     labs(x=NULL, y=NULL)
 ggsave(filename = "figures/variant/exon_ss_phyloP_canonical_translational.pdf", width = 12, height = 9, dpi = 300)
+
+read_csv("export/variant/CDS_ss_phyloP_canonical_riboseq.csv") %>%
+    ggplot(aes(pos, phyloP)) +
+    geom_pointrange(
+        aes(ymin = phyloP - 1.96 * sem,
+            ymax = phyloP + 1.96 * sem
+        ),
+        size=.1,
+        position = position_dodge2(0.5)
+    ) +
+    scale_x_continuous(breaks = seq.int(-25, 10, 5)) +
+    facet_grid(
+            cols = vars(factor(region, levels = c("Acceptor", "Donor"))),
+            rows = vars(factor(spl_type, levels = c("known", "novel_5prime", "novel_3prime", "novel_both"))),
+            scale = "free", space = "free_x"
+        ) +
+    ggtitle("PhyloP scores for CDS canonical splice sites with ribo-seq evidence") +
+    labs(x=NULL, y=NULL)
+ggsave(filename = "figures/variant/CDS_ss_phyloP_canonical_riboseq.pdf", width = 12, height = 9, dpi = 300)
+
+read_csv("export/variant/exon_ss_phyloP_canonical_riboseq.csv") %>%
+    ggplot(aes(pos, phyloP)) +
+    geom_pointrange(
+        aes(ymin = phyloP - 1.96 * sem,
+            ymax = phyloP + 1.96 * sem
+        ),
+        size=.1,
+        position = position_dodge2(0.5)
+    ) +
+    scale_x_continuous(breaks = seq.int(-25, 10, 5)) +
+    facet_grid(
+            cols = vars(factor(region, levels = c("Acceptor", "Donor"))),
+            rows = vars(factor(spl_type, levels = c("known", "novel_5prime", "novel_3prime", "novel_both"))),
+            scale = "free", space = "free_x"
+        ) +
+    ggtitle("PhyloP scores for all canonical splice sites with ribo-seq evidence") +
+    labs(x=NULL, y=NULL)
+ggsave(filename = "figures/variant/exon_ss_phyloP_canonical_riboseq.pdf", width = 12, height = 9, dpi = 300)

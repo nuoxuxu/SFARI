@@ -1,10 +1,11 @@
 import pyBigWig
 from Bio import SeqIO
 import polars as pl
-from src.utils import gtf_to_SJ, read_gtf
+from src.utils import gtf_to_SJ, read_gtf, read_SJ
 import os
 import numpy as np
 import polars.selectors as cs
+from pathlib import Path
 
 bw = "data/hg38.phyloP100way.bw"
 pbw = pyBigWig.open(bw)
@@ -78,7 +79,22 @@ def filter_for_canonical(df):
             (pl.col("acceptor_seq")=="AG") & (pl.col("donor_seq")=="GT")
         )
 
-def filter_for_translational_evidence(df):
+def filter_for_riboseq_evidence(df):
+    riboseq_SJ = pl.concat([read_SJ(file) for file in Path('data/riboseq').rglob('*_SJ.out.tab')], how='vertical')\
+        .unique(['chrom', 'start', 'end', 'strand'])\
+        .select(['chrom', 'start', 'end', 'strand'])\
+        .with_columns(
+            strand = pl.col('strand').map_elements(lambda s: '+' if s == 1 else '-', return_dtype=pl.String)
+        )
+
+    return df\
+        .join(
+            riboseq_SJ.drop("strand"),
+            on=["chrom", "start", "end"],
+            how="inner"
+        )
+
+def filter_for_peptide_evidence(df):
     annot_peptides_hybrid = read_gtf("nextflow_results/V47/orfanage/annot_peptides_hybrid.gtf", attributes=["detected", "type", "transcript_id"])
     annot_peptides_hybrid = annot_peptides_hybrid\
         .filter(
@@ -93,19 +109,27 @@ def filter_for_translational_evidence(df):
             how="inner"
         )
 
-def filter_combined(df, canonical_ss=False, translational_evidence=False):
+def filter_combined(df, canonical_ss=False, riboseq_evidence = False, translational_evidence=False):
     """ Filter the splice junctions for canonical splice sites and/or translational evidence.
     """
+    if canonical_ss and riboseq_evidence and translational_evidence:
+        return filter_for_peptide_evidence(filter_for_riboseq_evidence(filter_for_canonical(df)))
+    if canonical_ss and riboseq_evidence:
+        return filter_for_riboseq_evidence(filter_for_canonical(df))
     if canonical_ss and translational_evidence:
-        return filter_for_translational_evidence(filter_for_canonical(df))
+        return filter_for_peptide_evidence(filter_for_canonical(df))    
+    elif riboseq_evidence and translational_evidence:
+        return filter_for_peptide_evidence(filter_for_riboseq_evidence(df))
     elif canonical_ss:
         return filter_for_canonical(df)
     elif translational_evidence:
-        return filter_for_translational_evidence(df)
+        return filter_for_peptide_evidence(df)
+    elif riboseq_evidence:
+        return filter_for_riboseq_evidence(df)
     else:
         return lambda df: df
-    
-def export_phyloP(feature, out, canonical_ss=False, translational_evidence=False):
+
+def export_phyloP(feature, out, canonical_ss=False, riboseq_evidence=False, translational_evidence=False):
     """ Export the phyloP scores to a CSV file.
     """
     final_transcripts_SJ = read_gtf("nextflow_results/V47/orfanage/orfanage.gtf")\
@@ -122,7 +146,7 @@ def export_phyloP(feature, out, canonical_ss=False, translational_evidence=False
     
     known_SJ_ss = GENCODE_SJ\
         .unique(["chrom", "start", "end"])\
-        .pipe(filter_combined, canonical_ss=canonical_ss, translational_evidence=translational_evidence)\
+        .pipe(filter_combined, canonical_ss=canonical_ss, translational_evidence=translational_evidence, riboseq_evidence= riboseq_evidence)\
         .pipe(add_phylop_to_df)\
         .with_columns(
             spl_type = pl.lit("known")
@@ -137,7 +161,7 @@ def export_phyloP(feature, out, canonical_ss=False, translational_evidence=False
             pl.col("end").is_in(GENCODE_SJ["end"]).not_()
         ).\
         unique(["chrom", "start", "end"])\
-        .pipe(filter_combined, canonical_ss=canonical_ss, translational_evidence=translational_evidence)\
+        .pipe(filter_combined, canonical_ss=canonical_ss, translational_evidence=translational_evidence, riboseq_evidence= riboseq_evidence)\
         .pipe(add_phylop_to_df)\
         .with_columns(
             spl_type = pl.lit("novel_3prime")
@@ -152,7 +176,7 @@ def export_phyloP(feature, out, canonical_ss=False, translational_evidence=False
             pl.col("start").is_in(GENCODE_SJ["start"]).not_()
         )\
         .unique(["chrom", "start", "end"])\
-        .pipe(filter_combined, canonical_ss=canonical_ss, translational_evidence=translational_evidence)\
+        .pipe(filter_combined, canonical_ss=canonical_ss, translational_evidence=translational_evidence, riboseq_evidence= riboseq_evidence)\
         .pipe(add_phylop_to_df)\
         .with_columns(
             spl_type = pl.lit("novel_5prime")
@@ -164,7 +188,7 @@ def export_phyloP(feature, out, canonical_ss=False, translational_evidence=False
             pl.col("end").is_in(GENCODE_SJ["end"]).not_()
         )\
         .unique(["chrom", "start", "end"])\
-        .pipe(filter_combined, canonical_ss=canonical_ss, translational_evidence=translational_evidence)\
+        .pipe(filter_combined, canonical_ss=canonical_ss, translational_evidence=translational_evidence, riboseq_evidence= riboseq_evidence)\
         .pipe(add_phylop_to_df)\
         .with_columns(
             spl_type = pl.lit("novel_both")
@@ -179,3 +203,5 @@ export_phyloP("exon", "export/variant/exon_ss_phyloP_canonical.csv", canonical_s
 export_phyloP("CDS", "export/variant/CDS_ss_phyloP_canonical.csv", canonical_ss=True)
 export_phyloP("exon", "export/variant/exon_ss_phyloP_canonical_translational.csv", canonical_ss=True, translational_evidence=True)
 export_phyloP("CDS", "export/variant/CDS_ss_phyloP_canonical_translational.csv", canonical_ss=True, translational_evidence=True)
+export_phyloP("exon", "export/variant/exon_ss_phyloP_canonical_riboseq.csv", canonical_ss=True, riboseq_evidence=True)
+export_phyloP("CDS", "export/variant/CDS_ss_phyloP_canonical_riboseq.csv", canonical_ss=True, riboseq_evidence=True)
