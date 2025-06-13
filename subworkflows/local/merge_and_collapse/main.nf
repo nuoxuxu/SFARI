@@ -3,6 +3,8 @@
 process getIDToSample {
     publishDir "${params.output_dir}", mode: 'copy'
 
+    conda "${moduleDir}/environment.yml"
+    
     input:
     val x
 
@@ -89,5 +91,4 @@ workflow {
     Channel.fromPath(params.mapped_bam).collect().set { bamFiles }
     mergeBamFiles(bamFiles)
     isoseqCollapse(mergeBamFiles.out)
-    
 }

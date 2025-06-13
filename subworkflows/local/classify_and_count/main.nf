@@ -75,7 +75,7 @@ process getFullExpression {
     label "short_slurm_job"
     publishDir "${params.output_dir}", mode: 'copy'
 
-    conda "${moduleDir}/environment.yml"
+    conda "/home/s/shreejoy/nxu/miniforge3/envs/patch_seq_spl"
 
     input:
     path read_stat
