@@ -42,7 +42,6 @@ process runORFanage {
 }
 
 process fixORFanageFormat {
-    publishDir "${params.output_dir}/orfanage", mode: 'copy'
     label "short_slurm_job"
 
     container "quay.io/biocontainers/agat:1.4.2--pl5321hdfd78af_0"
@@ -81,7 +80,6 @@ process extractORFanageCdsFasta {
 }
 
 process extractORFanageTranslationFasta {
-    publishDir "${params.output_dir}/orfanage", mode: 'copy'
     label "short_slurm_job"
 
     container "quay.io/biocontainers/agat:1.4.2--pl5321hdfd78af_0"
@@ -119,8 +117,6 @@ process filterOrfanageUCSC {
 }
 
 process getBestOrfCsv {
-    publishDir "${params.output_dir}/orfanage", mode: 'copy'
-
     conda "$moduleDir/environment.yml"
 
     input:
@@ -151,6 +147,7 @@ workflow ORFanage {
     fixORFanageFormat(runORFanage.out.orfanage_gtf, params.genome_fasta)
     extractORFanageCdsFasta(params.genome_fasta, fixORFanageFormat.out)
     extractORFanageTranslationFasta(params.genome_fasta, fixORFanageFormat.out)
+    filterOrfanageUCSC(fixORFanageFormat.out)
     getBestOrfCsv(final_sample_classification, final_sample_fasta, extractORFanageCdsFasta.out)
     emit:
     predicted_cds_gtf = fixORFanageFormat.out
@@ -168,5 +165,6 @@ workflow {
     fixORFanageFormat(runORFanage.out.orfanage_gtf, params.genome_fasta)
     extractORFanageCdsFasta(params.genome_fasta, fixORFanageFormat.out)
     extractORFanageTranslationFasta(params.genome_fasta, fixORFanageFormat.out)
+    filterOrfanageUCSC(fixORFanageFormat.out)
     getBestOrfCsv(final_sample_classification, final_sample_fasta, extractORFanageCdsFasta.out)
 }
