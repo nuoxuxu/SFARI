@@ -99,6 +99,25 @@ process extractORFanageTranslationFasta {
     """
 }
 
+process filterOrfanageUCSC {
+    publishDir "${params.output_dir}/${params.orf_prediction}/UCSC_tracks", mode: 'copy'
+    
+    conda "/home/s/shreejoy/nxu/miniforge3/envs/patch_seq_spl"
+
+    input:
+    path predicted_cds_gtf
+
+    output:
+    path "orfanage_UCSC.gtf"
+
+    script:
+    """
+    filter_orfanage_UCSC.py \\
+        --orfanage_gtf $predicted_cds_gtf \\
+        --output "orfanage_UCSC.gtf"
+    """
+}
+
 process getBestOrfCsv {
     publishDir "${params.output_dir}/orfanage", mode: 'copy'
 
