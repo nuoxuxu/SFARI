@@ -11,15 +11,17 @@ LR_SJ <- read_parquet("data/riboseq/riboseq_SJ.parquet")
 
 #-------------------------------------Get annotated long-read exons----------------------------
 
-ribo <- BamFile("/scratch/s/shreejoy/ehogan/sfari/riboseq/analysis/peak-calling/merged.sorted.bam") %>% 
+ribo <- BamFile("/scratch/s/shreejoy/ehogan/sfari/riboseq/analysis/peak-calling/merged.sorted.bam") %>%
     scanBam(param = ScanBamParam(what = c("pos", "rname", "strand", "qwidth")))
 
 ribo <- GRanges(
-    seqnames = Rle(ribo[[1]]$rname), 
-    ranges = IRanges(start = ribo[[1]]$pos, 
-    width = ribo[[1]]$qwidth), 
+    seqnames = Rle(ribo[[1]]$rname),
+    ranges = IRanges(
+        start = ribo[[1]]$pos,
+        width = ribo[[1]]$qwidth
+    ),
     strand = ribo[[1]]$strand
-    ) %>% 
+) %>%
     unique()
 
 saveRDS(ribo, "data/riboseq/ribo.rds")
@@ -33,13 +35,13 @@ saveRDS(ribo, "data/riboseq/ribo.rds")
 ribo <- readRDS("data/riboseq/ribo.rds")
 
 gencode <- rtracklayer::import(paste0(Sys.getenv("GENOMIC_DATA_DIR"), "GENCODE/gencode.v47.annotation.gtf"))
-gencode.cds <- gencode[gencode$type == "CDS"]    
+gencode.cds <- gencode[gencode$type == "CDS"]
 gencode.cds.unique <- unique(gencode.cds)
 
-orfanage  <- rtracklayer::import("nextflow_results/V47/orfanage/orfanage.gtf")
+orfanage <- rtracklayer::import("nextflow_results/V47/orfanage/orfanage.gtf")
 orfanage.cds <- orfanage[orfanage$type == "CDS"]
 orfanage.cds.unique <- unique(orfanage.cds)
-        
+
 # Annotate the Orfanage CDS as known/novel
 matches <- findOverlaps(orfanage.cds.unique, gencode.cds.unique, type = "equal")
 novelty_labels <- rep("novel", length(orfanage.cds.unique))
@@ -105,27 +107,27 @@ SJ.novel.summary_df <- LR_SJ %>%
         "SR" = "validated"
     )
 
-known.summary_df <- rbind(exon.known.summary_df, SJ.known.summary_df) %>% 
+known.summary_df <- rbind(exon.known.summary_df, SJ.known.summary_df) %>%
     group_by(validated) %>%
     summarise(
         len = sum(len)
-    ) %>% 
+    ) %>%
     mutate(
         percent = len / sum(len) * 100
-    ) %>%     
+    ) %>%
     arrange(desc(validated)) %>%
-    mutate(ypos = cumsum(percent) -0.5 * percent)
+    mutate(ypos = cumsum(percent) - 0.5 * percent)
 
-novel.summary_df <- rbind(exon.novel.summary_df, SJ.novel.summary_df) %>% 
+novel.summary_df <- rbind(exon.novel.summary_df, SJ.novel.summary_df) %>%
     group_by(validated) %>%
     summarise(
         len = sum(len)
-    ) %>% 
+    ) %>%
     mutate(
         percent = len / sum(len) * 100
-    ) %>%     
+    ) %>%
     arrange(desc(validated)) %>%
-    mutate(ypos = cumsum(percent) -0.5 * percent)        
+    mutate(ypos = cumsum(percent) - 0.5 * percent)
 
 #--------------Plotting---------------------------
 
@@ -152,4 +154,4 @@ p2 <- novel.summary_df %>%
     geom_text(aes(y = ypos, label = sprintf("%.1f%%", percent)), color = "white", size = 6)
 
 p1 + p2
-ggsave("figures/figure_2/Ribo-seq_pie.pdf", width = 200, height = 100, units ="mm")
+ggsave("figures/figure_2/Ribo-seq_pie.pdf", width = 200, height = 100, units = "mm")
