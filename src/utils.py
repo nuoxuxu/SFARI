@@ -135,8 +135,9 @@ def gtf_to_SJ(gtf):
         )\
         .explode("start", "end")\
         .rename({"seqname": "chrom"})\
-        .filter(pl.col("start").is_null().not_())
-        
+        .filter(pl.col("start").is_null().not_())\
+        .select("transcript_id", "strand", "chrom", "start", "end")
+
 def write_fasta(df: pl.DataFrame, id_col: str, seq_col: str, output_file: str):
     """
     Writes a FASTA file from a Polars DataFrame.
