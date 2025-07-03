@@ -1,4 +1,4 @@
-from src.ryp import r, to_r
+from SingleCell.ryp import r, to_r
 import polars as pl
 
 r(

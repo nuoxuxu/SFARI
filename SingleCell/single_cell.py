@@ -10320,7 +10320,7 @@ class SingleCell:
         X = self._X
         library_size = X.sum(axis=1)
         X = X / library_size[:, None] * 1e6
-        return SingleCell(X=X, obs=self._obs, var=self._var)
+        return SingleCell(X=csr_array(X), obs=self._obs, var=self._var)
 
     def to_frame(self) -> pl.DataFrame:
         return pl.concat([self.var_names.to_frame(), pl.DataFrame(self._X.toarray(), schema = self.obs_names.to_list())], how="horizontal")
@@ -11097,9 +11097,7 @@ class Pseudobulk:
         return f'Pseudobulk dataset with {len(self._X):,} cell ' \
                f'{"types, each" if len(self._X) > 1 else "type,"} with ' \
                f'{samples_string} (obs) and {genes_string} (var)\n' + \
-            fill(f'    Cell types: {", ".join(self._X)}',
-                 width=os.get_terminal_size().columns,
-                 subsequent_indent=' ' * 17)
+               f'    Cell types: {", ".join(self._X)}'
     
     @property
     def shape(self) -> dict[str, tuple[int, int]]:
