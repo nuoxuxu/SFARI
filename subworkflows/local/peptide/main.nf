@@ -28,7 +28,7 @@ process peptideTrackUCSC {
 process addPeptideAnnotation {
     publishDir "${params.output_dir}/${params.orf_prediction}/UCSC_tracks", mode: 'copy'
     
-    conda "/scratch/s/shreejoy/nxu/SFARI/envs/r_env"
+    conda "$moduleDir/R.yml"
 
     input:
     val mode
@@ -52,7 +52,7 @@ process addPeptideAnnotation {
 process filterPeptidesUCSC {
     publishDir "${params.output_dir}/${params.orf_prediction}/UCSC_tracks", mode: 'copy'
     
-    conda "/home/s/shreejoy/nxu/miniforge3/envs/patch_seq_spl"
+    conda "$moduleDir/python.yml"
 
     input:
     path annot_peptides_gtf

@@ -100,7 +100,7 @@ process extractORFanageTranslationFasta {
 process filterOrfanageUCSC {
     publishDir "${params.output_dir}/${params.orf_prediction}/UCSC_tracks", mode: 'copy'
     
-    conda "/home/s/shreejoy/nxu/miniforge3/envs/patch_seq_spl"
+    conda "$moduleDir/environment.yml"
 
     input:
     path predicted_cds_gtf

@@ -17,7 +17,7 @@ process pigeonPrepare {
 
     script:
     """
-    ~/miniforge3/envs/SQANTI3.env/bin/pigeon prepare $isoform_gff $annotation_gtf $genome_fasta
+    pigeon prepare $isoform_gff $annotation_gtf $genome_fasta
     """
 }
 
@@ -42,7 +42,7 @@ process pigeonClassify {
 
     script:
     """
-    ~/miniforge3/envs/SQANTI3.env/bin/pigeon classify $sorted_isoform_gff $sorted_annotation $genome_fasta
+    pigeon classify $sorted_isoform_gff $sorted_annotation $genome_fasta
     """
 }
 
@@ -67,7 +67,7 @@ process pigeonFilter {
 
     script:
     """
-    ~/miniforge3/envs/SQANTI3.env/bin/pigeon filter $classification --isoforms $isoform_gff
+    pigeon filter $classification --isoforms $isoform_gff
     """
 }
 
@@ -75,7 +75,7 @@ process getFullExpression {
     label "short_slurm_job"
     publishDir "${params.output_dir}", mode: 'copy'
 
-    conda "/home/s/shreejoy/nxu/miniforge3/envs/patch_seq_spl"
+    conda "${moduleDir}/environment.yml"
 
     input:
     path read_stat
@@ -96,7 +96,7 @@ process filterByExpressionExternalSupport {
     label "short_slurm_job"
     publishDir "${params.output_dir}", mode: 'copy'
 
-    conda "/home/s/shreejoy/nxu/miniforge3/envs/patch_seq_spl"
+    conda "${moduleDir}/environment.yml"
 
     input:
     path classification

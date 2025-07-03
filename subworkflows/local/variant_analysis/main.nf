@@ -61,6 +61,23 @@ process novelCDS {
     """
 }
 
+process riboseqTrack {
+    publishDir "${params.output_dir}/${params.orf_prediction}/UCSC_tracks", mode: 'copy'
+    
+    conda "/scratch/s/shreejoy/nxu/SFARI/envs/r_env"
+
+    input:
+    path riboseq_file
+
+    output:
+    path "riboseq.gtf"
+
+    script:
+    """
+    riboseq_track.R \\
+        $riboseq_file
+    """
+}
 workflow UCSCTracks {
     take:
     predicted_cds_gtf
@@ -70,6 +87,7 @@ workflow UCSCTracks {
     novelExonicRegions(predicted_cds_gtf, annotation_gtf)
     novelSpliceSites(predicted_cds_gtf, annotation_gtf)
     novelCDS(predicted_cds_gtf, annotation_gtf)
+    riboseqTrack(params.riboseq_file)
 }
 
 workflow {
@@ -79,4 +97,5 @@ workflow {
     novelExonicRegions(annotation_gtf, predicted_cds_gtf)
     novelSpliceSites(annotation_gtf, predicted_cds_gtf)
     novelCDS(annotation_gtf, predicted_cds_gtf)
+    riboseqTrack(params.riboseq_file)
 }
