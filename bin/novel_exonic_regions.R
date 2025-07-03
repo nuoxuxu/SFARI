@@ -31,6 +31,17 @@ mcols(novel_exonic_regions)$gene_id <- mcols(SFARI_exons[subjectHits(hits[!dupli
 
 mcols(novel_exonic_regions)$transcript_id <- mcols(SFARI_exons[subjectHits(hits[!duplicated(queryHits(hits))])])$transcript_id
 
-rtracklayer::export(novel_exonic_regions, "novel_exonic_regions.gtf")
-
-system("sed -i 's/sequence_feature/exon/g' novel_exonic_regions.gtf")
+as_tibble(novel_exonic_regions) %>% 
+    mutate(
+        source = "ORFanage",
+        feature = "exon",
+        score = ".",
+        frame = ".",
+        attributes = paste0(
+            'gene_id \"', gene_id, '\"; ',
+            'transcript_id \"', transcript_id, '\";'
+        )
+    ) %>%
+    dplyr::select(-c(gene_id, transcript_id)) %>% 
+    dplyr::select(seqnames, source, feature, start, end, score, strand, frame, attributes) %>% 
+    write_tsv("novel_exonic_regions.gtf", col_names = FALSE, quote="none", escape="none")

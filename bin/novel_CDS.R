@@ -31,6 +31,17 @@ mcols(novel_CDS)$gene_id <- mcols(SFARI_CDS[subjectHits(hits[!duplicated(queryHi
 
 mcols(novel_CDS)$transcript_id <- mcols(SFARI_CDS[subjectHits(hits[!duplicated(queryHits(hits))])])$transcript_id
 
-rtracklayer::export(novel_CDS, "novel_CDS.gtf")
-
-system("sed -i 's/sequence_feature/CDS/g' novel_CDS.gtf")
+as_tibble(novel_CDS) %>%
+    mutate(
+        source = "ORFanage",
+        feature = "CDS",
+        score = ".",
+        frame = ".",
+        attributes = paste0(
+            'gene_id \"', gene_id, '\"; ',
+            'transcript_id \"', transcript_id, '\";'
+        )
+    ) %>% 
+    dplyr::select(-c(gene_id, transcript_id)) %>% 
+    dplyr::select(seqnames, source, feature, start, end, score, strand, frame, attributes) %>% 
+    write_tsv("novel_CDS.gtf", col_names = FALSE, quote="none", escape="none")
