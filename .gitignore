@@ -32,3 +32,4 @@ transcript_vis_app/*.csv
 .virtualenvs/
 assets/
 envs/
+env/

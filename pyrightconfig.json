@@ -6,6 +6,7 @@
       "data/**",
       "proc/**",
       "env/**",
+      ".virtualenvs/**"
     ],
     "stubPath": "typings",
     "ignore": [
