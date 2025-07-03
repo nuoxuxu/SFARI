@@ -1,0 +1,18 @@
+name: /gpfs/fs0/scratch/s/shreejoy/nxu/SFARI/env
+channels:
+  - conda-forge
+  - bioconda
+  - pytorch
+dependencies:
+  - python=3.12.3
+  - polars
+  - scipy
+  - h5py
+  - pyarrow
+  - ipykernel
+  - cffi
+  - radian
+  - r-base
+  - r-arrow
+  - r-svglite
+  - r-tidyverse
