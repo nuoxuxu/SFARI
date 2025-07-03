@@ -79,9 +79,6 @@ novel.subset <- novel.subset[-contained.index]
 known.subset$n_riboseq <- countOverlaps(known.subset, ribo)
 known.subset$avg_riboseq <- known.subset$n_riboseq / width(known.subset)
 
-novel.subset$n_riboseq <- countOverlaps(novel.subset, ribo)
-novel.subset$avg_riboseq <- novel.subset$n_riboseq / width(novel.subset)
-
 # Add a boolean validation column using 0.04 as the cutoff
 known.subset$validated <- ifelse(known.subset$avg_riboseq > 0.04, T, F)
 novel.subset$validated <- ifelse(novel.subset$avg_riboseq > 0.04, T, F)
@@ -129,6 +126,51 @@ novel.summary_df <- rbind(exon.novel.summary_df, SJ.novel.summary_df) %>%
     arrange(desc(validated)) %>%
     mutate(ypos = cumsum(percent) - 0.5 * percent)
 
+#-------------My code---------------------------
+ribo <- readRDS("data/riboseq/ribo.rds")
+
+gencode_CDS <- makeTxDbFromGFF(paste0(Sys.getenv("GENOMIC_DATA_DIR"), "GENCODE/gencode.v47.annotation.gtf")) %>%
+    cdsBy(by = "tx", use.names = TRUE) %>%
+    unlist() %>%
+    unique()
+
+orfanage_CDS <- rtracklayer::import("nextflow_results/V47/orfanage/orfanage.gtf") %>%
+    subset(type == "CDS") %>%
+    unique()
+
+novel_CDS <- GenomicRanges::subtract(orfanage_CDS, gencode_CDS) %>% unlist() %>% unique() %>% reduce()
+
+gencode_CDS$n_riboseq <- countOverlaps(gencode_CDS, ribo)
+gencode_CDS$avg_riboseq <- gencode_CDS$n_riboseq / width(gencode_CDS)
+
+novel_CDS$n_riboseq <- countOverlaps(novel_CDS, ribo)
+novel_CDS$avg_riboseq <- novel_CDS$n_riboseq / width(novel_CDS)
+
+gencode_avg_riboseq <- tibble(
+    avg_riboseq = gencode_CDS$avg_riboseq,
+    type = "GENCODE"
+)
+
+novel_avg_riboseq <- tibble(
+    avg_riboseq = novel_CDS$avg_riboseq,
+    type = "ORFanage"
+)
+
+# Combine the average riboseq data
+avg_riboseq_df <- rbind(gencode_avg_riboseq, novel_avg_riboseq)
+
+avg_riboseq_df %>% 
+    ggplot(aes(x = avg_riboseq, fill = type)) +
+    geom_histogram(alpha = 0.5) +
+    labs(
+        x = "Average Ribo-seq reads per base",
+        fill = "Type"
+    ) +
+    xlim(c(0, 0.1)) +
+    ylim(c(0, 8000)) +
+    theme_minimal()
+
+ggsave("figures/test/Ribo-seq_histogram.png", width = 140, height = 100, units = "mm")
 #--------------Plotting---------------------------
 
 my_theme <- theme_void() +

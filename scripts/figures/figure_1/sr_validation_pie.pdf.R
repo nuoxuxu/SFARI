@@ -2,69 +2,74 @@ library(reticulate)
 library(dplyr)
 library(ggplot2)
 library(patchwork)
+library(arrow)
 
-use_condaenv("/scratch/s/shreejoy/nxu/SFARI/envs/r_env")
+LR_SJ_novel <- read_parquet("export/LR_SJ_novel.parquet")
 
-py_run_string("
-from src.utils import read_gtf, read_SJ, gtf_to_SJ
-import polars as pl
-from pathlib import Path
-import os
+classification <- read_parquet("nextflow_results/V47/final_classification.parquet")
 
-SR_SJ = (
-    pl.concat([read_SJ(file) for file in Path('export/STAR_results').rglob('*_SJ.out.tab')], how='vertical')
-    .unique(['chrom', 'start', 'end', 'strand'])
-    .select(['chrom', 'start', 'end', 'strand'])
-    .with_columns(
-        strand = pl.col('strand').map_elements(lambda s: '+' if s == 1 else '-', return_dtype=pl.String)
-    )
-    .with_columns(
-        SR = pl.lit(True)
-    )
-)
+LR_SJ_novel %>%
+    filter(LR, GENCODE) %>%
+    filter(SR) %>%
+    left_join(
+        classification %>% select(c(isoform, structural_category)),
+        by = join_by(transcript_id == isoform)
+    ) %>%
+    group_by(structural_category) %>%
+    summarise(len = n()) %>%
+    mutate(
+        percent = len / sum(len) * 100
+    ) %>%
+    ggplot(
+        aes(x = structural_category, y = len, fill = structural_category)
+    ) +
+    geom_bar(stat = "identity") +
+    geom_text(aes(label = sprintf("%.1f%%", percent)), vjust = -0.5, color = "black", size = 3.5) +
+    labs(title = "Validated by short-read splice junctions") +
+    theme_minimal()
 
-LR_SJ = (
-    read_gtf('nextflow_results/V47/final_transcripts.gtf')
-    .pipe(gtf_to_SJ)
-)
+LR_SJ_novel %>%
+    filter(LR, !GENCODE) %>%
+    filter(!SR) %>%
+    left_join(
+        classification %>% select(c(isoform, structural_category)),
+        by = join_by(transcript_id == isoform)
+    ) %>%
+    group_by(structural_category) %>%
+    summarise(len = n()) %>%
+    mutate(
+        percent = len / sum(len) * 100
+    ) %>%
+    ggplot(
+        aes(x = structural_category, y = len, fill = structural_category)
+    ) +
+    geom_bar(stat = "identity") +
+    geom_text(aes(label = sprintf("%.1f%%", percent)), vjust = -0.5, color = "black", size = 3.5) +
+    labs(title = "Not validated by short-read splice junctions") +
+    theme_minimal()
 
-gencode_V47_SJ = (
-    read_gtf(''.join([os.getenv('GENOMIC_DATA_DIR'), '/GENCODE/gencode.v47.annotation.gtf']))
-    .filter(pl.col('feature') == 'exon')
-    .pipe(gtf_to_SJ)
-)
+LR_SJ_novel %>%
+    filter(LR, GENCODE) %>%
+    filter(!SR) %>% 
+    ggplot(aes(x=len)) +
+    geom_histogram(bins = 100) +
+    xlim(0, 20)
 
-LR_SJ_novel = (
-    LR_SJ
-    .filter(pl.col('start').is_null().not_())
-    .with_columns(
-        LR=pl.lit(True)
-    )
-    .join(
-        gencode_V47_SJ['chrom', 'start', 'end', 'strand'].with_columns(GENCODE=pl.lit(True)),
-        on=['chrom', 'start', 'end', 'strand'],
-        how='full',
-        coalesce=True
-    )
-    .join(
-        SR_SJ,
-        on=['chrom', 'start', 'end', 'strand'],
-        how='full',
-        coalesce=True
-    )
-)
+LR_SJ_novel %>%
+    filter(LR, !GENCODE) %>%
+    filter(!SR) %>%
+    ggplot(aes(x=len)) +
+    geom_histogram(bins = 100) +
+    xlim(0, 20) +
+    labs(title = "SJ not validated by short-read splice junctions")
 
-LR_SJ_novel = (
-    LR_SJ_novel
-    .with_columns(
-        pl.col('LR').fill_null(False),
-        pl.col('GENCODE').fill_null(False),
-        pl.col('SR').fill_null(False)
-    )
-)
-")
-
-LR_SJ_novel <- as_tibble(py$LR_SJ_novel$to_pandas())
+LR_SJ_novel %>%
+    filter(LR, !GENCODE) %>%
+    filter(SR) %>%
+    ggplot(aes(x=len)) +
+    geom_histogram(bins = 100) +
+    xlim(0, 20) +
+    labs(title = "SJ validated by short-read splice junctions")
 
 df <- LR_SJ_novel %>%
     filter(LR, GENCODE) %>%
@@ -107,4 +112,4 @@ p2 <- df %>%
     geom_text(aes(y = ypos, label = sprintf("%.1f%%", percent)), color = "white", size = 5)
 
 p1 + p2
-ggsave("figures/figure_1/sr_validation_pie.pdf", width = 200, height = 100, units ="mm")
+ggsave("figures/figure_1/sr_validation_pie.pdf", width = 200, height = 100, units = "mm")

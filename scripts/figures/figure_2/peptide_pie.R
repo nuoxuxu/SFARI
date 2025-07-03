@@ -7,7 +7,12 @@ library(patchwork)
 annot_peptides_hybrid <- import("nextflow_results/V47/orfanage/annot_peptides_hybrid.gtf") %>%
     as_tibble()
 
+annot_peptides_hybrid %>% 
+    distinct(transcript_id) %>%
+    summarise(len = n())
+
 known <- annot_peptides_hybrid %>%
+    distinct(transcript_id, .keep_all = TRUE) %>% # keep only unique transcripts
     filter(novelty == "known") %>% # filter to known peptides
     group_by(detected) %>% # group by detected status
     summarise(len = n(), .groups = "drop") %>% # count rows per group
@@ -19,6 +24,7 @@ known <- annot_peptides_hybrid %>%
     mutate(ypos = cumsum(percent) - 0.5 * percent)
 
 novel <- annot_peptides_hybrid %>%
+    distinct(transcript_id, .keep_all = TRUE) %>% 
     filter(novelty == "novel") %>% # filter to novel peptides
     group_by(detected) %>% # group by detected status
     summarise(len = n(), .groups = "drop") %>% # count rows per group

@@ -2,12 +2,11 @@ from src.utils import read_gtf, read_SJ, gtf_to_SJ
 import polars as pl
 from pathlib import Path
 import os
-from SingleCell.ryp import r, to_r
 
 SR_SJ = (
-    pl.concat([read_SJ(file) for file in Path('nextflow_results/STAR_results').rglob('*_SJ.out.tab')], how='vertical')
-    .unique(['chrom', 'start', 'end', 'strand'])
-    .select(['chrom', 'start', 'end', 'strand'])
+    pl.concat([read_SJ(file) for file in Path('export/STAR_results').rglob('*_SJ.out.tab')], how='vertical')
+    .unique(['chrom', 'start', 'end', 'strand', 'motif'])
+    .select(['chrom', 'start', 'end', 'strand', 'motif'])
     .with_columns(
         strand = pl.col('strand').map_elements(lambda s: '+' if s == 1 else '-', return_dtype=pl.String)
     )
@@ -18,13 +17,16 @@ SR_SJ = (
 
 LR_SJ = (
     read_gtf('nextflow_results/V47/final_transcripts.gtf')
-    .pipe(gtf_to_SJ)
+    .pipe(gtf_to_SJ)\
+    .group_by(['chrom', 'start', 'end', 'strand'])\
+    .len()
 )
 
 gencode_V47_SJ = (
     read_gtf(''.join([os.getenv('GENOMIC_DATA_DIR'), '/GENCODE/gencode.v47.annotation.gtf']))
     .filter(pl.col('feature') == 'exon')
-    .pipe(gtf_to_SJ)
+    .pipe(gtf_to_SJ)\
+    .unique(['strand', 'chrom', 'start', 'end'])
 )
 
 LR_SJ_novel = (
@@ -56,28 +58,4 @@ LR_SJ_novel = (
     )
 )
 
-novel_LR_SJ = LR_SJ_novel\
-    .drop_nulls()\
-    .filter(
-        pl.col("LR"), 
-        pl.col("GENCODE").not_()
-    )\
-    .with_columns(
-        len = pl.col("end") - pl.col("start") +1
-    )
-
-to_r(novel_LR_SJ, "novel_LR_SJ")
-
-r(
-"""
-library(ggplot2)
-library(dplyr)
-
-novel_LR_SJ %>%
-    ggplot(aes(len, fill=SR)) +
-    geom_histogram(alpha=0.5) +
-    theme_minimal() + 
-    ggtitle("Novel long-read SJ lengths distribution")
-ggsave("figures/supplementary/novel_LR_SJ_lengths.pdf")
-"""
-)
+LR_SJ_novel.write_parquet('export/LR_SJ_novel.parquet')
