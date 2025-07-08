@@ -1,0 +1,19 @@
+name: /gpfs/fs0/scratch/s/shreejoy/nxu/SFARI/envs/spliceai-toolkit
+channels:
+  - conda-forge
+  - bioconda
+  - pytorch
+dependencies:
+  - python<=3.12
+  - numpy>=1.22.0
+  - gffutils>=0.10.1
+  - h5py
+  - pytorch
+  - tqdm
+  - wandb
+  - scikit-learn
+  - pandas
+  - pip
+  - pip:
+    - tensorflow
+    - spliceai-toolkit
