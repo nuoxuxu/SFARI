@@ -13,13 +13,22 @@ predicted_cds_gtf <- args[2]
 sequence_feature <- args[3]
 output <- args[4]
 
-gencode_exons <- makeTxDbFromGFF(annotation_gtf) %>%
-    exonsBy(by = "tx", use.names = TRUE) %>% 
-    unlist() %>%
-    unique()
+if (sequence_feature == "CDS") {
+    gencode_exons <- makeTxDbFromGFF(annotation_gtf) %>%
+        cdsBy(by = "tx", use.names = TRUE) %>%
+        unlist() %>%
+        unique()
+} else if (sequence_feature == "exon") {
+    gencode_exons <- makeTxDbFromGFF(annotation_gtf) %>%
+        exonsBy(by = "tx", use.names = TRUE) %>%
+        unlist() %>%
+        unique()
+} else {
+    stop("Invalid sequence feature. Please use 'CDS' or 'exon'.")
+}
 
 SFARI_exons <- rtracklayer::import(predicted_cds_gtf) %>%
-    subset(type == "exon") %>%
+    subset(type == sequence_feature) %>%
     unique()
 
 novel_exonic_regions <- GenomicRanges::subtract(SFARI_exons, gencode_exons) %>% unlist() %>% unique() %>% reduce()
@@ -36,7 +45,7 @@ mcols(novel_exonic_regions)$transcript_id <- mcols(SFARI_exons[subjectHits(hits[
 as_tibble(novel_exonic_regions) %>% 
     mutate(
         source = "ORFanage",
-        feature = "exon",
+        feature = sequence_feature,
         score = ".",
         frame = ".",
         attributes = paste0(
