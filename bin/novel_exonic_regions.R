@@ -10,6 +10,8 @@ args <- commandArgs(trailingOnly=TRUE)
 
 annotation_gtf <- args[1]
 predicted_cds_gtf <- args[2]
+sequence_feature <- args[3]
+output <- args[4]
 
 gencode_exons <- makeTxDbFromGFF(annotation_gtf) %>%
     exonsBy(by = "tx", use.names = TRUE) %>% 
@@ -44,4 +46,4 @@ as_tibble(novel_exonic_regions) %>%
     ) %>%
     dplyr::select(-c(gene_id, transcript_id)) %>% 
     dplyr::select(seqnames, source, feature, start, end, score, strand, frame, attributes) %>% 
-    write_tsv("novel_exonic_regions.gtf", col_names = FALSE, quote="none", escape="none")
+    write_tsv(output, col_names = FALSE, quote="none", escape="none")

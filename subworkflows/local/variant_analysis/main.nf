@@ -14,7 +14,10 @@ process novelExonicRegions {
     """
     novel_exonic_regions.R \\
         $annotation_gtf \\
-        $predicted_cds_gtf
+        $predicted_cds_gtf \\
+        exon \\
+        novel_exonic_regions.gtf
+
     """
 }
 
