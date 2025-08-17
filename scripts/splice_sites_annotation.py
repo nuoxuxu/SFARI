@@ -166,7 +166,7 @@ def add_is_novel(ss_df):
         ).drop("transcript_id_right")
 
 def main():
-    read_gtf("nextflow_results/V47/orfanage/orfanage.gtf")\
+    ORFanage_splice_sites = read_gtf("nextflow_results/V47/orfanage/orfanage.gtf")\
         .filter(pl.col("feature").is_in(["CDS", "exon"]))\
         .filter(pl.col("seqname")!= "chrM")\
         .pipe(gtf_to_SJ)\
@@ -181,7 +181,42 @@ def main():
         .pipe(ad_SR)\
         .pipe(add_is_novel)\
         .pipe(add_phyloP, "data/cactus241way.phyloP.bw", "mammal")\
-        .write_csv("export/ORFanage_splice_sites.csv")
+        .with_columns(
+            start = pl.when(pl.col("start_or_end") == "start")\
+                .then(pl.col("coord"))\
+                .otherwise(pl.col("coord")-1),
+            end = pl.when(pl.col("start_or_end") == "end")\
+                .then(pl.col("coord"))\
+                .otherwise(pl.col("coord")+1),
+            donor = (pl.col("start_or_end")=="start")&(pl.col("strand")=="+") |
+                    (pl.col("start_or_end")=="end")&(pl.col("strand")=="-"),
+            acceptor = (pl.col("start_or_end")=="start")&(pl.col("strand")=="-") |
+                    (pl.col("start_or_end")=="end")&(pl.col("strand")=="+")
+        )\
+        .drop("start_or_end", "coord")\
+        .select(["chrom", "start", "end", "strand", "transcript_id", "donor", "acceptor", "is_CDS", "canonical", "SR", "is_novel", "mammal_phyloP_1", "mammal_phyloP_2"])
+    
+    ORFanage_splice_sites.write_csv("export/ORFanage_splice_sites.csv")
+
+    pbw = pyBigWig.open("data/cactus241way.phyloP.bw")
+
+    novel_only_splice_sites = ORFanage_splice_sites\
+        .unpivot(
+                on = ["start", "end"],
+                index=["chrom", "strand", "transcript_id", "is_CDS", "canonical", "SR", "is_novel"],
+                variable_name="start_or_end",
+                value_name="coord"
+            )\
+        .filter(pl.col("is_novel"))
+
+    chrom_idx = novel_only_splice_sites.columns.index("chrom")
+    coord_idx = novel_only_splice_sites.columns.index("coord")
+
+    phyloP_column = novel_only_splice_sites.map_rows(lambda row: tuple(pbw.values(row[chrom_idx], row[coord_idx]-1, row[coord_idx]))).rename({"column_0": "phyloP"})
+    novel_only_splice_sites = pl.concat([novel_only_splice_sites, phyloP_column], how="horizontal")
+    novel_only_splice_sites\
+        .select(['chrom', 'strand', 'coord', 'transcript_id', 'is_CDS', 'canonical', 'SR', 'is_novel', 'phyloP'])\
+        .write_csv("export/ORFanage_novel_only_splice_sites.csv")    
 
 if __name__ == "__main__":
     main()
