@@ -5,6 +5,7 @@ include {proteoform_classification} from './subworkflows/local/proteoform_classi
 include {proteomic} from './subworkflows/local/proteomic'
 include {peptide} from './subworkflows/local/peptide'
 include {UCSCTracks} from './subworkflows/local/variant_analysis'
+include {PreprocessFigure6Files} from './subworkflows/local/variant_analysis'
 
 workflow {
     // isoform_gff = Channel.fromPath("nextflow_results/merged_collapsed.gff")

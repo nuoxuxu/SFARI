@@ -10,6 +10,7 @@ args <- commandArgs(trailingOnly=TRUE)
 
 annotation_gtf <- args[1]
 predicted_cds_gtf <- args[2]
+output <- args[3]
 
 gencode_CDS <- makeTxDbFromGFF(annotation_gtf) %>%
     cdsBy(by = "tx", use.names = TRUE) %>%
@@ -43,5 +44,5 @@ as_tibble(novel_CDS) %>%
         )
     ) %>% 
     dplyr::select(-c(gene_id, transcript_id)) %>% 
-    dplyr::select(seqnames, source, feature, start, end, score, strand, frame, attributes) %>% 
-    write_tsv("novel_CDS.gtf", col_names = FALSE, quote="none", escape="none")
+    dplyr::select(seqnames, source, feature, start, end, score, strand, frame, attributes) %>%
+    write_tsv(output, col_names = FALSE, quote="none", escape="none")
