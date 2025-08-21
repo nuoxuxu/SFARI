@@ -153,10 +153,9 @@ def export_phyloP(feature, out, canonical_ss=False, riboseq_evidence=False, tran
         .pipe(gtf_to_SJ)\
         .select("transcript_id", "chrom", "start", "end")
     
-    
     known_SJ_ss = GENCODE_SJ\
         .unique(["chrom", "start", "end"])\
-        .pipe(filter_combined, canonical_ss=canonical_ss, translational_evidence=translational_evidence, riboseq_evidence= riboseq_evidence, short_read_evidence=short_read_evidence)\
+        .pipe(filter_combined)\
         .pipe(add_phylop_to_df)\
         .with_columns(
             spl_type = pl.lit("known")

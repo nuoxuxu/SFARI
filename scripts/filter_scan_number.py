@@ -1,4 +1,4 @@
-#!/home/s/shreejoy/nxu/miniforge3/envs/patch_seq_spl/bin/python
+#!/usr/bin/env python3
 from src.utils import read_gtf
 import subprocess
 from pathlib import Path

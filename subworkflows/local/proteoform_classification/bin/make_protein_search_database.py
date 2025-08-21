@@ -1,4 +1,4 @@
-#!/home/s/shreejoy/nxu/miniforge3/envs/patch_seq_spl/bin/python
+#!/usr/bin/env python3
 import polars as pl
 import argparse
 from src.utils import read_fasta, write_fasta, read_gtf, collapse_isoforms_to_proteoforms

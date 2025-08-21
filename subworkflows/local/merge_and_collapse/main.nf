@@ -40,7 +40,7 @@ process mergeBamFiles {
     path "merged.bam"
 
     script:
-    """mamba 
+    """ 
     samtools merge bam* -o merged.bam -@ $task.cpus
     """
 }

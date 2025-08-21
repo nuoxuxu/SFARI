@@ -1,6 +1,6 @@
 import polars as pl
 from src.utils import read_gtf
-from src.ryp import r, to_py, to_r
+from SingleCell.ryp import r, to_py, to_r
 
 r(
     """
