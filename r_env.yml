@@ -1,0 +1,31 @@
+channels:
+  - conda-forge
+  - bioconda
+  - pytorch
+dependencies:
+  - r-base
+  - r-dplyr
+  - bioconda::bioconductor-rsamtools
+  - conda-forge::r-ggplot2
+  - conda-forge::r-patchwork
+  - conda-forge::r-reticulate
+  - python
+  - polars
+  - pyarrow
+  - ca-certificates
+  - openssl
+  - pandas
+  - bioconda::bioconductor-rtracklayer
+  - bioconda::bioconductor-genomicfeatures
+  - conda-forge::r-arrow
+  - conda-forge::r-biocmanager
+  - conda-forge::r-readr
+  - cffi
+  - ipykernel
+  - conda-forge::r-httpgd
+  - conda-forge::r-irkernel
+  - conda-forge::r-readxl
+  - conda-forge::r-languageserver
+  - conda-forge::r-ragg
+  - conda-forge::r-devtools
+  - r-ggpubr
