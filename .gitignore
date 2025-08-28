@@ -33,3 +33,4 @@ transcript_vis_app/*.csv
 assets/
 envs/
 env/
+r_env
