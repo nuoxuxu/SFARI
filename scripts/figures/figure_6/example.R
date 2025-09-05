@@ -2,11 +2,10 @@ library(Gviz)
 library(txdbmaker)
 library(rtracklayer)
 library(biomaRt)
-library(dplyr)
 library(tidyr)
 library(ggtranscript)
 library(ggplot2)
-library(BSgenome.Hsapiens.UCSC.hg38)
+library(dplyr)
 
 # Known track
 
@@ -112,30 +111,40 @@ ZNF292_exons <- combined_ZNF292_annotation %>%
 ZNF292_CDS <- combined_ZNF292_annotation %>%
   filter(type == "CDS")
 
-ZNF292_exons %>% 
+Fig_6E <- ZNF292_exons %>% 
   ggplot(
     aes(
       xstart = start,
       xend = end,
-      y = transcript_id
+      y = transcript_id,
+      color = transcript_id,
+      fill = transcript_id
     )
   ) +
   geom_range(
     fill = "white",
-    height = 0.25
+    height = 0.25,
+    linewidth = 1
   ) +
   geom_intron(
       data = to_intron(ZNF292_exons, "transcript_id"),
-      aes(strand = strand)
+      aes(strand = strand),
+      color = "black"
   ) + 
   geom_range(
-      data = ZNF292_CDS
+      data = ZNF292_CDS,
+      linewidth = 1
   ) +
   geom_intron(
       data = to_intron(ZNF292_CDS, "transcript_id"),
       aes(strand = strand),
       arrow.min.intron.length = 500,
+      color = "black"
   ) +
-  geom_vline(xintercept = 87256249, color = "red", linetype = "dashed")
+  geom_vline(xintercept = 87256249, color = "red") +
+  scale_color_manual(values = c("ENST00000369577.8" = "#009E73", "PB.44758.107" = "#E69F00")) +
+  scale_fill_manual(values = c("ENST00000369577.8" = "#009E73", "PB.44758.107" = "#E69F00"))
+ggsave("figures/figure_6/ZNF292_full_transcript.pdf", width = 15, height = 5)
 
-ggsave("figures/figure_6/ZNF292_full_transcript.pdf", width = 9, height = 5)
+Fig_6E + coord_cartesian(xlim = c(87256214, 87256280))
+ggsave("figures/figure_6/ZNF292_full_transcript_zoomed.pdf", width = 8, height = 5)
