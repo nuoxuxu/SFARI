@@ -16,28 +16,31 @@ my_theme <- theme_bw() +
 
 theme_set(my_theme)
 
-isoformswitch <- readRDS("export/IsoformSwitchAnalyzeR/isoformswitch.rds")
+isoformswitch <- readRDS("export/IsoformSwitchAnalyzeR/isoformswitch_part2_v2.rds")
 isoformFeatures <- isoformswitch$isoformFeatures
+
+isoformFeatures %>% filter(isoform_id == novel_pb_id)
 
 isoformFeatures %>% 
   filter(
     isoform_id == novel_pb_id,
     condition_1 == "t00",
-    condition_2 == "t04"
+    condition_2 == "t30"
   ) %>% 
   pivot_longer(
-    cols = c("iso_value_1", "iso_value_2"),
-    names_to = "condition",
-    values_to = "iso_value"
+    cols = starts_with("iso_value_") | starts_with("iso_stderr_"),
+    names_to = c(".value", "condition"),
+    names_pattern = "iso_(value|stderr)_(\\d+)"
   ) %>%
   mutate(
-    condition = recode(condition, "iso_value_1" = "t00", "iso_value_2" = "t30")
+    condition = recode(condition, "1" = "t00", "2" = "t30")
   ) %>% 
-  ggplot(aes(x=condition, y=iso_value)) +
+  ggplot(aes(x=condition, y=value)) +
   geom_col() +
-  labs(
-    y = "Isoform Expression"
-  ) +
+  geom_pointrange(
+    aes(ymin = value - stderr, ymax = value + stderr)
+  )  +
+  labs(y = "Isoform Expression") +
   theme(
     axis.title.x = element_text(size = 25, color = "black")
   )
