@@ -1,5 +1,5 @@
 process liftOverTalonGtf {
-    conda '/scratch/s/shreejoy/nxu/SFARI/env'
+    container "crossmap.sif"
     publishDir "${params.output_dir}/compare", mode: 'copy'
     
     input:
@@ -16,7 +16,6 @@ process liftOverTalonGtf {
 }
 
 process getTalonGencodeV47Refmap {
-    conda '/scratch/s/shreejoy/nxu/SFARI/env'
     publishDir "${params.output_dir}/compare", mode: 'copy'
 
     input:
@@ -28,12 +27,13 @@ process getTalonGencodeV47Refmap {
 
     script:
     """
+    module load StdEnv/2023
+    module load gffcompare/0.12.6
     gffcompare -r $annotation_gtf $talon_gtf_lifted -o TALON_GENCODE_V47
     """
 }
 
 process getTalonSfariRefmap {
-    conda '/scratch/s/shreejoy/nxu/SFARI/env'
     publishDir "${params.output_dir}/compare", mode: 'copy'
 
     input:
@@ -45,39 +45,45 @@ process getTalonSfariRefmap {
 
     script:
     """
+    module load StdEnv/2023
+    module load gffcompare/0.12.6    
     gffcompare -r $final_transcripts_gtf $talon_gtf_lifted -o TALON_SFARI
     """
 }
-// process readRefmap {
-//     conda '/scratch/s/shreejoy/nxu/SFARI/env'
 
-//     input:
-//     path annotation_gtf
-//     path refmap
-//     path talon_gtf_lifted
-//     path final_transcripts_gtf
+process addPAtowaryColumnToClassification {
+    publishDir "${params.output_dir}/compare", mode: 'copy'
 
-//     output:
-//     path "TALON_GENCODE_V39.cp_vz_0.75_min_7_recovery_talon_hg38.gtf.refmap.reads.csv", emit: reads_csv
+    input:
+    path classification
+    path TALON_SFARI_refmap
 
-// }
+    output:
+    path 'classification_with_patowary.txt'
+
+    script:
+    """
+    compare_to_patowary.py --classification $classification --TALON_SFARI_refmap $TALON_SFARI_refmap --output classification_with_patowary.txt
+    """
+}
 
 workflow compare_patowary {
     take:
     talon_gtf
     chain_file
     annotation_gtf
+    final_transcripts_gtf
 
     main:
     liftOverTalonGtf(talon_gtf, chain_file)
     getTalonGencodeV47Refmap(annotation_gtf, liftOverTalonGtf.out)
+    getTalonSfariRefmap(final_transcripts_gtf, liftOverTalonGtf.out)
+    addPAtowaryColumnToClassification(params.classification, getTalonSfariRefmap.out)
 }
 
 workflow {
-    talon_gtf = channel.fromPath("/scratch/s/shreejoy/nxu/SFARI/data/cp_vz_0.75_min_7_recovery_talon.gtf")
-    chain_file = channel.fromPath("/scratch/s/shreejoy/nxu/SFARI/data/hg19ToHg38.over.chain.gz")
-    final_transcripts_gtf = channel.fromPath("/scratch/s/shreejoy/nxu/SFARI/nextflow_results/V47/final_transcripts.gtf")
-    liftOverTalonGtf(talon_gtf, chain_file)
+    liftOverTalonGtf(params.patowary_talon_gtf, params.chain_file)
     getTalonGencodeV47Refmap(params.annotation_gtf, liftOverTalonGtf.out)
-    getTalonSfariRefmap(final_transcripts_gtf, liftOverTalonGtf.out)
+    getTalonSfariRefmap(params.final_transcripts_gtf, liftOverTalonGtf.out)
+    addPAtowaryColumnToClassification(params.classification, getTalonSfariRefmap.out)
 }
