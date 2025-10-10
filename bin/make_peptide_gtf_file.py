@@ -5,6 +5,7 @@ import argparse
 from Bio import SeqIO
 import pandas as pd
 import polars as pl
+import re
 
 def read_gtf(file, attributes=["transcript_id"], keep_attributes=True):
     if keep_attributes:
@@ -32,28 +33,17 @@ def read_fasta(fasta_file):
 def find_start_pep_index(row):
     pep = row[0]
     pb_acc = row[1]
-    try:
-        seq = seqs[pb_acc]
-    except:
-        return 0
-    start = seq.find(pep)
-    if start == -1:
-        return 0
+    pattern = row[7]
+    start = re.compile(pattern).search(seqs[pb_acc]).start()
     start_idx = start + 1
     return start_idx
 
 def find_end_pep_index(row):
     pep = row[0]
     pb_acc = row[1]
-    try:
-        seq = seqs[pb_acc]
-    except:
-        return 0
-    start = seq.find(pep)
-    if start == -1:
-        return 0
-    start_idx = start + 1
-    end_idx = start_idx + len(pep) - 1
+    pattern = row[7]
+    end = re.compile(pattern).search(seqs[pb_acc]).end()
+    end_idx = end + 1
     return end_idx
 
 def make_cumulative_blens(blocks):
@@ -169,6 +159,10 @@ def write_peptide_gtf(output_name, pep_ranges, pbs):
                     ofile.write('\t'.join([chr, 'hg38_canon', 'exon', str(start), str(end), '.', strand,
                                 '.', pep_acc]) + '\n')
 
+def make_IL_regex(seq: str) -> str:
+    pattern = ''.join('[IL]' if c in 'IL' else c for c in seq)
+    return f'{pattern}'
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Filter genome_gffs from TransDecoder with novel transripts')
     parser.add_argument('--annotation_gtf', action='store', type=str, required=True)
@@ -208,20 +202,16 @@ if __name__ == "__main__":
         .with_columns(
             detected = pl.col("q-value") < 0.05
         )\
-        .rename({"associated_gene": "gene"})[['pep', 'pb_acc', 'prev_aa','next_aa', 'gene', 'PSMId', 'detected']]
+        .rename({"associated_gene": "gene"})[['pep', 'pb_acc', 'prev_aa','next_aa', 'gene', 'PSMId', 'detected']]\
+        .with_columns(
+            pl.col("pep").map_elements(make_IL_regex, return_dtype=pl.String).alias("IL_regex")
+        )
 
     start_idx = percolator_res.map_rows(find_start_pep_index).rename({"map": "pep_start"})
     end_idx = percolator_res.map_rows(find_end_pep_index).rename({"map": "pep_end"})
 
-    pep_ranges = pl.concat([pl.concat([percolator_res, start_idx], how="horizontal"), end_idx], how="horizontal")\
-        .filter(
-            pl.col("pb_acc").is_in(seqs.keys())
-        )\
-        .filter(
-            pl.col("pep_start") > 0,
-            pl.col("pep_end") > 0
-        )
-    
+    pep_ranges = pl.concat([pl.concat([percolator_res, start_idx], how="horizontal"), end_idx], how="horizontal").drop("IL_regex")
+
     sample_gtf = read_sample_gtf(params.predicted_cds_gtf)
     reference_gtf = read_reference_gtf(params.annotation_gtf)
     pbs = process_gtf(pd.concat([sample_gtf, reference_gtf], ignore_index=True))
