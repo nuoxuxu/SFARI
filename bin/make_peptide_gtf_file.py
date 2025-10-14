@@ -31,17 +31,15 @@ def read_fasta(fasta_file):
     return seqs
 
 def find_start_pep_index(row):
-    pep = row[0]
     pb_acc = row[1]
-    pattern = row[7]
+    pattern = row[6]
     start = re.compile(pattern).search(seqs[pb_acc]).start()
     start_idx = start + 1
     return start_idx
 
 def find_end_pep_index(row):
-    pep = row[0]
     pb_acc = row[1]
-    pattern = row[7]
+    pattern = row[6]
     end = re.compile(pattern).search(seqs[pb_acc]).end()
     end_idx = end + 1
     return end_idx
@@ -135,7 +133,7 @@ def write_peptide_gtf(output_name, pep_ranges, pbs):
         # remove for conversion to bed12 (genePred complains)
         # ofile.write('track name=peptide color=0,0,0\n')
         for i, row in pep_ranges.iterrows():
-            pep_seq, pb_acc, prev_aa, next_aa, gene, PSMId, detected, pep_start, pep_end = row
+            pep_seq, pb_acc, prev_aa, next_aa, gene, PSMId, pep_start, pep_end = row
             # convert from protein (AA) to CDS (nt) coords
             pep_start = pep_start * 3 - 2
             pep_end = pep_end * 3
@@ -154,7 +152,7 @@ def write_peptide_gtf(output_name, pep_ranges, pbs):
                 if chr in ['chrX','chrY']:
                     gene = f"{gene}_{chr}"
                 acc_id= f"{prev_aa}.{pep_seq}.{next_aa}({gene})"
-                pep_acc = f'gene_id "{PSMId}"; transcript_id "{acc_id}"; gene_name "{gene}"; detected "{detected}";'
+                pep_acc = f'gene_id "{PSMId}"; transcript_id "{acc_id}"; gene_name "{gene}";'
                 for [start, end] in orf_coords:
                     ofile.write('\t'.join([chr, 'hg38_canon', 'exon', str(start), str(end), '.', strand,
                                 '.', pep_acc]) + '\n')
@@ -199,10 +197,10 @@ if __name__ == "__main__":
             {"proteinIds": "pb_acc"}
         )\
         .join(pb_gene.rename({"isoform": "pb_acc"}), on = "pb_acc", how = "left")\
-        .with_columns(
-            detected = pl.col("q-value") < 0.05
+        .filter(
+            pl.col("q-value") < 0.05
         )\
-        .rename({"associated_gene": "gene"})[['pep', 'pb_acc', 'prev_aa','next_aa', 'gene', 'PSMId', 'detected']]\
+        .rename({"associated_gene": "gene"})[['pep', 'pb_acc', 'prev_aa','next_aa', 'gene', 'PSMId']]\
         .with_columns(
             pl.col("pep").map_elements(make_IL_regex, return_dtype=pl.String).alias("IL_regex")
         )
