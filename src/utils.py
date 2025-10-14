@@ -243,3 +243,15 @@ def fastq_dir_to_samplesheet(
         error_str += "  - '--read2_extension' parameter\n"
         print(error_str)
         sys.exit(1)
+
+def print_df(df, num_rows=-1, num_columns=-1):
+    """
+    Prints the entirety of a polars DataFrame without truncating.
+    
+    Args:
+        df: the DataFrame to print
+        num_rows: the number of rows to print (-1 to print all rows)
+        num_columns: the number of columns to print (-1 to print all columns)
+    """
+    with pl.Config(tbl_rows=num_rows, tbl_cols=num_columns):
+        print(df)
