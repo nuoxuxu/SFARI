@@ -1,4 +1,5 @@
 process cometSearch {
+    publishDir "${params.output_dir}/${params.orf_prediction}/pin", mode: 'link'
     label "short_slurm_job"
 
     input:
@@ -16,7 +17,7 @@ process cometSearch {
 }
 
 process runPercolator {
-    publishDir "${params.output_dir}/${params.orf_prediction}", mode: 'copy'
+    publishDir "${params.output_dir}/${params.orf_prediction}", mode: 'link'
     label "short_slurm_job"
     
     conda "$moduleDir/environment.yml"
@@ -60,16 +61,15 @@ workflow proteomic {
     protein_database
     mzXMLfilesPath
     main:
-    Channel.fromPath(mzXMLfilesPath).collect().set { mzXMLfiles }
-    cometSearch(params.comet_params, protein_database, mzXMLfiles)
+    mzXMLfilesPath.collect().set { mzXMLfiles }
+    cometSearch("/scratch/nxu/SFARI/data/comet.params", protein_database, mzXMLfiles)
     runPercolator(params.searchDB, cometSearch.out)
     emit:
     peptides = runPercolator.out
 }
 
 workflow {
-
     protein_database = Channel.fromPath("nextflow_results/V47/orfanage/hybrid.fasta")
-    Channel.fromPath(params.datadir + "tc-1154/*.mzXML").collect().set { mzXMLfiles }
+    Channel.fromPath("data/tc-1154/*.mzXML").collect().set { mzXMLfiles }
     proteomic(protein_database, mzXMLfiles)
 }

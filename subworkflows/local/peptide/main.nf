@@ -25,52 +25,10 @@ process peptideTrackUCSC {
     """
 }
 
-process addPeptideAnnotation {
-    publishDir "${params.output_dir}/${params.orf_prediction}/UCSC_tracks", mode: 'copy'
-    
-    conda "$moduleDir/R.yml"
-
-    input:
-    val mode
-    path annotation_gtf
-    path predicted_cds_gtf
-    path peptides_gtf
-    
-    output:
-    path "annot_peptides_${mode}.gtf"
-    
-    script:
-    """
-    get_novel_peptides.R \\
-        $annotation_gtf \\
-        $predicted_cds_gtf \\
-        $peptides_gtf \\
-        "annot_peptides_${mode}.gtf"
-    """
-}
-
-process filterPeptidesUCSC {
-    publishDir "${params.output_dir}/${params.orf_prediction}/UCSC_tracks", mode: 'copy'
-    
-    conda "$moduleDir/python.yml"
-
-    input:
-    path annot_peptides_gtf
-    
-    output:
-    path "detected_peptides.gtf"
-    
-    script:
-    """
-    filter_peptides_UCSC.py \\
-        --annot_peptides_gtf $annot_peptides_gtf \\
-        --output "detected_peptides.gtf" \\
-    """
-}
 process peptideMapping {
     publishDir "${params.output_dir}/${params.orf_prediction}", mode: 'copy'
     
-    conda "/scratch/s/shreejoy/nxu/SFARI/envs/r_env"
+    conda "/scratch/nxu/SFARI/r_env"
 
     input:
     path annotation_gtf
@@ -98,19 +56,15 @@ workflow peptide {
     peptides
     main:
     peptideTrackUCSC(params.searchDB, params.annotation_gtf, final_sample_classification, predicted_cds_gtf, protein_search_database, peptides)
-    addPeptideAnnotation(params.searchDB, params.annotation_gtf, predicted_cds_gtf, peptideTrackUCSC.out)
-    filterPeptidesUCSC(addPeptideAnnotation.out)
     peptideMapping(params.annotation_gtf, predicted_cds_gtf, peptideTrackUCSC.out)
 }
 
 workflow {
-    final_sample_classification = "/scratch/s/shreejoy/nxu/SFARI/nextflow_results/V47/final_classification.parquet"
-    predicted_cds_gtf = "/scratch/s/shreejoy/nxu/SFARI/nextflow_results/V47/orfanage/orfanage.gtf"
-    protein_search_database = "/scratch/s/shreejoy/nxu/SFARI/nextflow_results/V47/orfanage/hybrid.fasta"
-    peptides = "/scratch/s/shreejoy/nxu/SFARI/nextflow_results/V47/orfanage/hybrid_percolator.tsv"
+    final_sample_classification = "/scratch/nxu/SFARI/nextflow_results/V47/final_classification.parquet"
+    predicted_cds_gtf = "/scratch/nxu/SFARI/nextflow_results/V47/orfanage/orfanage.gtf"
+    protein_search_database = "/scratch/nxu/SFARI/nextflow_results/V47/orfanage/hybrid.fasta"
+    peptides = "/scratch/nxu/SFARI/nextflow_results/orfanage/hybrid_percolator.tsv"
 
     peptideTrackUCSC(params.searchDB, params.annotation_gtf, final_sample_classification, predicted_cds_gtf, protein_search_database, peptides)
-    addPeptideAnnotation(params.searchDB, params.annotation_gtf, predicted_cds_gtf, peptideTrackUCSC.out)
-    filterPeptidesUCSC(addPeptideAnnotation.out)
     peptideMapping(params.annotation_gtf, predicted_cds_gtf, peptideTrackUCSC.out)
 }
