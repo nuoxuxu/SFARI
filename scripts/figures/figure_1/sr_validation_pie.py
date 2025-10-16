@@ -23,7 +23,7 @@ LR_SJ = (
 )
 
 gencode_V47_SJ = (
-    read_gtf(''.join([os.getenv('GENOMIC_DATA_DIR'), '/GENCODE/gencode.v47.annotation.gtf']))
+    read_gtf(os.path.join(os.getenv('GENOMIC_DATA_DIR', ''), 'GENCODE', 'gencode.v47.annotation.gtf'))
     .filter(pl.col('feature') == 'exon')
     .pipe(gtf_to_SJ)\
     .unique(['strand', 'chrom', 'start', 'end'])
