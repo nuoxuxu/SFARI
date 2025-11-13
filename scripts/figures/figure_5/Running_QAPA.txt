@@ -1,0 +1,15 @@
+###RUNNING QAPA ###
+cd /mnt/d/SFARI_Aim_2/FINAL_CODE/
+
+conda activate qapa
+
+gtfToGenePred -genePredExt ./code/APA/input/orfanage_APA.gtf ./code/APA/input/orfanage_APA.genePred
+
+
+##Edited qapa.py file directly to skip the annotation step completely. View qapa.py file to see changes. 
+cd /mnt/d/qapa-main/qapa-main
+python -m qapa.qapa build -N --db /mnt/d/SFARI_Aim_2/FINAL_CODE/code/APA/input/Ensembl_custom.txt /mnt/d/SFARI_Aim_2/FINAL_CODE/code/APA/input/orfanage_APA.genePred --debug --save --temp /mnt/d/SFARI_Aim_2/FINAL_CODE/code/APA/debug > /mnt/d/SFARI_Aim_2/FINAL_CODE/code/APA/output/QAPA/output_utrs.bed
+
+
+
+
