@@ -6,66 +6,105 @@ library(readr)
 library(shiny)
 library(bslib)
 library(patchwork)
+library(rtracklayer)
+library(arrow)
+library(dplyr)
 
-combined_gtf <- read_csv("./shiny.csv")
-pbid_abundance <- read_csv("./pbid_abundance.csv")
-talon_abundance <- read_csv("./talon_abundance.csv")
-CDS_gtf <- read_csv("genome_gff3_gtf.csv")
-gencode_gtf <- read_csv("GENCODE_v39.csv")
-peptides_gtf <- read_csv("SFARI_peptides.csv")
-
-ui <- page_fillable(
-  navset_tab(
-    nav_panel(
-      title = "Comparison",
-      selectizeInput(
-        "select_genes",
-        "Select genes from list below:",
-        choices = choices <- unique(combined_gtf$gene_name)
-      ),
-      layout_columns(
-        card(
-          title = "Gene Structure",
-          plotOutput("ggtranscript_plot")
-        ),
-        card(
-          title = "Abundance",
-          plotOutput("abundance")
-        ),
-        col_widths = c(8, 4)
-      )      
-    ),
-    nav_panel(
-      title = "CDS",
-        selectizeInput(
-          "select_genes_CDS",
-          "Select genes from list below:",
-          choices = choices <- unique(CDS_gtf$gene_name)
-        ),
-        selectizeInput(
-          "select_protein_class",
-          "Select SQANTI protrein classes from list below:",
-          choices = choices <- c(unique(as.character(unique(CDS_gtf[["protein_classification_base"]]))), "all"),
-          selected = "all"
-        ),        
-        selectizeInput(
-          "select_mapped_to_nov_trans_only",
-          "Filter for peptides that represent novel splice junctions or mono-exons",
-          choices = choices <- c("known", "novel", "all"),
-          selected = "all"
-      ),
-      card(
-        title = "Unique CDS",
-        plotOutput("CDS_plot")
-      )
-    )
-  )
+my_theme <- theme_bw() + theme(
+  panel.grid.minor = element_blank(),
+  axis.text.x = element_text(size = 14),
+  axis.title.y = element_blank(),
+  strip.text.y = element_text(size = 14),
+  axis.text.y = element_text(size = 14),
+  axis.ticks.y = element_blank(),
+  legend.position = "top",
+  legend.text = element_text(size = 14),
+  legend.title = element_text(size = 14)
 )
 
-plot_ggtranscript <- function(gene_of_interest) {
-  exons <- combined_gtf %>%
-    filter(gene_name == {{ gene_of_interest }})
+theme_set(my_theme)
 
+structural_category_labels <- c(
+    "full-splice_match"        = "FSM",
+    "incomplete-splice_match"  = "ISM",
+    "novel_in_catalog"         = "NIC",
+    "novel_not_in_catalog"     = "NNC"
+)
+
+time_point_labels <- c(
+  "mean_iPSC" = "t00",
+  "mean_NPC"  = "t04",
+  "mean_CN"   = "t30"
+)
+
+classification <- read_parquet("nextflow_results/V47/final_classification.parquet")
+
+lr_log2_cpm <- read_parquet("nextflow_results/V47/final_expression.parquet") %>%
+  dplyr::rename(
+    NPC_1_2 = NPC_1_3,
+    NPC_3_2 = NPC_3_3,
+    CN_1_1 = CN_1_2,
+    CN_1_2 = CN_1_3
+  ) %>%
+  mutate(
+    across(
+      where(is.numeric), 
+      ~ log2((.x / sum(.x) * 1e6) + 1)
+    )
+  ) %>% 
+  mutate(
+    mean_iPSC = rowMeans(select(., starts_with("iPSC_")), na.rm = TRUE),
+    mean_NPC  = rowMeans(select(., starts_with("NPC_")), na.rm = TRUE),
+    mean_CN   = rowMeans(select(., starts_with("CN_")), na.rm = TRUE)
+  ) %>% 
+  select(isoform, mean_iPSC, mean_NPC, mean_CN) %>% 
+  pivot_longer(
+    cols = c("mean_iPSC", "mean_NPC", "mean_CN"),
+    names_to = "time_point",
+    values_to = "abundance"
+  ) %>% 
+  left_join(
+    classification[, c("isoform", "structural_category", "associated_gene")],
+    by = "isoform"
+  ) %>% 
+  dplyr::filter(structural_category %in% c("full-splice_match", "novel_not_in_catalog", "incomplete-splice_match", "novel_in_catalog")) %>% 
+  mutate(
+    structural_category = structural_category_labels[structural_category], 
+    time_point = time_point_labels[time_point]
+  ) %>% 
+  mutate(
+    structural_category = factor(structural_category, levels = c("FSM", "ISM", "NIC", "NNC"))
+  )
+
+orfanage_gtf <- rtracklayer::import("nextflow_results/V47/orfanage/orfanage.gtf") %>% as.data.frame()
+full_gtf <- rtracklayer::import("nextflow_results/V47/final_transcripts.gtf") %>% as.data.frame()
+tx_no_CDS <- setdiff(pull(distinct(full_gtf, transcript_id), transcript_id), pull(distinct(orfanage_gtf, transcript_id), transcript_id))
+gtf <- bind_rows(orfanage_gtf, full_gtf %>% filter(transcript_id %in% tx_no_CDS))
+
+gtf <- gtf %>%
+  left_join(
+    classification[, c("isoform", "structural_category", "associated_gene")],
+    by = c("transcript_id" = "isoform")
+  ) %>% 
+  filter(structural_category %in% c("full-splice_match", "novel_not_in_catalog", "incomplete-splice_match", "novel_in_catalog")) %>% 
+  mutate(
+    structural_category = structural_category_labels[structural_category]
+  ) %>% 
+  mutate(
+    structural_category = factor(structural_category, levels = c("FSM", "ISM", "NIC", "NNC"))
+  )
+
+plot_ggtranscript <- function(gene_of_interest) {
+  exons <- gtf %>%
+    filter(
+      type == "exon",
+      associated_gene == {{ gene_of_interest }}
+    )
+  CDS <- gtf %>%
+    filter(
+      type == "CDS",
+      associated_gene == {{ gene_of_interest }}
+    )
   exons %>%
     ggplot(
       aes(xstart = start, xend = end, y = transcript_id, strand = strand)
@@ -73,286 +112,63 @@ plot_ggtranscript <- function(gene_of_interest) {
     geom_intron(
       data = to_intron(exons, "transcript_id"),
     ) +
-    geom_range(aes(fill = exon_status)) +
-    facet_grid(dataset ~ ., scales = "free", space = "free") +
-    theme(
-      panel.background = element_blank(),
-      panel.grid.major = element_blank(),
-      panel.grid.minor = element_blank(),
-      axis.ticks.x = element_blank(),
-      axis.text.x = element_blank(),
-      axis.ticks.y = element_blank(),
-      axis.title.y = element_blank(),
-      strip.text.y = element_text(size = 12),
-      axis.text.y = element_text(size = 12),
-      legend.position = "top"
-    )
-}
-
-plot_SFARI <- function(gene_of_interest) {
-  pbid_abundance_gene <- pbid_abundance %>%
-    filter(transcript_id %in% (combined_gtf %>% filter(gene_name == {{ gene_of_interest }} & dataset == "SFARI") %>% pull("transcript_id"))) %>%
-    pivot_longer(cols = c("iPSC", "NPC", "CN"), names_to = "time_point", values_to = "abundance")
-
-  pbid_abundance_gene$time_point <- factor(pbid_abundance_gene$time_point, levels = c("CN", "NPC", "iPSC"))
-
-  pbid_abundance_gene %>%
-    ggplot(aes(x = abundance, y = transcript_id, fill = time_point)) +
-    geom_col(position = "dodge") +
-    xlab("log2(CPM + 1)") +
-    ylab("SFARI") +
-    theme(
-      axis.text.x = element_text(angle = 90, hjust = 1),
-      axis.text.y = element_text(size = 12)
+    geom_range(
+      fill = "white",
+      height = 0.25
     ) +
-    scale_fill_manual(breaks = c("iPSC", "NPC", "CN"), values = c("#e0a19c", "#e14bd5", "#ff0011"))
-}
-
-plot_Patowary <- function(gene_of_interest) {
-  talon_abundance %>%
-    filter(transcript_id %in% (combined_gtf %>% filter(gene_name == {{ gene_of_interest }} & dataset == "Patowary et al.") %>% pull("transcript_id"))) %>%
-    pivot_longer(cols = c("CP_mean", "VZ_mean"), names_to = "time_point", values_to = "abundance") %>%
-    ggplot(aes(x = abundance, y = transcript_id, fill = time_point)) +
-    geom_col(position = "dodge") +
-    xlab("log2(CPM + 1)") +
-    ylab("Patowary et al.") +
-    scale_color_brewer(palette = "PuOr") +
-    theme(
-      axis.text.x = element_text(angle = 90, hjust = 1),
-      axis.text.y = element_text(size = 12)
+    geom_range(
+      data = CDS,
+      aes(fill = structural_category)
     ) +
-    scale_fill_manual(breaks = c("CP_mean", "VZ_mean"), values = c("#9797ea", "#08a0a2"))
-}
-
-plot_overlapped <- function(gene_of_interest) {
-  transcript_id_to_plot <- combined_gtf %>%
-    filter(gene_name == {{ gene_of_interest }} & (dataset == "Overlapped")) %>%
-    pull(transcript_id) %>%
-    unique()
-
-  pbid_abundance_gene <- pbid_abundance %>%
-    filter(transcript_id %in% transcript_id_to_plot) %>%
-    rowwise() %>%
-    summarise(
-      transcript_id,
-      mean_value = mean(c_across(CN:iPSC), na.rm = TRUE),
-      dataset = "SFARI"
-    ) %>%
-    ungroup()
-
-  talon_abundance_gene <- talon_abundance %>%
-    filter(transcript_id %in% transcript_id_to_plot) %>%
-    rowwise() %>%
-    summarise(
-      transcript_id,
-      mean_value = mean(c_across(CP_mean:VZ_mean), na.rm = TRUE),
-      dataset = "Patowary et al."
-    ) %>%
-    ungroup()
-
-  bind_rows(pbid_abundance_gene, talon_abundance_gene) %>%
-    ggplot(aes(x = mean_value, y = transcript_id, fill = dataset)) +
-    geom_col(position = "dodge") +
-    xlab("log2(CPM + 1)") +
-    ylab("Overlapped") +
-    theme(
-      axis.text.x = element_text(angle = 90, hjust = 1),
-      axis.text.y = element_text(size = 12)
-    ) +
-    scale_fill_manual(breaks = c("SFARI", "Patowary et al."), values = c("#f51c0c", "#2908a2"))
-}
-
-get_n_transcript_ratio <- function(gene_of_interest) {
-  combined_gtf %>%
-    filter(gene_name == {{ gene_of_interest }}) %>%
-    group_by(dataset) %>%
-    summarise(n_transcript_id = n_distinct(transcript_id)) %>%
-    pull(n_transcript_id, name = dataset)
+    facet_grid(structural_category ~ ., scales = "free", space = "free")
 }
 
 plot_abundance <- function(gene_of_interest) {
-  if (setequal(c("Overlapped", "SFARI", "Patowary et al."), names(get_n_transcript_ratio(gene_of_interest)))) {
-    plot_overlapped(gene_of_interest) / plot_Patowary(gene_of_interest) / plot_SFARI(gene_of_interest) + plot_layout(heights = get_n_transcript_ratio(gene_of_interest) * 2)
-  } else if (setequal(c("SFARI"), names(get_n_transcript_ratio(gene_of_interest)))) {
-    plot_SFARI(gene_of_interest) + plot_layout(heights = get_n_transcript_ratio(gene_of_interest) * 2)
-  } else if (setequal(c("Patowary et al."), names(get_n_transcript_ratio(gene_of_interest)))) {
-    plot_Patowary(gene_of_interest) + plot_layout(heights = get_n_transcript_ratio(gene_of_interest) * 2)
-  } else if (setequal(c("Overlapped"), names(get_n_transcript_ratio(gene_of_interest)))) {
-    plot_overlapped(gene_of_interest) + plot_layout(heights = get_n_transcript_ratio(gene_of_interest) * 2)
-  } else if (setequal(c("SFARI", "Patowary et al."), names(get_n_transcript_ratio(gene_of_interest)))) {
-    plot_Patowary(gene_of_interest) / plot_SFARI(gene_of_interest) + plot_layout(heights = get_n_transcript_ratio(gene_of_interest) * 2)
-  } else if (setequal(c("SFARI", "Overlapped"), names(get_n_transcript_ratio(gene_of_interest)))) {
-    plot_overlapped(gene_of_interest) / plot_SFARI(gene_of_interest) + plot_layout(heights = get_n_transcript_ratio(gene_of_interest) * 2)
-  } else if (setequal(c("Patowary et al.", "Overlapped"), names(get_n_transcript_ratio(gene_of_interest)))) {
-    plot_overlapped(gene_of_interest) / plot_Patowary(gene_of_interest) + plot_layout(heights = get_n_transcript_ratio(gene_of_interest) * 2)
-  }
+  lr_log2_cpm %>% 
+    filter(associated_gene == gene_of_interest) %>%
+    ggplot(aes(x = abundance, y = isoform, fill = time_point)) +
+    geom_col(position = "dodge") +
+    xlab("log2(CPM + 1)") +
+    ylab(gene_of_interest) +
+    theme(
+      axis.text.y = element_blank(),
+      axis.title.x = element_text(size = 14),
+    ) +
+    scale_fill_manual(breaks = c("t00", "t04", "t30"), values = c("#e0a19c", "#e14bd5", "#ff0011")) +
+    facet_grid(structural_category ~ ., scales = "free", space = "free") 
 }
 
-plot_gencode <- function(gtf, gene_of_interest, xmin, xmax) {
-    exons <- gtf %>%
-        filter(gene_name == {{ gene_of_interest }}) %>%
-        filter(feature %in% c("exon"))
-    CDS <- gtf %>%
-        filter(gene_name == {{ gene_of_interest }}) %>%
-        filter(feature == "CDS")
-
-    exons %>%
-        ggplot(
-            aes(xstart = start, xend = end, y = transcript_id, strand = strand)
-            ) +
-        geom_range(
-            fill = "white",
-            height = 0.25
-            ) +            
-        geom_intron(
-            data = to_intron(exons, "transcript_id")
-            ) +
-        geom_range(
-            data = CDS
-            ) +
-        coord_cartesian(xlim = c({{xmin}}, {{xmax}})) +
-        theme(
-            panel.background = element_blank(),
-            panel.grid.major = element_blank(),
-            panel.grid.minor = element_blank(),
-            axis.ticks.x = element_blank(),
-            axis.text.x = element_blank(),
-            axis.ticks.y = element_blank(),
-            axis.title.y = element_blank(),
-            strip.text.y = element_text(size = 12),
-            axis.text.y = element_text(size = 12),
-            legend.position = "top"
-        )
+plot_combined <- function(gene_of_interest) {
+  ggtranscript_plot <- plot_ggtranscript(gene_of_interest)
+  abundance <- plot_abundance(gene_of_interest)
+  ggtranscript_plot | abundance + plot_layout(widths = c(2, 1))
 }
 
-plot_CDS <- function(gtf, gene_of_interest, select_protein_class) {
-    if ((select_protein_class == "all")) {
-      gtf <- gtf %>%
-          filter(gene_name == {{gene_of_interest}})
-    } else {
-      gtf <- gtf %>%
-          filter(gene_name == {{gene_of_interest}}) %>%
-          filter(protein_classification_base == {{select_protein_class}})
-    }
-
-    gtf %>%
-        ggplot(
-            aes(xstart = start, xend = end, y = transcript_id, strand = strand)
-            ) +
-        geom_range(
-            aes(fill = protein_classification_base)
-            ) +  
-        geom_intron(
-            data = to_intron(gtf, "transcript_id")
-            ) +
-        theme(
-            panel.background = element_blank(),
-            panel.grid.major = element_blank(),
-            panel.grid.minor = element_blank(),
-            axis.ticks.x = element_blank(),
-            axis.text.x = element_blank(),
-            axis.ticks.y = element_blank(),
-            axis.title.y = element_blank(),
-            strip.text.y = element_text(size = 12),
-            axis.text.y = element_text(size = 12),
-            legend.position = "top"
-        )
+get_n_transcripts <- function(gene_of_interest) {
+  classification %>%
+    filter(associated_gene == gene_of_interest) %>%
+    nrow()
 }
 
-plot_peptides <- function(gtf, gene_of_interest, novelty, xmin, xmax) {
-    if (novelty == "all") {
-      gtf <- gtf %>%
-          filter(gene_name == {{gene_of_interest}})
-    } else {
-      gtf <- gtf %>%
-          filter(gene_name == {{gene_of_interest}})%>%
-          filter(novelty == {{novelty}})
-    }
-    gtf %>%
-        ggplot(
-            aes(xstart = start, xend = end, y = transcript_id, strand = strand)
-            ) +
-        geom_range(
-            aes(fill = novelty)
-            ) +  
-        geom_intron(
-            data = to_intron(gtf, "transcript_id")
-            ) +
-        coord_cartesian(xlim = c({{xmin}}, {{xmax}})) +
-        theme(
-            panel.background = element_blank(),
-            panel.grid.major = element_blank(),
-            panel.grid.minor = element_blank(),
-            axis.ticks.x = element_blank(),
-            axis.text.x = element_blank(),
-            axis.ticks.y = element_blank(),
-            axis.title.y = element_blank(),
-            strip.text.y = element_text(size = 12),
-            axis.text.y = element_text(size = 12),
-            legend.position = "top"
-        )
-}
-
-get_n_transcript_CDS <- function(gene_of_interest, select_protein_class, novelty) {
-    if (select_protein_class == "all") {
-      n_CDS <- CDS_gtf %>%
-          filter(gene_name == {{gene_of_interest}}) %>%
-          summarise(CDS = n_distinct(transcript_id))
-    } else {
-      n_CDS <- CDS_gtf %>%
-          filter(gene_name == {{gene_of_interest}}) %>%
-          filter(protein_classification_base == {{select_protein_class}}) %>%
-          summarise(CDS = n_distinct(transcript_id))
-    }
-    if (novelty == "all") {
-      n_peptides <- peptides_gtf %>%
-          filter(gene_name == {{gene_of_interest}}) %>%
-          summarise(peptides = n_distinct(transcript_id))
-    } else {
-      n_peptides <- peptides_gtf %>%
-          filter(gene_name == {{gene_of_interest}}) %>%
-          filter(novelty == {{novelty}}) %>%
-          summarise(peptides = n_distinct(transcript_id))      
-    }
-    n_gencode <- gencode_gtf %>%
-        filter(gene_name == {{gene_of_interest}}) %>%
-        summarise(gencode = n_distinct(transcript_id))    
-
-    cbind(n_gencode, n_CDS, n_peptides)
-}
-
-plot_combined <- function(gene_of_interest, select_protein_class, select_mapped_to_nov_trans_only) {
-    CDS <- plot_CDS(CDS_gtf, {{gene_of_interest}}, {{select_protein_class}})
-    xmin <- ggplot_build(CDS)$layout$panel_params[[1]]$x.range[1]
-    xmax <- ggplot_build(CDS)$layout$panel_params[[1]]$x.range[2]
-    gencode <- plot_gencode(gencode_gtf, {{gene_of_interest}}, {{xmin}}, {{xmax}})
-    peptides <- plot_peptides(peptides_gtf, {{gene_of_interest}}, {{select_mapped_to_nov_trans_only}}, {{xmin}}, {{xmax}})
-    gencode / CDS / peptides + plot_layout(heights = get_n_transcript_CDS(gene_of_interest, select_protein_class, select_mapped_to_nov_trans_only) * 2)
-}
+ui <- page_sidebar(
+  sidebar = sidebar(
+    title = "Comparison",
+    selectizeInput(
+      "select_genes",
+      "Select genes from list below:",
+      choices = choices <- unique(gtf$associated_gene)
+    )
+  ),
+  plotOutput("combined_plot")
+)
 
 server <- function(input, output, session) {
-  output$ggtranscript_plot <- renderPlot(
+  output$combined_plot <- renderPlot(
     {
-      plot_ggtranscript(input$select_genes)
+      plot_combined(input$select_genes)
     },
     height = reactive({
-      20 * sum(get_n_transcript_ratio(input$select_genes)) + 100
-    })
-  )
-  output$abundance <- renderPlot(
-    {
-      plot_abundance(input$select_genes)
-    },
-    height = reactive({
-      20 * sum(get_n_transcript_ratio(input$select_genes)) + 100
-    })
-  )
-  output$CDS_plot <- renderPlot(
-    {
-      plot_combined(input$select_genes_CDS, input$select_protein_class, input$select_mapped_to_nov_trans_only)
-    },
-    height = reactive({
-      20 * sum(get_n_transcript_CDS(input$select_genes_CDS, input$select_protein_class, input$select_mapped_to_nov_trans_only)) + 100
+      35 * sum(get_n_transcripts(input$select_genes)) + 100
     })
   )
 }
