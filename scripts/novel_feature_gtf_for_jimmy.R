@@ -36,7 +36,17 @@ if (sequence_feature == "CDS") {
 }
 
 # Getting unique, non-overlapping novel features
-novel_features_unique <- GenomicRanges::subtract(SFARI_feature, gencode_feature) %>% unlist() %>% unique() %>% reduce()
+if (sequence_feature == "CDS") {
+    novel_features_unique <- GenomicRanges::subtract(SFARI_feature, gencode_feature) %>% unlist() %>% unique() %>% reduce()
+} else if (sequence_feature == "three_prime_utr") {
+    novel_features_unique <- GenomicRanges::subtract(SFARI_feature, gencode_feature) %>% unlist() %>% unique() %>% reduce()
+    gencode_cds <- makeTxDbFromGFF(annotation_gtf) %>%
+        cdsBy(by = "tx", use.names = TRUE) %>%
+        unlist() %>%
+        unique()
+    # Further subtract any regions that overlap with GENCODE CDS
+    novel_features_unique <- GenomicRanges::subtract(novel_features_unique, gencode_cds) %>% unlist() %>% unique()
+}
 
 # Since we need each novel feature to be associated with a transcript, we will overlap back with the non-unique SFARI features
 hits <- findOverlaps(novel_features_unique, SFARI_feature_nonunique)
