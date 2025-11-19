@@ -1,13 +1,9 @@
 library(ggplot2)
 library(ggtranscript)
 library(dplyr)
-library(tidyr)
-library(readr)
 library(shiny)
 library(bslib)
 library(patchwork)
-library(rtracklayer)
-library(arrow)
 library(dplyr)
 
 my_theme <- theme_bw() + theme(
@@ -24,74 +20,27 @@ my_theme <- theme_bw() + theme(
 
 theme_set(my_theme)
 
-structural_category_labels <- c(
-    "full-splice_match"        = "FSM",
-    "incomplete-splice_match"  = "ISM",
-    "novel_in_catalog"         = "NIC",
-    "novel_not_in_catalog"     = "NNC"
+colorVector <- c(
+    "FSM" = "#009E73",
+    "ISM" = "#0072B2",
+    "NIC" = "#D55E00",
+    "NNC" = "#E69F00",
+    "Other" = "#000000"
 )
 
-time_point_labels <- c(
-  "mean_iPSC" = "t00",
-  "mean_NPC"  = "t04",
-  "mean_CN"   = "t30"
+pastelColorVector <- c(
+    "FSM" = "#7FCEB9",
+    "ISM" = "#7FB8D8",
+    "NIC" = "#EAAE7F",
+    "NNC" = "#F2CF7F",
+    "Other" = "#7F7F7F"
 )
 
-classification <- read_parquet("nextflow_results/V47/final_classification.parquet")
-
-lr_log2_cpm <- read_parquet("nextflow_results/V47/final_expression.parquet") %>%
-  dplyr::rename(
-    NPC_1_2 = NPC_1_3,
-    NPC_3_2 = NPC_3_3,
-    CN_1_1 = CN_1_2,
-    CN_1_2 = CN_1_3
-  ) %>%
+gtf <- read.csv("data/gtf.csv")
+lr_log2_cpm <- read.csv("data/lr_log2_cpm.csv") %>% 
   mutate(
-    across(
-      where(is.numeric), 
-      ~ log2((.x / sum(.x) * 1e6) + 1)
-    )
-  ) %>% 
-  mutate(
-    mean_iPSC = rowMeans(select(., starts_with("iPSC_")), na.rm = TRUE),
-    mean_NPC  = rowMeans(select(., starts_with("NPC_")), na.rm = TRUE),
-    mean_CN   = rowMeans(select(., starts_with("CN_")), na.rm = TRUE)
-  ) %>% 
-  select(isoform, mean_iPSC, mean_NPC, mean_CN) %>% 
-  pivot_longer(
-    cols = c("mean_iPSC", "mean_NPC", "mean_CN"),
-    names_to = "time_point",
-    values_to = "abundance"
-  ) %>% 
-  left_join(
-    classification[, c("isoform", "structural_category", "associated_gene")],
-    by = "isoform"
-  ) %>% 
-  dplyr::filter(structural_category %in% c("full-splice_match", "novel_not_in_catalog", "incomplete-splice_match", "novel_in_catalog")) %>% 
-  mutate(
-    structural_category = structural_category_labels[structural_category], 
-    time_point = time_point_labels[time_point]
-  ) %>% 
-  mutate(
-    structural_category = factor(structural_category, levels = c("FSM", "ISM", "NIC", "NNC"))
-  )
-
-orfanage_gtf <- rtracklayer::import("nextflow_results/V47/orfanage/orfanage.gtf") %>% as.data.frame()
-full_gtf <- rtracklayer::import("nextflow_results/V47/final_transcripts.gtf") %>% as.data.frame()
-tx_no_CDS <- setdiff(pull(distinct(full_gtf, transcript_id), transcript_id), pull(distinct(orfanage_gtf, transcript_id), transcript_id))
-gtf <- bind_rows(orfanage_gtf, full_gtf %>% filter(transcript_id %in% tx_no_CDS))
-
-gtf <- gtf %>%
-  left_join(
-    classification[, c("isoform", "structural_category", "associated_gene")],
-    by = c("transcript_id" = "isoform")
-  ) %>% 
-  filter(structural_category %in% c("full-splice_match", "novel_not_in_catalog", "incomplete-splice_match", "novel_in_catalog")) %>% 
-  mutate(
-    structural_category = structural_category_labels[structural_category]
-  ) %>% 
-  mutate(
-    structural_category = factor(structural_category, levels = c("FSM", "ISM", "NIC", "NNC"))
+    structural_category = factor(structural_category, levels = c("FSM", "ISM", "NIC", "NNC")),
+    time_point = factor(time_point, levels = c("t30", "t04", "t00"))
   )
 
 plot_ggtranscript <- function(gene_of_interest) {
@@ -110,16 +59,23 @@ plot_ggtranscript <- function(gene_of_interest) {
       aes(xstart = start, xend = end, y = transcript_id, strand = strand)
     ) +
     geom_intron(
-      data = to_intron(exons, "transcript_id"),
+      data = to_intron(exons, "transcript_id")
     ) +
+    # hide exon legend
     geom_range(
-      fill = "white",
-      height = 0.25
+      aes(fill = structural_category),
+      height = 0.25,
+      show.legend = FALSE
     ) +
+    scale_fill_manual(values = pastelColorVector, guide = "none") +
+    ggnewscale::new_scale_fill() +
+    # keep only CDS legend
     geom_range(
       data = CDS,
-      aes(fill = structural_category)
+      aes(fill = structural_category),
+      color = "black"
     ) +
+    scale_fill_manual("Structural Category", values = colorVector) +
     facet_grid(structural_category ~ ., scales = "free", space = "free")
 }
 
@@ -128,7 +84,7 @@ plot_abundance <- function(gene_of_interest) {
     filter(associated_gene == gene_of_interest) %>%
     ggplot(aes(x = abundance, y = isoform, fill = time_point)) +
     geom_col(position = "dodge") +
-    xlab("log2(CPM + 1)") +
+    xlab("mean log2(CPM + 1)") +
     ylab(gene_of_interest) +
     theme(
       axis.text.y = element_blank(),
@@ -145,32 +101,52 @@ plot_combined <- function(gene_of_interest) {
 }
 
 get_n_transcripts <- function(gene_of_interest) {
-  classification %>%
+  gtf %>%
+    filter(type == "transcript") %>%
     filter(associated_gene == gene_of_interest) %>%
     nrow()
 }
 
-ui <- page_sidebar(
-  sidebar = sidebar(
-    title = "Comparison",
+ui <- fluidPage(
+  titlePanel("Human iPSC-derived Neurons Full-length Transcriptome"),
+  helpText("Explore transcript structures and abundances for genes of interest. Transcript structural categories are based on comparison to GENCODE v47."),
+  sidebarPanel(
     selectizeInput(
       "select_genes",
-      "Select genes from list below:",
-      choices = choices <- unique(gtf$associated_gene)
-    )
+      "Select gene of interest:",
+      choices = choices <- unique(gtf$associated_gene),
+      selected = "AGO1"
+    ),
+    helpText("To view the genomic region of the selected gene in the UCSC Genome Browser, click the link below:"),
+    #insert a hyperlink here
+    uiOutput("ucsc_link"),
+    width = 3
   ),
-  plotOutput("combined_plot")
+  mainPanel(
+    plotOutput("combined_plot")
+  )
 )
 
 server <- function(input, output, session) {
   output$combined_plot <- renderPlot(
     {
+      validate(need(input$select_genes, 'Choose a gene!'))
       plot_combined(input$select_genes)
     },
     height = reactive({
       35 * sum(get_n_transcripts(input$select_genes)) + 100
     })
   )
+  output$ucsc_link <- renderUI({
+    validate(need(input$select_genes, 'Choose a gene!'))
+  gene_info <- gtf %>%
+    filter(type == "transcript", associated_gene == input$select_genes)
+  chrom <- gene_info %>% select(seqnames) %>% distinct() %>% pull()
+  start <- gene_info %>% select(start) %>% min()
+  end <- gene_info %>% select(end) %>% max()
+    url <- paste0("https://genome.ucsc.edu/s/nuoxuxu/iPSC_Neuron_Proteogenomic_atlas?position=", chrom, ":", start, "-", end)
+    tags$a(href = url, "View in UCSC Genome Browser", target = "_blank")
+  })
 }
 
 shinyApp(ui, server)
