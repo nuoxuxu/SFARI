@@ -2,23 +2,23 @@
 
 library(arrow)
 library(IsoformSwitchAnalyzeR)
+library(rtracklayer)
 
-setwd("")
-
-
-
-final_pb_ids <- read.table("./data/filtered_transcript_list.txt", header = T)
+final_pb_ids <- import("nextflow_results/V47/orfanage/orfanage.gtf") %>% 
+  as.data.frame() %>% 
+  distinct(transcript_id) %>% 
+  pull(transcript_id)
 
 #Subset the transcript file to these PB IDs. 
 tr_count <- read_parquet("./data/final_expression.parquet")
 tr_count <- as.data.frame(tr_count)
 
-filtered_tr_count <- tr_count[tr_count$isoform %in% final_pb_ids$x, ]
+filtered_tr_count <- tr_count[tr_count$isoform %in% final_pb_ids, ]
 
-classification <- read_parquet("./data/final_classification.parquet")
+classification <- read_parquet("nextflow_results/V47/final_classification.parquet")
 
-tr_CPM <- read.csv("./code/expression/output/transcript_CPM.csv")
-gene_CPM <- read.csv("./code/expression/output/gene_CPM.csv")
+tr_CPM <- read.csv("./proc/expression/transcript_CPM.csv")
+gene_CPM <- read.csv("./proc/expression/gene_CPM.csv")
 
 
 
@@ -38,8 +38,8 @@ aSwitchList <- importRdata(
   isoformCountMatrix   = filtered_tr_count,
   isoformRepExpression = tr_CPM,
   designMatrix         = myDesign,
-  isoformExonAnnoation = ('./code/IsoformSwitchAnalyzeR/input/ORF_gene_id_replaced_tr_exon.gtf.gz'), #gtf with only transcript and exon types            
-  isoformNtFasta       = ('./code/IsoformSwitchAnalyzeR/input/final_transcripts.fasta.gz'), 
+  isoformExonAnnoation = ('./proc/IsoformSwitchAnalyzeR/input/ORF_gene_id_replaced_tr_exon.gtf.gz'), #gtf with only transcript and exon types            
+  isoformNtFasta       = ('./proc/IsoformSwitchAnalyzeR/input/final_transcripts.fasta.gz'), 
   addAnnotatedORFs     = FALSE, 
   detectUnwantedEffects = F, #FALSE because I'm importing my pre-calculated CPMs
   fixStringTieAnnotationProblem = F,
@@ -114,7 +114,7 @@ aSwitchList$isoformFeatures <- merge(aSwitchList$isoformFeatures, df_pairs[,c('g
 #Adding ORFanage annotated ORFs
 aSwitchList <- addORFfromGTF(
   switchAnalyzeRlist     = aSwitchList,
-  pathToGTF              = './code/IsoformSwitchAnalyzeR/input/ORF_gene_id_replaced_new.gtf.gz') #gtf with ORFanage predictions
+  pathToGTF              = './proc/IsoformSwitchAnalyzeR/input/ORF_gene_id_replaced_new.gtf.gz') #gtf with ORFanage predictions
 
 # Step 1 of 2: importing GTF (this may take a while)...
 # Step 2 of 2: Adding ORF...
@@ -135,21 +135,21 @@ aSwitchList <- preFilter(
 
 # The filtering removed 90043 ( 56.69% of ) transcripts. There is now 68801 isoforms left
 
-saveRDS(aSwitchList, file = "./code/IsoformSwitchAnalyzeR/output/isoformswitch_v4.rds")
+saveRDS(aSwitchList, file = "./proc/IsoformSwitchAnalyzeR/output/isoformswitch_v4.rds")
 
 
 
-aSwitchList <- readRDS("./code/IsoformSwitchAnalyzeR/output/isoformswitch_v4.rds")
+aSwitchList <- readRDS("./proc/IsoformSwitchAnalyzeR/output/isoformswitch_v4.rds")
 
 
 
 # DTE/DGE/DTU -------------------------------------------------------------
 #DTE - already done in DESeq2 section
-res_t04_vs_t00 <- read.csv("./code/expression/output/DESeq2_tr_t04_vs_t00.csv")
+res_t04_vs_t00 <- read.csv("./proc/expression/DESeq2_tr_t04_vs_t00.csv")
 
-res_t30_vs_t00 <- read.csv("./code/expression/output/DESeq2_tr_t30_vs_t00.csv")
+res_t30_vs_t00 <- read.csv("./proc/expression/DESeq2_tr_t30_vs_t00.csv")
 
-res_t30_vs_t04 <- read.csv("./code/expression/output/DESeq2_tr_t30_vs_t04.csv")
+res_t30_vs_t04 <- read.csv("./proc/expression/DESeq2_tr_t30_vs_t04.csv")
 
 #Add gene_names
 res_t04_vs_t00 <- merge(res_t04_vs_t00, classification[, c("isoform", "associated_gene", "structural_category")],
@@ -187,15 +187,15 @@ DTE_results <- DTE
 colnames(DTE_results)[1] <- "isoform_id"
 
 #DGE
-gene_sum_t04_vs_t00_df <- read.csv("./code/expression/output/DESeq2_gene_sum_t04_vs_t00.csv")
+gene_sum_t04_vs_t00_df <- read.csv("./proc/expression/DESeq2_gene_sum_t04_vs_t00.csv")
 gene_sum_t04_vs_t00_df <- gene_sum_t04_vs_t00_df %>%
   mutate(padj = replace_na(padj, 1))
 
-gene_sum_t30_vs_t00_df <- read.csv("./code/expression/output/DESeq2_gene_sum_t30_vs_t00.csv")
+gene_sum_t30_vs_t00_df <- read.csv("./proc/expression/DESeq2_gene_sum_t30_vs_t00.csv")
 gene_sum_t30_vs_t00_df <- gene_sum_t30_vs_t00_df %>%
   mutate(padj = replace_na(padj, 1))
 
-gene_sum_t30_vs_t04_df <- read.csv("./code/expression/output/DESeq2_gene_sum_t30_vs_t04.csv")
+gene_sum_t30_vs_t04_df <- read.csv("./proc/expression/DESeq2_gene_sum_t30_vs_t04.csv")
 gene_sum_t30_vs_t04_df <- gene_sum_t30_vs_t04_df %>%
   mutate(padj = replace_na(padj, 1))
 
@@ -282,9 +282,9 @@ colnames(aSwitchList_part1$isoformFeatures)[colnames(aSwitchList_part1$isoformFe
 
 
 ###Save
-saveRDS(aSwitchList_part1, file = "./code/IsoformSwitchAnalyzeR/output/isoformswitch_part1_v4.rds")
+saveRDS(aSwitchList_part1, file = "./proc/IsoformSwitchAnalyzeR/output/isoformswitch_part1_v4.rds")
 
-aSwitchList_part1 <- readRDS("./code/IsoformSwitchAnalyzeR/output/isoformswitch_part1_v4.rds")
+aSwitchList_part1 <- readRDS("./proc/IsoformSwitchAnalyzeR/output/isoformswitch_part1_v4.rds")
 
 
 summary(aSwitchList_part1)
@@ -296,12 +296,12 @@ supp_table <- aSwitchList_part1$isoformSwitchAnalysis %>%
     DTU_pval   = "pvalue",
     DTU_qval   = "padj")
 
-write.csv(supp_table, "./code/IsoformSwitchAnalyzeR/output/DTU_table.csv")
+write.csv(supp_table, "./proc/IsoformSwitchAnalyzeR/output/DTU_table.csv")
 
 
 
 # ALTERNATIVE SPLICING & FUNC CONSEQUENCES-------------------------------------
-aSwitchList_part1 <- readRDS("./code/IsoformSwitchAnalyzeR/output/isoformswitch_part1_v4.rds")
+aSwitchList_part1 <- readRDS("./proc/IsoformSwitchAnalyzeR/output/isoformswitch_part1_v4.rds")
 
 ###Setting all FDR < 0.05, and dIF = 0.05
 
@@ -316,19 +316,19 @@ aSwitchList_part1 <- analyzeAlternativeSplicing(aSwitchList_part1,
 #Add PFAM data
 aSwitchList_part2 <- analyzePFAM(
   switchAnalyzeRlist   = aSwitchList_part1,
-  pathToPFAMresultFile = "./code/IsoformSwitchAnalyzeR/input/full_pfam_scan_results_isoform_edited.txt",
+  pathToPFAMresultFile = "./proc/IsoformSwitchAnalyzeR/input/full_pfam_scan_results_isoform_edited.txt",
   showProgress=T)
 
 #Add IUPRED data
 aSwitchList_part2 <- analyzeIUPred2A(
   switchAnalyzeRlist        = aSwitchList_part2,
-  pathToIUPred2AresultFile  = "./code/IsoformSwitchAnalyzeR/input/iupred2a_processed_result.txt", 
+  pathToIUPred2AresultFile  = "./proc/IsoformSwitchAnalyzeR/input/iupred2a_processed_result.txt", 
   showProgress = T)
 
 #Add SignalP data
 aSwitchList_part2 <- analyzeSignalP(
   switchAnalyzeRlist = aSwitchList_part2,
-  pathToSignalPresultFile = "./code/IsoformSwitchAnalyzeR/input/processed.signalp5",
+  pathToSignalPresultFile = "./proc/IsoformSwitchAnalyzeR/input/processed.signalp5",
   minSignalPeptideProbability = 0.5,
   quiet=FALSE
 ) 
@@ -365,7 +365,7 @@ aSwitchList_part2 <- extractSequence(
 #saveRDS(aSwitchList_part2, file = "./isoformswitch_part2_temp.rds")
 
 #Analyze more SwitchConsequences:
-source('./code/IsoformSwitchAnalyzeR/new_functions.R') #fixed TTS issues
+source('./proc/IsoformSwitchAnalyzeR/new_functions.R') #fixed TTS issues
 
 aSwitchList_part2 <- analyzeSwitchConsequences_new(aSwitchList_part2, 
                                                    onlySigIsoforms = T, 
@@ -425,9 +425,4 @@ aSwitchList_part2 <- analyzeSwitchConsequences_new(aSwitchList_part2,
                                                    ))
 
 #Export and save:
-saveRDS(aSwitchList_part2, file = "./code/IsoformSwitchAnalyzeR/output/isoformswitch_part2_v4.rds")
-
-
-
-
-
+saveRDS(aSwitchList_part2, file = "./proc/IsoformSwitchAnalyzeR/output/isoformswitch_part2_v4.rds")

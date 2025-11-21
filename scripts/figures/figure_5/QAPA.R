@@ -6,10 +6,6 @@ library(stringr)
 library(tidyr)
 library(arrow)
 
-
-
-setwd("")
-
 classification <- read_parquet("./data/final_classification.parquet")
 
 
@@ -459,6 +455,4 @@ summary(cluster_t30_vs_t04)
 cluster_t30_vs_t04_df <- as.data.frame(cluster_t30_vs_t04)
 
 # Save the results as a CSV file
-write.csv(cluster_t30_vs_t04_df, file = "./code/APA/output/QAPA/Deseq2_cluster_t04_v_t30.csv", row.names = T)
-
-
+write.csv(cluster_t30_vs_t04_df, file = "proc/APA/output/QAPA/Deseq2_cluster_t04_v_t30.csv", row.names = T)

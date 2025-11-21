@@ -6,28 +6,20 @@ library(purrr)
 library(edgeR)
 library(IsoformSwitchAnalyzeR)
 
-
-setwd("")
-
-
-
-classification <- read_parquet("./data/final_classification.parquet")
+classification <- read_parquet("nextflow_results/V47/final_classification.parquet")
 
 #Subset the transcript file to these PB IDs. 
-tr_count <- read_parquet("./data/final_expression.parquet")
+tr_count <- read_parquet("nextflow_results/V47/final_expression.parquet")
 tr_count <- as.data.frame(tr_count)
 
-classif_final_tr <- read_parquet("./data/final_classification.parquet")
+classif_final_tr <- read_parquet("nextflow_results/V47/final_classification.parquet")
 classification <- classif_final_tr
 
 filtered_tr_count <- tr_count[tr_count$isoform %in% classification$isoform, ] 
 
-
-
-
 # ISOFORM SWITCHING MICs --------------------------------------------------
 ###IsoformSwitches
-aSwitchList_part2 <- readRDS("./code/IsoformSwitchAnalyzeR/output/isoformswitch_part2_v4.rds")
+aSwitchList_part2 <- readRDS("proc/IsoformSwitchAnalyzeR/output/isoformswitch_part2_v4.rds")
 aSwitchList_part2[["isoformFeatures"]]$gene_name <- aSwitchList_part2[["isoformFeatures"]]$gene_id
 
 
@@ -103,7 +95,7 @@ AS_full <- AS_full %>%
 aSwitchList_part2$AlternativeSplicingAnalysis <- AS_full
 
 
-saveRDS(aSwitchList_part2, file="./code/microexons/output/isoformswitch_MIC.rds") 
+saveRDS(aSwitchList_part2, file="proc/microexons/output/isoformswitch_MIC.rds") 
 
 
 
@@ -133,7 +125,7 @@ tr_CPM <- PB_tr_cpm_norm %>% relocate(isoform_id, .before = iPSC_1)
 
 
 #Replace gene_id with gene_name:
-transcripts <- rtracklayer::import("./data/final_transcripts.gtf")
+transcripts <- rtracklayer::import("nextflow_results/V47/final_transcripts.gtf")
 transcripts <- subset(transcripts, transcript_id %in% classification$isoform) #182,371
 transcript_ids <- data.frame(pb_id = transcripts@elementMetadata@listData[["transcript_id"]])
 transcript_ids <- merge(transcript_ids, classification[, c("isoform", "associated_gene")], 
@@ -142,7 +134,7 @@ transcript_ids <- merge(transcript_ids, classification[, c("isoform", "associate
 
 # Direct assignment to the listData
 transcripts@elementMetadata@listData[["gene_id"]] <- as.character(transcript_ids$associated_gene)
-rtracklayer::export(transcripts, './code/microexons/input/final_transcripts_gene_id_replaced_gtf.gtf')
+rtracklayer::export(transcripts, 'proc/microexons/input/final_transcripts_gene_id_replaced_gtf.gtf')
 
 colnames(filtered_tr_count)[1] <- "isoform_id"
 #Make a switch list
@@ -150,8 +142,8 @@ aSwitchList_all_tr <- importRdata(
   isoformCountMatrix   = filtered_tr_count,
   isoformRepExpression = tr_CPM,
   designMatrix         = myDesign,
-  isoformExonAnnoation = ('./code/microexons/input/final_transcripts_gene_id_replaced_gtf.gtf'),             
- # isoformNtFasta       = ('./data/PacBio_Nuo/IsoformSwitch/full_sequences_fixed_head.fasta.gz'),
+  isoformExonAnnoation = ('proc/microexons/input/final_transcripts_gene_id_replaced_gtf.gtf'),             
+ # isoformNtFasta       = ('nextflow_results/V47/PacBio_Nuo/IsoformSwitch/full_sequences_fixed_head.fasta.gz'),
   addAnnotatedORFs     = FALSE,
   detectUnwantedEffects = F, 
   fixStringTieAnnotationProblem = F,
@@ -163,14 +155,14 @@ aSwitchList_all_tr <- analyzeAlternativeSplicing(aSwitchList_all_tr,
                                              alpha=1, #FDR corrected pval
                                              dIFcutoff = 0, #min change in abs. isoform usage
                                              showProgress=TRUE)
-saveRDS(aSwitchList_all_tr, file="./code/microexons/output/isoformswitch_all_tr.rds") 
+saveRDS(aSwitchList_all_tr, file="proc/microexons/output/isoformswitch_all_tr.rds") 
 
 
 ##Read in all
-aSwitchList_all_tr <- readRDS("./code/microexons/output/isoformswitch_all_tr.rds")
+aSwitchList_all_tr <- readRDS("proc/microexons/output/isoformswitch_all_tr.rds")
 
 
-all_AS <- read.table("./code/microexons/input/vastDB/EVENT_INFO-hg38.tab", 
+all_AS <- read.table("proc/microexons/input/vastDB/EVENT_INFO-hg38.tab", 
                      header = T, 
                      sep = "\t") #downloaded from vastDB
 all_AS_EX <- all_AS %>% filter(grepl("HsaEX[0-9]+", EVENT))
@@ -237,7 +229,7 @@ intersect(vast_MIC_EX$CO_A, MIC_events$event) #293!!!!!
 
 
 # MICROEXONS IN GENCODE - BY LENGTH ---------------------------------------
-gencode <- rtracklayer::import("./data/Gencode_v47/gencode.v47.annotation.gtf")
+gencode <- rtracklayer::import("nextflow_results/V47/Gencode_v47/gencode.v47.annotation.gtf")
 
 #To make it a fair comparison, only using genes we have in our data:
 genes <- unique(classification$associated_gene)
@@ -258,7 +250,7 @@ gencode_unique_MIC$MIC_coord <- paste0(gencode_unique_MIC$seqnames, ":",
 
 
 # LONG-READ MICROEXONS - BY LENGTH ----------------------------------------
-transcripts <- rtracklayer::import("./data/final_transcripts.gtf")
+transcripts <- rtracklayer::import("nextflow_results/V47/final_transcripts.gtf")
 transcripts <- subset(transcripts, transcript_id %in% classification$isoform) #182,371
 
 PB_exon <- subset(transcripts, type == "exon")
@@ -276,7 +268,7 @@ PB_unique_MIC$MIC_coord <- paste0(PB_unique_MIC$seqnames, ":",
 
 
 # MICROEXONS INTERSECTION -------------------------------------------------
-all_AS <- read.table("./code/microexons/input/vastDB/EVENT_INFO-hg38.tab", 
+all_AS <- read.table("proc/microexons/input/vastDB/EVENT_INFO-hg38.tab", 
                      header = T, 
                      sep = "\t")
 all_AS_EX <- all_AS %>% filter(grepl("HsaEX[0-9]+", EVENT))
@@ -322,4 +314,3 @@ MIC_exons_mapping <- all_exons %>%
   group_by(transcript_id) %>%
   drop_na(MIC_type) %>%
   ungroup()
-

@@ -12,11 +12,11 @@ library(purrr)
 
 setwd("")
 
-classification <- read_parquet("./data/final_classification.parquet") #182371 
+classification <- read_parquet("nextflow_results/V47/final_classification.parquet") #182371 
 
 # PREP FILEs -------------------------------------------------
 #Read in transcript regions
-ORFanage_replaced <- rtracklayer::import("./code/IsoformSwitchAnalyzeR/input/ORF_gene_id_replaced_gtf.gtf") #only using 158,844 here
+ORFanage_replaced <- rtracklayer::import("proc/IsoformSwitchAnalyzeR/input/ORF_gene_id_replaced_gtf.gtf") #only using 158,844 here
 gtf_df <- as.data.frame(ORFanage_replaced)
 
 # Keep only transcripts with a 3'UTR
@@ -127,7 +127,7 @@ ident_seq <- ident_seq %>% group_by(sequence_cluster) %>%
   ungroup() #14,738 transcripts
 
 ###Sum each sequence cluster, and filter by expression. 
-cpm <- read.csv("./code/expression/output/transcript_CPM.csv")
+cpm <- read.csv("proc/expression/output/transcript_CPM.csv")
 
 cpm$Avgt00 <- rowMeans(subset(cpm, select = c(1:3)))
 cpm$Avgt04 <- rowMeans(subset(cpm, select = c(4:9)))
@@ -230,15 +230,15 @@ PPAU <- merge(PPAU, PAU_unique[,c('sequence_cluster', "gene_id", "UTR3_length_cl
               all.y = F)
 
 #Export. 
-write.csv(PPAU,"./code/APA/output/APA/PPAU_t00_v_t30.csv", row.names = FALSE)
+write.csv(PPAU,"proc/APA/output/APA/PPAU_t00_v_t30.csv", row.names = FALSE)
 
 
 
-K_PPAU <- read.csv("./code/APA/output/APA/PPAU_t00_v_t30.csv")
+K_PPAU <- read.csv("proc/APA/output/APA/PPAU_t00_v_t30.csv")
 # 
 
 ##Re-run DESeq2, but sum counts per cluster. 
-tr_count <- read_parquet("./data/final_expression.parquet")
+tr_count <- read_parquet("nextflow_results/V47/final_expression.parquet")
 tr_count <- as.data.frame(tr_count)
 
 
@@ -291,7 +291,7 @@ summary(cluster_t30_vs_t00)
 cluster_t30_vs_t00_df <- as.data.frame(cluster_t30_vs_t00)
 
 # Save the results as a CSV file
-write.csv(cluster_t30_vs_t00_df, file = "./code/APA/output/APA/Deseq2_cluster_lrmethod_t00_v_t30.csv", row.names = T)
+write.csv(cluster_t30_vs_t00_df, file = "proc/APA/output/APA/Deseq2_cluster_lrmethod_t00_v_t30.csv", row.names = T)
 
 
 
@@ -358,15 +358,15 @@ PPAU <- merge(PPAU, PAU_unique[,c('sequence_cluster', "gene_id", "UTR3_length_cl
               all.y = F)
 
 #Export. 
-write.csv(PPAU,"./code/APA/output/APA/PPAU_t00_v_t04.csv", row.names = FALSE)
+write.csv(PPAU,"proc/APA/output/APA/PPAU_t00_v_t04.csv", row.names = FALSE)
 
 
 
-K_PPAU <- read.csv("./code/APA/output/APA/PPAU_t00_v_t04.csv")
+K_PPAU <- read.csv("proc/APA/output/APA/PPAU_t00_v_t04.csv")
 # 
 
 ##Re-run DESeq2, but sum counts per cluster. 
-tr_count <- read_parquet("./data/final_expression.parquet")
+tr_count <- read_parquet("nextflow_results/V47/final_expression.parquet")
 tr_count <- as.data.frame(tr_count)
 
 
@@ -419,10 +419,7 @@ summary(cluster_t04_vs_t00)
 cluster_t04_vs_t00_df <- as.data.frame(cluster_t04_vs_t00)
 
 # Save the results as a CSV file
-write.csv(cluster_t04_vs_t00_df, file = "./code/APA/output/APA/Deseq2_cluster_lrmethod_t00_v_t04.csv", row.names = T)
-
-
-
+write.csv(cluster_t04_vs_t00_df, file = "proc/APA/output/APA/Deseq2_cluster_lrmethod_t00_v_t04.csv", row.names = T)
 
 ###T04 vs T30:
 cutoff_filter <- cutoff %>%
@@ -486,15 +483,15 @@ PPAU <- merge(PPAU, PAU_unique[,c('sequence_cluster', "gene_id", "UTR3_length_cl
               all.y = F)
 
 #Export. 
-write.csv(PPAU,"./code/APA/output/APA/PPAU_t04_v_t30.csv", row.names = FALSE)
+write.csv(PPAU,"proc/APA/output/APA/PPAU_t04_v_t30.csv", row.names = FALSE)
 
 
 
-K_PPAU <- read.csv("./code/APA/output/APA/PPAU_t04_v_t30.csv")
+K_PPAU <- read.csv("proc/APA/output/APA/PPAU_t04_v_t30.csv")
 # 
 
 ##Re-run DESeq2, but sum counts per cluster. 
-tr_count <- read_parquet("./data/final_expression.parquet")
+tr_count <- read_parquet("nextflow_results/V47/final_expression.parquet")
 tr_count <- as.data.frame(tr_count)
 
 
@@ -547,5 +544,4 @@ summary(cluster_t30_vs_t04)
 cluster_t30_vs_t04_df <- as.data.frame(cluster_t30_vs_t04)
 
 # Save the results as a CSV file
-write.csv(cluster_t30_vs_t04_df, file = "./code/APA/output/APA/Deseq2_cluster_lrmethod_t04_v_t30.csv", row.names = T)
-
+write.csv(cluster_t30_vs_t04_df, file = "proc/APA/output/APA/Deseq2_cluster_lrmethod_t04_v_t30.csv", row.names = T)

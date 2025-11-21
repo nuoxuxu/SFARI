@@ -7,10 +7,7 @@ library(edgeR)
 library(DESeq2)
 library(MSstatsTMT)
 library(stringr)
-
-
-setwd("")
-
+library(rtracklayer)
 
 ######################
 
@@ -19,40 +16,37 @@ setwd("")
 #####################
 
 #Load in data
-final_pb_ids <- read.table("./data/filtered_transcript_list.txt", 
-                           header = T) #only using transcripts with an ORFanage-predicted ORF from FSM, ISM, NIC or NNC categories
+final_pb_ids <- import("nextflow_results/V47/orfanage/orfanage.gtf") %>% 
+  as.data.frame() %>% 
+  distinct(transcript_id) %>% 
+  pull(transcript_id)
 
 #Subset the transcript file to these PB IDs. 
-tr_count <- read_parquet("./data/final_expression.parquet")
+tr_count <- read_parquet("nextflow_results/V47/final_expression.parquet")
 tr_count <- as.data.frame(tr_count)
 
-filtered_tr_count <- tr_count[tr_count$isoform %in% final_pb_ids$x, ]
+filtered_tr_count <- tr_count[tr_count$isoform %in% final_pb_ids, ]
 
 # CPM - TRANSCRIPTS -------------------------------------------------------
 PB_counts <- as.matrix(filtered_tr_count[,c(2:16)])
 rownames(PB_counts) <- filtered_tr_count$isoform
 
-
 dge_PB <- DGEList(counts = PB_counts, genes = filtered_tr_count[,1])
 dge_PB <- calcNormFactors(dge_PB)
-
 
 PB_tr_cpm_norm <- cpm(dge_PB, normalized.lib.sizes=TRUE, log=FALSE)
 PB_tr_cpm_norm <- as.data.frame(PB_tr_cpm_norm)
 PB_tr_cpm_norm$pb_id <- row.names(PB_tr_cpm_norm)
 
 #Export to save. 
-write.csv(PB_tr_cpm_norm, "./code/expression/output/transcript_CPM.csv", row.names = F)
-
+write.csv(PB_tr_cpm_norm, "proc/expression/transcript_CPM.csv", row.names = F)
 
 # CPM - GENES (SUMMED) ----------------------------------------------------
 #Sum counts. 
-classification <- read_parquet("./data/final_classification.parquet") #182371
-
+classification <- read_parquet("nextflow_results/V47/final_classification.parquet") #182371
 
 #Subset the transcript file to these PB IDs. 
-filtered_tr_count <- tr_count[tr_count$isoform %in% final_pb_ids$x, ]
-
+filtered_tr_count <- tr_count[tr_count$isoform %in% final_pb_ids, ]
 
 filtered_tr_count <- merge(filtered_tr_count, classification[, c("isoform", "associated_gene")], 
                            by.x = "isoform", by.y = "isoform", all.x = TRUE)
@@ -76,8 +70,6 @@ gene_sum_count <- filtered_tr_count %>%
             sum_CN_3_2 = sum(CN_3_2)) %>%
   ungroup()
 
-
-
 gene_sum_counts <- as.matrix(gene_sum_count[,c(2:16)])
 rownames(gene_sum_counts) <- gene_sum_count$associated_gene
 
@@ -90,11 +82,11 @@ gene_sum_cpm_norm <- as.data.frame(gene_sum_cpm_norm)
 gene_sum_cpm_norm$gene_name <- row.names(gene_sum_cpm_norm)
 
 #Export to save. 
-write.csv(gene_sum_cpm_norm, "./code/expression/output/gene_CPM.csv", row.names = F)
+write.csv(gene_sum_cpm_norm, "./proc/expression/gene_CPM.csv", row.names = F)
 
 # CPM - GENES (SUMMED - everything) ----------------------------------------------------
 #Sum counts. 
-classification <- read_parquet("./data/final_classification.parquet") #182371
+classification <- read_parquet("nextflow_results/V47/final_classification.parquet") #182371
 
 
 #Subset the transcript file to these PB IDs.
@@ -137,10 +129,7 @@ gene_sum_cpm_norm <- as.data.frame(gene_sum_cpm_norm)
 gene_sum_cpm_norm$gene_name <- row.names(gene_sum_cpm_norm)
 
 #Export to save. 
-write.csv(gene_sum_cpm_norm, "./code/expression/output/gene_CPM_all.csv", row.names = F)
-
-
-
+write.csv(gene_sum_cpm_norm, "./proc/expression/gene_CPM_all.csv", row.names = F)
 
 ######################
 
@@ -149,13 +138,15 @@ write.csv(gene_sum_cpm_norm, "./code/expression/output/gene_CPM_all.csv", row.na
 #####################
 
 #Load data. 
-tr_count <- read_parquet("./data/final_expression.parquet")
+tr_count <- read_parquet("nextflow_results/V47/final_expression.parquet")
 tr_count <- as.data.frame(tr_count)
 
-final_pb_ids <- read.table("./data/filtered_transcript_list.txt", 
-                           header = T) 
+final_pb_ids <- import("nextflow_results/V47/orfanage/orfanage.gtf") %>% 
+  as.data.frame() %>% 
+  distinct(transcript_id) %>% 
+  pull(transcript_id)
 
-filtered_tr_count <- tr_count[tr_count$isoform %in% final_pb_ids$x, ]
+filtered_tr_count <- tr_count[tr_count$isoform %in% final_pb_ids, ]
 
 # DESEQ2 TRANSCRIPTS ------------------------------------------------------
 #Prep df.
@@ -195,11 +186,11 @@ res_t30_vs_t04_df$pb_id <- rownames(res_t30_vs_t04_df)
 
 
 # Save the results as a CSV file
-write.csv(res_t04_vs_t00_df, file = "./code/expression/output/DESeq2_tr_t04_vs_t00.csv",
+write.csv(res_t04_vs_t00_df, file = "./proc/expression/DESeq2_tr_t04_vs_t00.csv",
           row.names = F)
-write.csv(res_t30_vs_t00_df, file = "./code/expression/output/DESeq2_tr_t30_vs_t00.csv",
+write.csv(res_t30_vs_t00_df, file = "./proc/expression/DESeq2_tr_t30_vs_t00.csv",
           row.names = F)
-write.csv(res_t30_vs_t04_df, file = "./code/expression/output/DESeq2_tr_t30_vs_t04.csv",
+write.csv(res_t30_vs_t04_df, file = "./proc/expression/DESeq2_tr_t30_vs_t04.csv",
           row.names = F)
 
 
@@ -207,9 +198,9 @@ write.csv(res_t30_vs_t04_df, file = "./code/expression/output/DESeq2_tr_t30_vs_t
 
 # DESEQ2 GENE-LEVEL (SUMMED TR) ------------------------------------------------------
 #Sum counts. 
-classification <- read_parquet("./data/final_classification.parquet")
+classification <- read_parquet("nextflow_results/V47/final_classification.parquet")
 
-filtered_tr_count <- tr_count[tr_count$isoform %in% final_pb_ids$x, ]
+filtered_tr_count <- tr_count[tr_count$isoform %in% final_pb_ids, ]
 filtered_tr_count <- merge(filtered_tr_count, classification[, c("isoform", "associated_gene")], 
                            by.x = "isoform", by.y = "isoform", all.x = TRUE)
 
@@ -272,14 +263,12 @@ gene_sum_t30_vs_t04_df$gene_name <- rownames(gene_sum_t30_vs_t04_df)
 
 
 # Save the results as a CSV file
-write.csv(gene_sum_t04_vs_t00_df, file = "./code/expression/output/DESeq2_gene_sum_t04_vs_t00.csv",
+write.csv(gene_sum_t04_vs_t00_df, file = "./proc/expression/DESeq2_gene_sum_t04_vs_t00.csv",
           row.names = F)
-write.csv(gene_sum_t30_vs_t00_df, file = "./code/expression/output/DESeq2_gene_sum_t30_vs_t00.csv",
+write.csv(gene_sum_t30_vs_t00_df, file = "./proc/expression/DESeq2_gene_sum_t30_vs_t00.csv",
           row.names = F)
-write.csv(gene_sum_t30_vs_t04_df, file = "./code/expression/output/DESeq2_gene_sum_t30_vs_t04.csv",
+write.csv(gene_sum_t30_vs_t04_df, file = "./proc/expression/DESeq2_gene_sum_t30_vs_t04.csv",
           row.names = F)
-
-
 
 ######################
 
@@ -450,9 +439,9 @@ quant_data <- proteinSummarization(data = msstats_with_annotation,
                                    MBimpute = TRUE)
 
 # Save protein quant
-save(quant_data, file = "./code/expression/output/MSstatsTMT_abundance.RData")
+save(quant_data, file = "./proc/expression/MSstatsTMT_abundance.RData")
 
-write.csv(quant_data[["ProteinLevelData"]], "./code/expression/output/MSstatsTMT_abundance.csv", row.names = F)
+write.csv(quant_data[["ProteinLevelData"]], "./proc/expression/MSstatsTMT_abundance.csv", row.names = F)
 
 
 # Create contrast matrix for time course comparisons
@@ -467,7 +456,7 @@ colnames(contrast_matrix) <- conditions
 
 test.pairwise <- groupComparisonTMT(quant_data, contrast.matrix = contrast_matrix, moderated = TRUE)
 
-write.csv(test.pairwise$ComparisonResult, "./code/expression/output/MSstatsTMT_diff_prot_expr.csv", row.names = F)
+write.csv(test.pairwise$ComparisonResult, "./proc/expression/MSstatsTMT_diff_prot_expr.csv", row.names = F)
 
 
 #####################
@@ -477,9 +466,9 @@ write.csv(test.pairwise$ComparisonResult, "./code/expression/output/MSstatsTMT_d
 ####################
 
 # GENE CLUSTERS (SUMMED TR) -----------------------------------------------
-gene_sum_t04_vs_t00_df <- read.csv("./code/expression/output/DESeq2_gene_sum_t04_vs_t00.csv")
-gene_sum_t30_vs_t00_df <- read.csv("./code/expression/output/DESeq2_gene_sum_t30_vs_t00.csv")
-gene_sum_t30_vs_t04_df <- read.csv("./code/expression/output/DESeq2_gene_sum_t30_vs_t04.csv")
+gene_sum_t04_vs_t00_df <- read.csv("./proc/expression/DESeq2_gene_sum_t04_vs_t00.csv")
+gene_sum_t30_vs_t00_df <- read.csv("./proc/expression/DESeq2_gene_sum_t30_vs_t00.csv")
+gene_sum_t30_vs_t04_df <- read.csv("./proc/expression/DESeq2_gene_sum_t30_vs_t04.csv")
 
 
 #Make 9 clusters
@@ -523,12 +512,12 @@ clusters_gene_sum <- clusters_gene_sum %>%
 clusters_gene_sum$cluster <- as.factor(clusters_gene_sum$cluster)
 
 
-write.csv(clusters_gene_sum, "./code/expression/output/gene_clusters_v2.csv", 
+write.csv(clusters_gene_sum, "./proc/expression/gene_clusters_v2.csv", 
           row.names = F)
 
 
 # PROTEIN CLUSTERS --------------------------------------------------------
-diff_prot <- read.csv("./code/expression/output/MSstatsTMT_diff_prot_expr.csv")
+diff_prot <- read.csv("./proc/expression/MSstatsTMT_diff_prot_expr.csv")
 diff_prot$UniprotID <- sub("^[^|]*\\|([^|]*)\\|.*$", "\\1", diff_prot$Protein)
 
 #
@@ -582,9 +571,9 @@ manual_picks <- ties_for_manual_review %>%
 final_filtered_diff_prot <- bind_rows(unique_winners, manual_picks)
 length(unique(final_filtered_diff_prot$GeneSymbol)) #8878
 
-# write.csv(final_filtered_diff_prot, "./code/expression/output/MSstatsTMT_diff_prot_expr_filtered.csv", 
+# write.csv(final_filtered_diff_prot, "./proc/expression/MSstatsTMT_diff_prot_expr_filtered.csv", 
 #           row.names = F)
-final_filtered_diff_prot <- read.csv("./code/expression/output/MSstatsTMT_diff_prot_expr_filtered.csv")
+final_filtered_diff_prot <- read.csv("./proc/expression/MSstatsTMT_diff_prot_expr_filtered.csv")
 
 wide_df <- final_filtered_diff_prot %>%
   filter(Label %in% c("t4_vs_t00", "t30_vs_t4")) %>%
@@ -611,11 +600,8 @@ clustered_df <- wide_df %>%
     cluster = paste0(dir1, dir2)
   )
 
-
 clustered_df$cluster <- as.factor(clustered_df$cluster)
 
-# 
-write.csv(clustered_df, "./code/expression/output/protein_clusters_v3.csv", 
+# Write the clustered data to a CSV file
+write.csv(clustered_df, "./proc/expression/protein_clusters_v3.csv", 
           row.names = F)
-
-

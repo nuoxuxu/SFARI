@@ -5,19 +5,18 @@ library(tidyr)
 library(purrr)
 library(tibble)
 
-setwd("")
-
+### Run suppa2
+system("python ./suppa.py generateEvents -i ./code/IsoformSwitchAnalyzeR/input/ORF_gene_id_replaced_tr_exon.gtf -o ./code/AS_APA/output/output/APA_AS_corr/ORFanage_events -e SE SS MX RI FL -f ioe")
 
 ###Load in data:
-classification <- read_parquet("./data/final_classification.parquet")
-# 
+classification <- read_parquet("nextflow_results/V47/final_classification.parquet")
 
 # Read in exon splicing events (from running SUPPA2)
-ES_events <- read.table("./code/AS_APA/output/output_APA_AS_corr/ORFanage_events_SE_strict.ioe", 
+ES_events <- read.table("proc/AS_APA/output/output_APA_AS_corr/ORFanage_events_SE_strict.ioe", 
                         header = T)
 
 # Read in all transcripts, and group into pA sites
-ORFanage_replaced <- rtracklayer::import("./code/IsoformSwitchAnalyzeR/input/ORF_gene_id_replaced_tr_exon.gtf") #only using 158,844 here
+ORFanage_replaced <- rtracklayer::import("proc/IsoformSwitchAnalyzeR/input/ORF_gene_id_replaced_tr_exon.gtf") #only using 158,844 here
 
 exons <- ORFanage_replaced[ORFanage_replaced$type == "exon"]
 transcripts <- ORFanage_replaced[ORFanage_replaced$type == "transcript"]
@@ -107,20 +106,20 @@ filtered_df_ES <- filtered_df_ES %>%
   ungroup() #111,744
 
 
-write.csv(filtered_df_ES, "./code/AS_APA/input/transcript_pA_sites.csv", 
+write.csv(filtered_df_ES, "proc/AS_APA/input/transcript_pA_sites.csv", 
           row.names = F)
 
 
 # Generate counts matrix  --------------------------------------------------
-filtered_df_ES <- read.csv("./code/AS_APA/input/transcript_pA_sites.csv")
+filtered_df_ES <- read.csv("proc/AS_APA/input/transcript_pA_sites.csv")
 
 
 #Load in data
-final_pb_ids <- read.table("./data/filtered_transcript_list.txt", 
+final_pb_ids <- read.table("nextflow_results/V47/filtered_transcript_list.txt", 
                            header = T) #only using transcripts with an ORFanage-predicted ORF from FSM, ISM, NIC or NNC categories
 
 #Subset the transcript file to these PB IDs. 
-tr_count <- read_parquet("./data/final_expression.parquet")
+tr_count <- read_parquet("nextflow_results/V47/final_expression.parquet")
 tr_count <- as.data.frame(tr_count)
 
 filtered_tr_count <- tr_count[tr_count$isoform %in% final_pb_ids$x, ]
@@ -163,7 +162,7 @@ event_map <- tot_map
 counts_annotated <- counts_long %>%
   inner_join(event_map, by = "transcript_id")
 # columns: transcript_id | timepoint | count | pA_id | event_id | type
-write.csv(counts_annotated, "./code/AS_APA/input/tr_pA_counts.csv", row.names = F)
+write.csv(counts_annotated, "proc/AS_APA/input/tr_pA_counts.csv", row.names = F)
 
 
 # 1. Sum counts per event_id, timepoint, and pA
@@ -171,6 +170,4 @@ pA_totals <- counts_annotated %>%
   group_by(event_id, type, pas_id, timepoint) %>%
   summarise(total = sum(count), .groups = "drop") #6619 genes
 
-write.csv(pA_totals, "./code/AS_APA/input/pA_counts.csv", row.names = F)
-
-
+write.csv(pA_totals, "proc/AS_APA/input/pA_counts.csv", row.names = F)
