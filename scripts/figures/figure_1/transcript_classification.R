@@ -22,13 +22,13 @@ structural_category_labels <- c(
 
 my_theme <- theme_classic() +
     theme(
-        axis.title.x = element_text(size = 13),
-        axis.title.y = element_text(size = 13),
-        axis.text.x = element_text(size = 12),
-        axis.text.y = element_text(size = 12),
+        axis.title.x = element_text(size = 16),
+        axis.title.y = element_text(size = 16),
+        axis.text.x = element_text(size = 15),
+        axis.text.y = element_text(size = 15),
         legend.position = "none"
     )
-
+update_geom_defaults("text", list(size = 5))    
 theme_set(my_theme)
 
 # Transcript Classification
@@ -88,8 +88,10 @@ read_parquet("nextflow_results/V47/final_classification.parquet") %>%
         x = "Transcript Length (bp)",
         y = expression("Transcripts (x" ~ 10^3 * ")")
     ) +
-    ggtitle("Transcript length distribution")
-# ggsave("figures/figure_1/length_vs_abundance.pdf", width = 8, height = 7)
+    theme(
+        legend.position = c(0.8, 0.8)
+    )
+ggsave("figures/figure_1/length_vs_abundance.pdf", width = 3.5, height = 3)
 
 # Number of exons vs abudance
 
@@ -124,7 +126,6 @@ row_sum <- read_parquet("nextflow_results/V47/final_expression.parquet") %>%
     mutate(
         row_sum = rowSums(across(where(is.numeric)))
     )
-
 count_vs_abundance <- read_parquet("nextflow_results/V47/final_classification.parquet") %>%
     mutate(
         structural_category2 = if_else(
@@ -149,4 +150,4 @@ count_vs_abundance <- read_parquet("nextflow_results/V47/final_classification.pa
 # ggsave("figures/figure_1/count_vs_abundance.pdf", width = 8, height = 7)
 
 transcript_classification_hist + count_vs_abundance + nexon_vs_abundance + plot_layout(widths = c(1, 1, 1))
-ggsave("figures/figure_1/transcript_fig_combined.pdf", width = 7.5, height = 2.5)
+ggsave("figures/figure_1/transcript_fig_combined_2.pdf", width = 7.5, height = 2.5)

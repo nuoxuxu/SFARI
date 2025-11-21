@@ -15,12 +15,31 @@ SR_SJ = (
     )
 )
 
-LR_SJ = (
-    read_gtf('nextflow_results/V47/final_transcripts.gtf')
+LR_SJ = read_gtf('nextflow_results/V47/final_transcripts.gtf')\
+    .filter(pl.col('feature') == 'CDS')\
     .pipe(gtf_to_SJ)\
     .group_by(['chrom', 'start', 'end', 'strand'])\
     .len()
-)
+
+gtf = read_gtf('nextflow_results/V47/final_transcripts.gtf')\
+    .filter(pl.col('feature') == 'exon')
+
+gtf\
+    .filter(
+        pl.col("feature")!="transcript"
+    )\
+    .filter(
+        pl.col("transcript_id").is_in(gtf.group_by("transcript_id").len().filter(pl.col("len")!=1).select("transcript_id")["transcript_id"])
+    )\
+    .group_by("transcript_id", maintain_order=True)\
+    .agg(
+        pl.col("strand").unique().map_elements(lambda l: l[0], return_dtype=pl.String),
+        pl.col("seqname").unique().map_elements(lambda l: l[0], return_dtype=pl.String),
+        pl.col("start").map_elements(lambda l: np.sort(np.array(l)-1)[1:].tolist(), return_dtype=pl.List(pl.Int64)).alias("end"),
+        pl.col("end").map_elements(lambda l: np.sort(np.array(l)+1)[:-1].tolist(), return_dtype=pl.List(pl.Int64)).alias("start")
+    )\
+    .explode("start", "end")\
+    .rename({"seqname": "chrom"})
 
 gencode_V47_SJ = (
     read_gtf(os.path.join(os.getenv('GENOMIC_DATA_DIR', ''), 'GENCODE', 'gencode.v47.annotation.gtf'))

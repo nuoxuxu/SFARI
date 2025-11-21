@@ -60,7 +60,7 @@ peptide_annot <- rtracklayer::import("nextflow_results/V47/orfanage/annot_peptid
 
 peptides <- peptide_annot %>%
   dplyr::filter(
-    gene_name == current_gene,
+    gene_.me == current_gene,
     detected == "True",
     novelty == "novel"
   ) %>%
