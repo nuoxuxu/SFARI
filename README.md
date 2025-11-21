@@ -5,6 +5,17 @@ mkdir envs
 mamba env create -p ./envs/tama
 ln -s ${PWD}/envs/tama ${CONDA_PREFIX}/envs/tama
 ```
+
+# Install external datasets
+
+```
+wget https://github.com/gandallab/Dev_Brain_IsoSeq/raw/refs/heads/main/data/cp_vz_0.75_min_7_recovery_talon.gtf.gz -O data/patowary/data/cp_vz_0.75_min_7_recovery_talon.gtf.gz
+gunzip data/patowary/data/cp_vz_0.75_min_7_recovery_talon.gtf.gz
+
+wget https://hgdownload.soe.ucsc.edu/gbdb/hg19/liftOver/hg19ToHg38.over.chain.gz -O data/hg19ToHg38.over.chain.gz
+
+
+```
 # Long-read sequencing
 ## Recommended bulk Iso-Seq workflow
 
