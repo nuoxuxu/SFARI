@@ -146,8 +146,7 @@ workflow classify_and_count {
     isoform_gff
     id_to_sample
     read_stat
-
-
+    
     main:
     pigeonPrepare(isoform_gff, params.annotation_gtf, params.genome_fasta)
     pigeonClassify(pigeonPrepare.out.sorted_isoform_gff, pigeonPrepare.out.sorted_isoform_gff_pgi, pigeonPrepare.out.sorted_annotation, pigeonPrepare.out.sorted_annotation_gtf_pgi, params.genome_fasta, pigeonPrepare.out.reference_fasta_pgi)

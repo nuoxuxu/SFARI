@@ -8,7 +8,8 @@ process cometSearch {
     path "file*.mzXML"
 
     output:
-    path "file*.pin"
+    path "file*.pin", emit: pin_files
+    path "file*.mzid", emit: mzid_files
 
     script:
     """
@@ -63,7 +64,7 @@ workflow proteomic {
     main:
     mzXMLfilesPath.collect().set { mzXMLfiles }
     cometSearch("/scratch/nxu/SFARI/data/comet.params", protein_database, mzXMLfiles)
-    runPercolator(params.searchDB, cometSearch.out)
+    runPercolator(params.searchDB, cometSearch.out.pin_files)
     emit:
     peptides = runPercolator.out
 }
