@@ -25,7 +25,7 @@ def get_expression(read_stat_path, id_to_sample_path):
         .group_by("id", "isoform")\
         .agg(pl.sum("count"))\
         .sort("isoform", descending=False)\
-        .pivot(columns = "id", index = "isoform", values = "count")\
+        .pivot(on = "id", index = "isoform", values = "count")\
         .fill_null(0)\
         .rename(id_to_sample)\
         ["isoform", "iPSC_1", "iPSC_2", "iPSC_3", "NPC_1_1", "NPC_1_3", "NPC_2_1", "NPC_2_2", "NPC_3_1", "NPC_3_3", "CN_1_2", "CN_1_3", "CN_2_1", "CN_2_2", "CN_3_1", "CN_3_2"]
