@@ -1,4 +1,3 @@
-name: /gpfs/fs0/scratch/s/shreejoy/nxu/SFARI/env
 channels:
   - conda-forge
   - bioconda
