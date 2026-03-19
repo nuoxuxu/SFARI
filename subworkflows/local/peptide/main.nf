@@ -1,5 +1,5 @@
 process peptideTrackUCSC {
-    
+    storeDir "${params.output_dir}/${params.orf_prediction}"
     conda "$moduleDir/python.yml"
     
     input:
@@ -26,7 +26,7 @@ process peptideTrackUCSC {
 }
 
 process peptideMapping {
-    publishDir "${params.output_dir}/${params.orf_prediction}", mode: 'copy'
+    storeDir "${params.output_dir}/${params.orf_prediction}"
     
     conda "/scratch/nxu/SFARI/r_env"
 

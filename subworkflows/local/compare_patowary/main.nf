@@ -1,6 +1,6 @@
 process liftOverTalonGtf {
     container "crossmap.sif"
-    publishDir "${params.output_dir}/compare", mode: 'copy'
+    storeDir "${params.output_dir}/compare"
     
     input:
     path talon_gtf
@@ -16,7 +16,7 @@ process liftOverTalonGtf {
 }
 
 process getTalonGencodeV47Refmap {
-    publishDir "${params.output_dir}/compare", mode: 'copy'
+    storeDir "${params.output_dir}/compare"
 
     input:
     path annotation_gtf
@@ -34,7 +34,7 @@ process getTalonGencodeV47Refmap {
 }
 
 process getTalonSfariRefmap {
-    publishDir "${params.output_dir}/compare", mode: 'copy'
+    storeDir "${params.output_dir}/compare"
 
     input:
     path final_transcripts_gtf
@@ -52,7 +52,7 @@ process getTalonSfariRefmap {
 }
 
 process addPAtowaryColumnToClassification {
-    publishDir "${params.output_dir}/compare", mode: 'copy'
+    storeDir "${params.output_dir}/compare"
 
     input:
     path classification

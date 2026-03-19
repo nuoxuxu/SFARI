@@ -1,7 +1,7 @@
 #!/usr/bin/env nextflow
 
 process getIDToSample {
-    publishDir "${params.output_dir}", mode: 'copy'
+    storeDir "${params.output_dir}"
 
     conda "${moduleDir}/environment.yml"
     
@@ -46,7 +46,7 @@ process mergeBamFiles {
 }
 
 process isoseqCollapse {
-    publishDir "${params.output_dir}", mode: 'copy'
+    storeDir "${params.output_dir}"
     label "short_slurm_job"
 
     conda "${moduleDir}/environment.yml"

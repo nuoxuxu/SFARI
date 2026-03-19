@@ -1,5 +1,5 @@
 process novelExonicRegions {
-    publishDir "${params.output_dir}/${params.orf_prediction}/UCSC_tracks", mode: 'copy'
+    storeDir "${params.output_dir}/${params.orf_prediction}/UCSC_tracks"
     
     conda "/scratch/s/shreejoy/nxu/SFARI/envs/r_env"
 
@@ -20,7 +20,7 @@ process novelExonicRegions {
 }
 
 process novelSpliceSites {
-    publishDir "${params.output_dir}/${params.orf_prediction}/splice_sites", mode: 'copy'
+    storeDir "${params.output_dir}/${params.orf_prediction}/splice_sites"
     
     conda "/scratch/s/shreejoy/nxu/SFARI/env"
 
@@ -43,7 +43,7 @@ process novelSpliceSites {
 }
 
 process novelCDS {
-    publishDir "${params.output_dir}/${params.orf_prediction}/UCSC_tracks", mode: 'copy'
+    storeDir "${params.output_dir}/${params.orf_prediction}/UCSC_tracks"
     
     conda "/scratch/s/shreejoy/nxu/SFARI/envs/r_env"
 
@@ -64,7 +64,7 @@ process novelCDS {
 }
 
 process riboseqTrack {
-    publishDir "${params.output_dir}/${params.orf_prediction}/UCSC_tracks", mode: 'copy'
+    storeDir "${params.output_dir}/${params.orf_prediction}/UCSC_tracks"
     
     conda "/scratch/s/shreejoy/nxu/SFARI/envs/r_env"
 
@@ -82,7 +82,7 @@ process riboseqTrack {
 }
 
 process formatExonicRegions {
-    publishDir "${params.output_dir}/${params.orf_prediction}/exonic_regions", mode: 'copy'
+    storeDir "${params.output_dir}/${params.orf_prediction}/exonic_regions"
     
     conda "/scratch/s/shreejoy/nxu/SFARI/envs/r_env"
 
@@ -106,7 +106,7 @@ process formatExonicRegions {
 
 
 process addPhyloPToExonicRegions {
-    publishDir "${params.output_dir}/${params.orf_prediction}/exonic_regions", mode: 'copy'
+    storeDir "${params.output_dir}/${params.orf_prediction}/exonic_regions"
     
     conda "/scratch/s/shreejoy/nxu/SFARI/env"
 
@@ -129,7 +129,7 @@ process addPhyloPToExonicRegions {
 }
 
 process addPhyloPToSpliceSite {
-    publishDir "${params.output_dir}/${params.orf_prediction}/splice_sites", mode: 'copy'
+    storeDir "${params.output_dir}/${params.orf_prediction}/splice_sites"
     
     conda "/scratch/s/shreejoy/nxu/SFARI/env"
 

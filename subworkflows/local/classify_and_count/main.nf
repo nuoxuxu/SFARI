@@ -47,7 +47,7 @@ process pigeonClassify {
 }
 
 process pigeonFilter {
-    publishDir "${params.output_dir}", mode: 'copy'
+    storeDir "${params.output_dir}"
 
     conda "${moduleDir}/environment.yml"
     
@@ -73,7 +73,7 @@ process pigeonFilter {
 
 process getFullExpression {
     label "short_slurm_job"
-    publishDir "${params.output_dir}", mode: 'copy'
+    storeDir "${params.output_dir}"
 
     conda "${moduleDir}/environment.yml"
 
@@ -94,7 +94,7 @@ process getFullExpression {
 
 process filterByExpressionExternalSupport {
     label "short_slurm_job"
-    publishDir "${params.output_dir}", mode: 'copy'
+    storeDir "${params.output_dir}"
 
     conda "${moduleDir}/environment.yml"
 

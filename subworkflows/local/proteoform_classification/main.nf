@@ -90,7 +90,7 @@ process fivePrimeUtr {
 }
 
 process proteinClassification {
-    publishDir "${params.output_dir}/${params.orf_prediction}", mode: 'copy'
+    storeDir "${params.output_dir}/${params.orf_prediction}"
     label "short_slurm_job"
 
     conda "$moduleDir/environment.yml"
@@ -110,7 +110,7 @@ process proteinClassification {
 }
 
 process makeProteinSearchDatabase {
-    publishDir "${params.output_dir}/${params.orf_prediction}", mode: 'copy'
+    storeDir "${params.output_dir}/${params.orf_prediction}"
 
     conda "$moduleDir/environment.yml"
 
@@ -155,9 +155,9 @@ workflow proteoform_classification {
 
 workflow {
 
-    predicted_cds_gtf = "/scratch/s/shreejoy/nxu/SFARI/nextflow_results/V47/orfanage/orfanage.gtf"
-    peptide_fasta = "/scratch/s/shreejoy/nxu/SFARI/nextflow_results/V47/orfanage/orfanage_peptide.fasta"
-    best_orf = "/scratch/s/shreejoy/nxu/SFARI/nextflow_results/V47/orfanage/best_orf.tsv"
+    predicted_cds_gtf = "/scratch/nxu/SFARI/nextflow_results/V47/orfanage/orfanage.gtf"
+    peptide_fasta = "/scratch/nxu/SFARI/nextflow_results/V47/orfanage/orfanage_peptide.fasta"
+    best_orf = "/scratch/nxu/SFARI/nextflow_results/V47/orfanage/best_orf.tsv"
     
     renameCdsToExon(predicted_cds_gtf, params.annotation_gtf)
     sqantiProtein(renameCdsToExon.out.sample_cds_renamed, renameCdsToExon.out.sample_transcript_exon_only, renameCdsToExon.out.ref_cds_renamed, renameCdsToExon.out.ref_transcript_exon_only, best_orf, predicted_cds_gtf)

@@ -98,7 +98,7 @@ process extractORFanageTranslationFasta {
 }
 
 process filterOrfanageUCSC {
-    publishDir "${params.output_dir}/${params.orf_prediction}/UCSC_tracks", mode: 'copy'
+    storeDir "${params.output_dir}/${params.orf_prediction}/UCSC_tracks"
     
     conda "$moduleDir/environment.yml"
 
