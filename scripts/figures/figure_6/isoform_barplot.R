@@ -19,6 +19,7 @@ theme_set(my_theme)
 isoformswitch <- readRDS("export/IsoformSwitchAnalyzeR/isoformswitch_part2_v2.rds")
 isoformFeatures <- isoformswitch$isoformFeatures
 
+novel_pb_id <- "PB.104608.73"
 isoformFeatures %>% filter(isoform_id == novel_pb_id)
 
 isoformFeatures %>% 
@@ -40,7 +41,7 @@ isoformFeatures %>%
   geom_pointrange(
     aes(ymin = value - stderr, ymax = value + stderr)
   )  +
-  labs(y = "Isoform Expression") +
+  labs(y = "Isoform Fraction (IF)") +
   theme(
     axis.title.x = element_text(size = 25, color = "black")
   )
