@@ -10,7 +10,7 @@ wget https://data.broadinstitute.org/Trinity/CTAT_SINGULARITY/MISC/TransDecoder/
 
 cd ${SCRATCH}/SFARI
 module load apptainer
-apptainer shell -B="/scratch/s/shreejoy/nxu/SFARI:/scratch/s/shreejoy/nxu/SFARI" ~/tools/transdecoder.v5.7.1.simg
+apptainer shell -B="/scratch/nxu/SFARI:/scratch/nxu/SFARI" ~/tools/transdecoder.v5.7.1.simg
 
 TransDecoder.LongOrfs -S -t full_nt.fasta
 

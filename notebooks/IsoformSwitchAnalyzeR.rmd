@@ -170,7 +170,7 @@ cd libs/libsvm
 gzip -dc libsvm-3.18.tar.gz | tar xf -
 cd libsvm-3.18
 make clean && make
-cd $CPC_HOME && python ./bin/CPC2.py -i /scratch/s/shreejoy/nxu/SFARI/cpc2.fasta -o /scratch/s/shreejoy/nxu/SFARI/full_CPC2result.txt
+cd $CPC_HOME && python ./bin/CPC2.py -i /scratch/nxu/SFARI/cpc2.fasta -o /scratch/nxu/SFARI/full_CPC2result.txt
 ```
 
 ```{r}
