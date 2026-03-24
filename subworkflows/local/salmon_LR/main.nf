@@ -20,7 +20,7 @@ workflow {
     final_sample_gtf = "nextflow_results/V47/final_transcripts.gtf"
     extractFinalTranscriptsFasta(params.genome_fasta, final_sample_gtf)
     SALMON_INDEX(params.genome_fasta, extractFinalTranscriptsFasta.out)
-    input_reads = Channel
+    input_reads = channel
         .fromList(samplesheetToList("assets/samplesheet.csv", "${projectDir}/assets/schema_input.json"))
         .map {
             meta, fastq_1, fastq_2 ->

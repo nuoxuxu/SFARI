@@ -4,7 +4,7 @@ include {samplesheetToList} from 'plugin/nf-schema'
 
 workflow {
     SALMON_INDEX(params.genome_fasta, params.transcript_fasta)
-    input_reads = Channel
+    input_reads = channel
         .fromList(samplesheetToList("assets/samplesheet.csv", "/scratch/nxu/SFARI/assets/schema_input.json"))
         .map {
             meta, fastq_1, fastq_2 ->

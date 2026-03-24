@@ -148,7 +148,7 @@ workflow proteomic {
     protein_search_database
     
     main:
-    Channel.fromPath(params.mzXMLfiles).collect().set { mzXMLfiles_collected }
+    channel.fromPath(params.mzXMLfiles).collect().set { mzXMLfiles_collected }
     cometSearch(params.comet_params, protein_search_database, mzXMLfiles_collected)
     runPercolator(params.searchDB, cometSearch.out.pin_files)
     peptideTrackUCSC(params.searchDB, params.annotation_gtf, final_sample_classification, predicted_cds_gtf, protein_search_database, runPercolator.out)
@@ -162,8 +162,8 @@ workflow proteomic {
 }
 
 workflow {
-    final_sample_classification = Channel.fromPath("nextflow_results/V47/final_classification.parquet")
-    predicted_cds_gtf = Channel.fromPath("nextflow_results/V47/orfanage/orfanage.gtf")
-    protein_database = Channel.fromPath("nextflow_results/V47/orfanage/hybrid.fasta")
+    final_sample_classification = channel.fromPath("nextflow_results/V47/final_classification.parquet")
+    predicted_cds_gtf = channel.fromPath("nextflow_results/V47/orfanage/orfanage.gtf")
+    protein_database = channel.fromPath("nextflow_results/V47/orfanage/hybrid.fasta")
     proteomic(final_sample_classification, predicted_cds_gtf, protein_database)
 }
