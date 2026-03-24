@@ -6,5 +6,5 @@
 #SBATCH -N 1
 
 module apptainer
-apptainer exec -e -B="/scratch/s/shreejoy/nxu/SFARI:/scratch/s/shreejoy/nxu/SFARI" ~/tools/transdecoder.v5.7.1.simg /usr/local/bin/util/gtf_to_alignment_gff3.pl proc/merged_collapsed.sorted.filtered_lite.gff > proc/merged_collapsed.sorted.filtered_lite.gff3
+apptainer exec -e -B="/scratch/nxu/SFARI:/scratch/nxu/SFARI" ~/tools/transdecoder.v5.7.1.simg /usr/local/bin/util/gtf_to_alignment_gff3.pl proc/merged_collapsed.sorted.filtered_lite.gff > proc/merged_collapsed.sorted.filtered_lite.gff3
 

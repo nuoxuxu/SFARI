@@ -10,5 +10,5 @@ module load NiaEnv/2019b python/3.11.5
 source .virtualenvs/deeploc/bin/activate
 
 .virtualenvs/deeploc/bin/deeploc2 \
-    -f /scratch/s/shreejoy/nxu/SFARI/nextflow_results/V47/orfanage/orfanage_peptide.fasta \
+    -f /scratch/nxu/SFARI/nextflow_results/V47/orfanage/orfanage_peptide.fasta \
     -o export/

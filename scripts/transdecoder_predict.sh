@@ -6,4 +6,4 @@
 #SBATCH -N 1
 
 module apptainer
-apptainer exec -e -B="/scratch/s/shreejoy/nxu/SFARI:/scratch/s/shreejoy/nxu/SFARI" ~/tools/transdecoder.v5.7.1.simg TransDecoder.Predict --single_best_only -t proc/merge_collapsed.filtered.fasta --retain_pfam_hits pfam.domtblout --retain_blastp_hits blastp.outfmt6
+apptainer exec -e -B="/scratch/nxu/SFARI:/scratch/nxu/SFARI" ~/tools/transdecoder.v5.7.1.simg TransDecoder.Predict --single_best_only -t proc/merge_collapsed.filtered.fasta --retain_pfam_hits pfam.domtblout --retain_blastp_hits blastp.outfmt6

@@ -10,6 +10,6 @@ module load NiaEnv/2019b python/3.11.5
 source .virtualenvs/DeepTMHMM/bin/activate
 
 # This does not work in compute nodes because of the lack of internet access
-# biolib run DTU/DeepTMHMM --fasta /scratch/s/shreejoy/nxu/SFARI/nextflow_results/V47/orfanage/orfanage_peptide.fasta
+# biolib run DTU/DeepTMHMM --fasta /scratch/nxu/SFARI/nextflow_results/V47/orfanage/orfanage_peptide.fasta
 
-biolib run --local 'DTU/DeepTMHMM:1.0.24' --fasta /scratch/s/shreejoy/nxu/SFARI/nextflow_results/V47/orfanage/orfanage_peptide.fasta
+biolib run --local 'DTU/DeepTMHMM:1.0.24' --fasta /scratch/nxu/SFARI/nextflow_results/V47/orfanage/orfanage_peptide.fasta
