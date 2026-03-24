@@ -49,8 +49,8 @@ def read_fasta(fasta_file, gencode = False):
 def remove_matches_not_following_RK(peptide_mapping):
     def get_regex_patern(txt):
         return "".join(["[RK]", txt])
-
-    return peptide_mapping\
+    
+    peptide_mapping = peptide_mapping\
         .with_columns(
             regex = pl.col("pep").map_elements(lambda x: get_regex_patern(x))
         )\
@@ -58,8 +58,14 @@ def remove_matches_not_following_RK(peptide_mapping):
             pl.col("seq").str.extract_all(pl.col("regex"))
         )\
         .explode("seq")\
-        .filter(pl.col("seq").is_not_null())\
-        .drop("pep", "regex", "seq")
+        .with_columns(
+            pl.col("seq").is_not_null().alias("match_RK"),
+            (pl.col("seq").str.find(pl.col("pep"))==0).alias("start_of_protein")
+        )\
+        .filter(
+            pl.col("match_RK") | pl.col("start_of_protein")
+        )
+    return peptide_mapping
 
 def get_novel_peptide_list(peptide_mapping, gencode_gtf, classification):
     novel_peptides = peptide_mapping\
@@ -108,22 +114,22 @@ def main():
         .filter(pl.col("feature")=="transcript")
 
     percolator_res = pl.read_csv(params.percolator_res, has_header=True, separator="\t")\
-            .with_columns(
-                proteinIds = pl.col("proteinIds").map_elements(lambda s: s.split(",")[0], return_dtype=pl.String)
-            )\
-            .with_columns(
-                pl.col("peptide").str.replace_all(r"M\[15.9949\]", "M")
-            )\
-            .with_columns(
-                pep = pl.col("peptide").str.split(".").map_elements(lambda x: x[1], return_dtype=pl.String),
-                prev_aa = pl.col("peptide").str.split(".").map_elements(lambda x: x[0], return_dtype=pl.String),
-                next_aa = pl.col("peptide").str.split(".").map_elements(lambda x: x[2], return_dtype=pl.String)
-            )\
-            .unique("pep")\
-            .filter(
-                pl.col("q-value") < 0.05
-            )\
-            ["pep"].to_list()
+        .with_columns(
+            proteinIds = pl.col("proteinIds").map_elements(lambda s: s.split(",")[0], return_dtype=pl.String)
+        )\
+        .with_columns(
+            pl.col("peptide").str.replace_all(r"M\[15.9949\]", "M")
+        )\
+        .with_columns(
+            pep = pl.col("peptide").str.split(".").map_elements(lambda x: x[1], return_dtype=pl.String),
+            prev_aa = pl.col("peptide").str.split(".").map_elements(lambda x: x[0], return_dtype=pl.String),
+            next_aa = pl.col("peptide").str.split(".").map_elements(lambda x: x[2], return_dtype=pl.String)
+        )\
+        .unique("pep")\
+        .filter(
+            pl.col("q-value") < 0.05
+        )\
+        ["pep"].to_list()
 
     my_list = []
     for pep in tqdm(percolator_res):
@@ -147,7 +153,7 @@ def main():
     peptide_mapping_RK = remove_matches_not_following_RK(peptide_mapping)
     novel_peptides_RK = get_novel_peptide_list(peptide_mapping_RK, gencode_gtf, classification)
     
-    peptide_mapping.write_parquet("peptide_mapping.parquet")
+    peptide_mapping_RK.write_parquet("peptide_mapping.parquet")
     novel_peptides_RK.write_csv("novel_peptides.csv")
 
 if __name__ == "__main__":

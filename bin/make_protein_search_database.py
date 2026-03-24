@@ -36,7 +36,7 @@ def main():
                 pl.col("protein_classification_base").is_in(["pNNC", "pNIC"])
             )\
             .unique("base_isoform")\
-            .select("base_isoform")
+            ["base_isoform"].to_list()
 
         novel_fasta = peptide_fasta\
             .filter(

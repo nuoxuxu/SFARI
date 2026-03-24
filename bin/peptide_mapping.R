@@ -13,6 +13,10 @@ annotation_gtf <- args[1]
 predicted_cds_gtf <- args[2]
 peptides_gtf <- args[3]
 
+annotation_gtf <- "/project/rrg-shreejoy/Genomic_references/GENCODE/gencode.v47.annotation.gtf"
+predicted_cds_gtf <- "nextflow_results/V47/orfanage/UCSC_tracks/orfanage_UCSC.gtf"
+peptides_gtf <- "nextflow_results/orfanage/peptides_hybrid.gtf"
+
 #-----------------------------------Processing-----------------------------------#
 # Splice junctions
 
@@ -31,7 +35,20 @@ SFARI_SJ <- SFARI_SJ[lengths(SFARI_SJ) != 0] %>%
     unlist()
 
 peptide_SJ_in_GENCODE <- peptide_SJ[seq_along(peptide_SJ) %in% queryHits(findOverlaps(peptide_SJ, GENCODE_SJ, type = "equal"))]
-peptide_SJ_not_in_GENCODE <- peptide_SJ[!(seq_along(peptide_SJ) %in% queryHits(findOverlaps(peptide_SJ, GENCODE_SJ, type = "equal")))]    
+peptide_SJ_not_in_GENCODE <- peptide_SJ[!(seq_along(peptide_SJ) %in% queryHits(findOverlaps(peptide_SJ, GENCODE_SJ, type = "equal")))]
+
+# peptide_SJ_not_in_GENCODE[names(peptide_SJ_not_in_GENCODE)=="K.GVVFSVTTVDLKR.Y(CLIC4)"]
+
+# library(BSgenome.Hsapiens.UCSC.hg38)
+
+# my_coords <- GRanges(
+#   seqnames = c("chr1", "chr1"),
+#   ranges = IRanges(start = c(24797814, 24827010), end = c(24797851, 24827013)),
+#   strand = c("+", "+") # Optional: Strand awareness (returns reverse complement for "-")
+# )
+
+# seqs <- getSeq(BSgenome.Hsapiens.UCSC.hg38, my_coords)
+# translate(seqs[[1]])
 
 in_GENCODE_hits <- findOverlaps(peptide_SJ_in_GENCODE, SFARI_SJ, type="equal")
 not_in_GENCODE_hits <- findOverlaps(peptide_SJ_not_in_GENCODE, SFARI_SJ, type="equal")
@@ -75,7 +92,6 @@ in_GENCODE_df <- tibble(
     pb = names(SFARI_CDS)[subjectHits(in_GENCODE_hits)],
     GENCODE = rep(TRUE, length(in_GENCODE_hits)),
     type = "mono-exonic"
-
 )
 
 not_GENCODE_df <- tibble(
@@ -90,4 +106,4 @@ peptide_exon_mapping <- bind_rows(in_GENCODE_df, not_GENCODE_df)
 # Combine two types of peptides
 
 out <- bind_rows(peptide_SJ_mapping, peptide_exon_mapping)
-out %>% write_parquet("peptide_mapping.parquet")
+out %>% write_parquet("old_peptide_mapping.parquet")

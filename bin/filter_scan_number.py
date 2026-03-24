@@ -43,12 +43,12 @@ def main():
     identifications = novel_peptides\
         .unique("PSMId")\
         .with_columns(
-            file_name = pl.col("PSMId").str.split("_").map_elements(lambda s: s[0], return_dtype=pl.String)
+            file_name = pl.col("PSMId").str.split("_").list.head(4).list.join("_")
         )\
         .filter(
             pl.col("file_name") == file_name
         )\
-        .with_columns(Scan = pl.col("PSMId").str.split("_").map_elements(lambda s: s[1], return_dtype=pl.String))\
+        .with_columns(Scan = pl.col("PSMId").str.split("_").list.get(4))\
         .rename({"original_pep": "Sequence"})\
         .select(["Scan", "Sequence"])
 
@@ -126,4 +126,4 @@ wine msconvert {mzXML_file.replace(".mzXML", "_fixed.mzXML")} \
 if __name__ == "__main__":
     main()
 
-# ls *mzXML | xargs -I {} /scratch/s/shreejoy/nxu/SFARI/bin/filter_scan_number.py --mzXML_file {} --annot_peptides /scratch/s/shreejoy/nxu/SFARI/nextflow_results/V47/orfanage/annot_peptides_hybrid.gtf
+# ls *mzXML | xargs -I {} /scratch/nxu/SFARI/bin/filter_scan_number.py --mzXML_file {} --annot_peptides /scratch/nxu/SFARI/nextflow_results/V47/orfanage/annot_peptides_hybrid.gtf

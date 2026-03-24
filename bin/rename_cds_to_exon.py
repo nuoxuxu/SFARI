@@ -40,18 +40,25 @@ def set_transcript_ranges(group):
 
 
 def transform_cds(gtf):
-    # only keep transcriipt and CDS rows
+    # only keep transcript and CDS rows
     gtf_cds = (
         gtf
             .query('feature in ["transcript","CDS"]')
+            .copy()
     )
-    # rename CDS to exon and update transcript range
-    gtf_cds['feature'] = np.where(gtf_cds['feature'] =='CDS','exon','transcript')
-    gtf_cds = gtf_cds.groupby('transcript_id', as_index=False).apply(set_transcript_ranges)
-    # only keep transcripts that have a CDS
-    sizes = gtf_cds.groupby('transcript_id').size()
-    transcripts_with_cds = list(sizes[sizes > 1].index)
-    gtf_cds = gtf_cds.query(f'transcript_id in {transcripts_with_cds}')
+    # rename CDS to exon
+    gtf_cds['feature'] = np.where(gtf_cds['feature'] == 'CDS', 'exon', 'transcript')
+    # update transcript start/end to span exon ranges (vectorized, pandas 3.0 compatible)
+    exon_mask = gtf_cds['feature'] == 'exon'
+    exons = gtf_cds[exon_mask]
+    exon_min = exons.groupby('transcript_id')[['start', 'end']].min().min(axis=1)
+    exon_max = exons.groupby('transcript_id')[['start', 'end']].max().max(axis=1)
+    tr_mask = gtf_cds['feature'] == 'transcript'
+    gtf_cds.loc[tr_mask, 'start'] = gtf_cds.loc[tr_mask, 'transcript_id'].map(exon_min).combine_first(gtf_cds.loc[tr_mask, 'start'])
+    gtf_cds.loc[tr_mask, 'end'] = gtf_cds.loc[tr_mask, 'transcript_id'].map(exon_max).combine_first(gtf_cds.loc[tr_mask, 'end'])
+    # only keep transcripts that have exon rows (had CDS)
+    transcripts_with_cds = set(exons['transcript_id'])
+    gtf_cds = gtf_cds[exon_mask | (tr_mask & gtf_cds['transcript_id'].isin(transcripts_with_cds))]
     return gtf_cds
 
 def process_gtf(sample, name):
