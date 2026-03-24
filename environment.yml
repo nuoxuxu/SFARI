@@ -15,3 +15,5 @@ dependencies:
   - r-arrow
   - r-svglite
   - r-tidyverse
+  - bioconductor-isoformswitchanalyzer
+  - bioconductor-msstatstmt
