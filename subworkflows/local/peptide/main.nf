@@ -1,5 +1,5 @@
 process peptideTrackUCSC {
-    storeDir "${params.output_dir}/${params.orf_prediction}"
+    storeDir "${params.output_dir}/peptide"
     conda "$moduleDir/python.yml"
     
     input:
@@ -26,20 +26,20 @@ process peptideTrackUCSC {
 }
 
 process peptideMapping {
-    storeDir "${params.output_dir}/${params.orf_prediction}"
-    
-    conda "/scratch/nxu/SFARI/r_env"
+    storeDir "${params.output_dir}/peptide"
+    module 'StdEnv/2023:gcc/12.3:r/4.5.0:r-bundle-bioconductor/3.21'
 
     input:
     path annotation_gtf
     path predicted_cds_gtf
     path peptides_gtf
-    
+
     output:
     path "peptide_mapping.parquet"
-    
+
     script:
     """
+    export R_LIBS=\$SCRATCH/R/\$EBVERSIONR
     peptide_mapping.R \\
         $annotation_gtf \\
         $predicted_cds_gtf \\
@@ -55,16 +55,6 @@ workflow peptide {
     protein_search_database
     peptides
     main:
-    peptideTrackUCSC(params.searchDB, params.annotation_gtf, final_sample_classification, predicted_cds_gtf, protein_search_database, peptides)
-    peptideMapping(params.annotation_gtf, predicted_cds_gtf, peptideTrackUCSC.out)
-}
-
-workflow {
-    final_sample_classification = "/scratch/nxu/SFARI/nextflow_results/V47/final_classification.parquet"
-    predicted_cds_gtf = "/scratch/nxu/SFARI/nextflow_results/V47/orfanage/orfanage.gtf"
-    protein_search_database = "/scratch/nxu/SFARI/nextflow_results/V47/orfanage/hybrid.fasta"
-    peptides = "/scratch/nxu/SFARI/nextflow_results/orfanage/hybrid_percolator.tsv"
-
     peptideTrackUCSC(params.searchDB, params.annotation_gtf, final_sample_classification, predicted_cds_gtf, protein_search_database, peptides)
     peptideMapping(params.annotation_gtf, predicted_cds_gtf, peptideTrackUCSC.out)
 }

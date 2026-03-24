@@ -1,6 +1,7 @@
 process cometSearch {
-    storeDir "${params.output_dir}/${params.orf_prediction}/pin"
+    storeDir "${params.output_dir}/proteomic"
     label "short_slurm_job"
+    conda "$moduleDir/environment.yml"
 
     input:
     path comet_params
@@ -8,19 +9,21 @@ process cometSearch {
     path mzXMLfiles
 
     output:
-    path "*.pin", emit: pin_files
-    path "*.mzid", emit: mzid_files
+    path "pin", emit: pin_files
+    path "mzid", emit: mzid_files
 
     script:
     """
     ~/tools/comet.linux.exe -P$comet_params -D$search_database *.mzXML
+    mkdir pin mzid
+    mv *.pin pin/
+    mv *.mzid mzid/ 
     """
 }
 
 process runPercolator {
-    storeDir "${params.output_dir}/${params.orf_prediction}"
+    storeDir "${params.output_dir}/proteomic"
     label "short_slurm_job"
-    
     conda "$moduleDir/environment.yml"
     
     input:
@@ -32,9 +35,9 @@ process runPercolator {
 
     script:
     """
-    ls *.pin | xargs -I {} tail -n +2 {} > pooled.pin
+    ls pin/* | xargs -I {} tail -n +2 {} > pooled.pin
     
-    files=( tc*.pin )
+    files=( pin/* )
 
     first_file="\${files[0]}"
 
@@ -62,8 +65,8 @@ process runPercolator {
 }
 
 process peptideTrackUCSC {
-    storeDir "${params.output_dir}/${params.orf_prediction}"
-    conda "/scratch/nxu/SFARI/envs/python"
+    storeDir "${params.output_dir}/proteomic"
+    conda "$moduleDir/environment.yml"
     
     input:
     val mode
@@ -89,9 +92,8 @@ process peptideTrackUCSC {
 }
 
 process peptideMapping {
-    storeDir "${params.output_dir}/${params.orf_prediction}"
-    
-    conda "/scratch/nxu/SFARI/envs/python"
+    storeDir "${params.output_dir}/proteomic"
+    conda "$moduleDir/environment.yml"
 
     input:
     path annotation_gtf
@@ -114,9 +116,8 @@ process peptideMapping {
 }
 
 process filterScanNumber {
-    storeDir "${params.output_dir}/${params.orf_prediction}/IPSA//"
-    
-    conda "/scratch/nxu/SFARI/envs/python"
+    storeDir "${params.output_dir}/proteomic/"
+    conda "$moduleDir/environment.yml"
 
     input:
     path mzXML_file
@@ -124,8 +125,8 @@ process filterScanNumber {
     path percolator_res
 
     output:
-    path "*_filtered.mzML", emit: filtered_mzXML
-    path "*_identifications.csv", emit: filtered_identifications
+    path "filtered_mzml", emit: filtered_mzXML
+    path "identifications", emit: filtered_identifications
     
     script:
     """
@@ -133,6 +134,10 @@ process filterScanNumber {
         --mzXML_file $mzXML_file \\
         --novel_peptides $novel_peptides \\
         --percolator_res $percolator_res
+
+    mkdir filtered_mzml identifications
+    mv *_filtered.mzML filtered_mzml/
+    mv *_identifications.csv identifications/
     """
 }
 
@@ -141,6 +146,7 @@ workflow proteomic {
     final_sample_classification
     predicted_cds_gtf
     protein_search_database
+    
     main:
     Channel.fromPath(params.mzXMLfiles).collect().set { mzXMLfiles_collected }
     cometSearch(params.comet_params, protein_search_database, mzXMLfiles_collected)
@@ -148,7 +154,11 @@ workflow proteomic {
     peptideTrackUCSC(params.searchDB, params.annotation_gtf, final_sample_classification, predicted_cds_gtf, protein_search_database, runPercolator.out)
     peptideMapping(params.annotation_gtf, final_sample_classification, protein_search_database, runPercolator.out)
     mzXMLfile = channel.fromPath(params.mzXMLfiles)
-    filterScanNumber(mzXMLfile, peptideMapping.out.novel_peptides.first(), runPercolator.out.first())
+    filterScanNumber(mzXMLfile, peptideMapping.out.novel_peptides, runPercolator.out)
+
+    emit:
+    peptides = runPercolator.out
+
 }
 
 workflow {

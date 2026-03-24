@@ -1,7 +1,9 @@
 #!/usr/bin/env nextflow
 
 process pigeonPrepare {
+    label "short_slurm_job"
     conda "${moduleDir}/environment.yml"
+    storeDir "${params.output_dir}/classify_and_count"
 
     input:
     path isoform_gff
@@ -11,8 +13,8 @@ process pigeonPrepare {
     output:
     path "merged_collapsed.sorted.gff", emit: sorted_isoform_gff
     path "merged_collapsed.sorted.gff.pgi", emit: sorted_isoform_gff_pgi
-    path "*.annotation.sorted.gtf", emit: sorted_annotation
-    path "*.annotation.sorted.gtf.pgi", emit: sorted_annotation_gtf_pgi
+    path "${annotation_gtf.baseName}.sorted.gtf", emit: sorted_annotation
+    path "${annotation_gtf.baseName}.sorted.gtf.pgi", emit: sorted_annotation_gtf_pgi
     path "GRCh38.primary_assembly.genome.fa.fai", emit: reference_fasta_pgi
 
     script:
@@ -23,7 +25,7 @@ process pigeonPrepare {
 
 process pigeonClassify {
     label "short_slurm_job"
-
+    storeDir "${params.output_dir}/classify_and_count"
     conda "${moduleDir}/environment.yml"
     
     input:
@@ -47,8 +49,8 @@ process pigeonClassify {
 }
 
 process pigeonFilter {
-    storeDir "${params.output_dir}"
-
+    label "short_slurm_job"
+    storeDir "${params.output_dir}/classify_and_count"
     conda "${moduleDir}/environment.yml"
     
     input:
@@ -73,8 +75,7 @@ process pigeonFilter {
 
 process getFullExpression {
     label "short_slurm_job"
-    storeDir "${params.output_dir}"
-
+    storeDir "${params.output_dir}/classify_and_count"
     conda "${moduleDir}/environment.yml"
 
     input:
@@ -94,8 +95,7 @@ process getFullExpression {
 
 process filterByExpressionExternalSupport {
     label "short_slurm_job"
-    storeDir "${params.output_dir}"
-
+    storeDir "${params.output_dir}/classify_and_count"
     conda "${moduleDir}/environment.yml"
 
     input:
@@ -127,6 +127,7 @@ process filterByExpressionExternalSupport {
 
 process extractTranscriptFasta {
     conda "${moduleDir}/environment.yml"
+    storeDir "${params.output_dir}/classify_and_count"
 
     input:
     path final_sample_gtf

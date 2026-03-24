@@ -2,7 +2,7 @@
 
 process renameCdsToExon {
     label "short_slurm_job"
-
+    storeDir "${params.output_dir}/proteoform_classification"
     conda "$moduleDir/environment.yml"
 
     input:
@@ -28,7 +28,7 @@ process renameCdsToExon {
 
 process sqantiProtein {
     label "short_slurm_job"
-
+    storeDir "${params.output_dir}/proteoform_classification"
     container "gsheynkmanlab/sqanti_protein:sing"
 
     input:
@@ -37,10 +37,9 @@ process sqantiProtein {
     path ref_cds_renamed
     path ref_transcript_exon_only
     path best_orf
-    path predicted_cds_gtf
     
     output:
-    path "${predicted_cds_gtf}.sqanti_protein_classification.tsv"
+    path "orfanage.sqanti_protein_classification.tsv"
 
     script:
 
@@ -52,14 +51,14 @@ process sqantiProtein {
         "gencode.transcript_exons_only.gtf" \\
         "gencode.cds_renamed_exon.gtf" \\
         -d ./ \\
-        -p $predicted_cds_gtf
+        -p orfanage
     """
 
 }
 
 process fivePrimeUtr {
     label "short_slurm_job"
-
+    storeDir "${params.output_dir}/proteoform_classification"
     conda "$moduleDir/environment.yml"
 
     input:
@@ -68,7 +67,7 @@ process fivePrimeUtr {
     path protein_classification
 
     output:
-    path "${predicted_cds_gtf}.sqanti_protein_classification._w_5utr_info.tsv"
+    path "orfanage.sqanti_protein_classification._w_5utr_info.tsv"
 
     script:
     """
@@ -90,9 +89,8 @@ process fivePrimeUtr {
 }
 
 process proteinClassification {
-    storeDir "${params.output_dir}/${params.orf_prediction}"
+    storeDir "${params.output_dir}/proteoform_classification"
     label "short_slurm_job"
-
     conda "$moduleDir/environment.yml"
 
     input:
@@ -110,8 +108,8 @@ process proteinClassification {
 }
 
 process makeProteinSearchDatabase {
-    storeDir "${params.output_dir}/${params.orf_prediction}"
-
+    storeDir "${params.output_dir}/proteoform_classification"
+    label "short_slurm_job"
     conda "$moduleDir/environment.yml"
 
     input:
@@ -144,7 +142,7 @@ workflow proteoform_classification {
     
     main:
     renameCdsToExon(predicted_cds_gtf, params.annotation_gtf)
-    sqantiProtein(renameCdsToExon.out.sample_cds_renamed, renameCdsToExon.out.sample_transcript_exon_only, renameCdsToExon.out.ref_cds_renamed, renameCdsToExon.out.ref_transcript_exon_only, best_orf, predicted_cds_gtf)
+    sqantiProtein(renameCdsToExon.out.sample_cds_renamed, renameCdsToExon.out.sample_transcript_exon_only, renameCdsToExon.out.ref_cds_renamed, renameCdsToExon.out.ref_transcript_exon_only, best_orf)
     fivePrimeUtr(params.annotation_gtf, predicted_cds_gtf, sqantiProtein.out)
     proteinClassification(fivePrimeUtr.out)
     makeProteinSearchDatabase(params.searchDB, proteinClassification.out, predicted_cds_gtf, peptide_fasta, params.translation_fasta)
@@ -160,7 +158,7 @@ workflow {
     best_orf = "/scratch/nxu/SFARI/nextflow_results/V47/orfanage/best_orf.tsv"
     
     renameCdsToExon(predicted_cds_gtf, params.annotation_gtf)
-    sqantiProtein(renameCdsToExon.out.sample_cds_renamed, renameCdsToExon.out.sample_transcript_exon_only, renameCdsToExon.out.ref_cds_renamed, renameCdsToExon.out.ref_transcript_exon_only, best_orf, predicted_cds_gtf)
+    sqantiProtein(renameCdsToExon.out.sample_cds_renamed, renameCdsToExon.out.sample_transcript_exon_only, renameCdsToExon.out.ref_cds_renamed, renameCdsToExon.out.ref_transcript_exon_only, best_orf)
     fivePrimeUtr(params.annotation_gtf, predicted_cds_gtf, sqantiProtein.out)
     proteinClassification(fivePrimeUtr.out)
     makeProteinSearchDatabase(params.searchDB, proteinClassification.out, predicted_cds_gtf, peptide_fasta, params.translation_fasta)

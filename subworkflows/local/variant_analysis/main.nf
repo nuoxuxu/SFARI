@@ -1,7 +1,7 @@
 process novelExonicRegions {
     storeDir "${params.output_dir}/${params.orf_prediction}/UCSC_tracks"
-    
-    conda "/scratch/s/shreejoy/nxu/SFARI/envs/r_env"
+
+    module 'StdEnv/2023:gcc/12.3:r/4.5.0:r-bundle-bioconductor/3.21'
 
     input:
     path annotation_gtf
@@ -12,6 +12,7 @@ process novelExonicRegions {
 
     script:
     """
+    export R_LIBS=\$SCRATCH/R/\$EBVERSIONR
     novel_exonic_regions.R \\
         $annotation_gtf \\
         $predicted_cds_gtf \\
@@ -22,7 +23,7 @@ process novelExonicRegions {
 process novelSpliceSites {
     storeDir "${params.output_dir}/${params.orf_prediction}/splice_sites"
     
-    conda "/scratch/s/shreejoy/nxu/SFARI/env"
+    conda "/scratch/nxu/SFARI/env"
 
     input:
     path annotation_gtf
@@ -44,8 +45,8 @@ process novelSpliceSites {
 
 process novelCDS {
     storeDir "${params.output_dir}/${params.orf_prediction}/UCSC_tracks"
-    
-    conda "/scratch/s/shreejoy/nxu/SFARI/envs/r_env"
+
+    module 'StdEnv/2023:gcc/12.3:r/4.5.0:r-bundle-bioconductor/3.21'
 
     input:
     path annotation_gtf
@@ -56,6 +57,7 @@ process novelCDS {
 
     script:
     """
+    export R_LIBS=\$SCRATCH/R/\$EBVERSIONR
     novel_CDS.R \\
         $annotation_gtf \\
         $predicted_cds_gtf \\
@@ -65,8 +67,8 @@ process novelCDS {
 
 process riboseqTrack {
     storeDir "${params.output_dir}/${params.orf_prediction}/UCSC_tracks"
-    
-    conda "/scratch/s/shreejoy/nxu/SFARI/envs/r_env"
+
+    module 'StdEnv/2023:gcc/12.3:r/4.5.0:r-bundle-bioconductor/3.21'
 
     input:
     path riboseq_file
@@ -76,6 +78,7 @@ process riboseqTrack {
 
     script:
     """
+    export R_LIBS=\$SCRATCH/R/\$EBVERSIONR
     riboseq_track.R \\
         $riboseq_file
     """
@@ -83,8 +86,8 @@ process riboseqTrack {
 
 process formatExonicRegions {
     storeDir "${params.output_dir}/${params.orf_prediction}/exonic_regions"
-    
-    conda "/scratch/s/shreejoy/nxu/SFARI/envs/r_env"
+
+    module 'StdEnv/2023:gcc/12.3:r/4.5.0:r-bundle-bioconductor/3.21'
 
     input:
     path annotation_gtf
@@ -97,6 +100,7 @@ process formatExonicRegions {
 
     script:
     """
+    export R_LIBS=\$SCRATCH/R/\$EBVERSIONR
     format_exonic_region_files.R \\
         $annotation_gtf \\
         $predicted_cds_gtf \\
@@ -108,7 +112,7 @@ process formatExonicRegions {
 process addPhyloPToExonicRegions {
     storeDir "${params.output_dir}/${params.orf_prediction}/exonic_regions"
     
-    conda "/scratch/s/shreejoy/nxu/SFARI/env"
+    conda "/scratch/nxu/SFARI/env"
 
     input:
     path utr_regions_csv
@@ -131,7 +135,7 @@ process addPhyloPToExonicRegions {
 process addPhyloPToSpliceSite {
     storeDir "${params.output_dir}/${params.orf_prediction}/splice_sites"
     
-    conda "/scratch/s/shreejoy/nxu/SFARI/env"
+    conda "/scratch/nxu/SFARI/env"
 
     input:
     path known_splice_sites_cds_csv
@@ -189,7 +193,7 @@ workflow PreprocessFigure6Files {
 }
 
 workflow {
-    predicted_cds_gtf = "/scratch/s/shreejoy/nxu/SFARI/nextflow_results/V47/orfanage/orfanage.gtf"
+    predicted_cds_gtf = "/scratch/nxu/SFARI/nextflow_results/V47/orfanage/orfanage.gtf"
     annotation_gtf = params.annotation_gtf
 
     novelExonicRegions(annotation_gtf, predicted_cds_gtf)

@@ -2,7 +2,7 @@
 
 process runORFanage {
     label "short_slurm_job"
-
+    storeDir "${params.output_dir}/${params.orf_prediction}"
     conda "$moduleDir/environment.yml"
 
     input:
@@ -43,6 +43,7 @@ process runORFanage {
 
 process fixORFanageFormat {
     label "short_slurm_job"
+    storeDir "${params.output_dir}/${params.orf_prediction}"
 
     container "quay.io/biocontainers/agat:1.4.2--pl5321hdfd78af_0"
 
@@ -63,7 +64,7 @@ process fixORFanageFormat {
 
 process extractORFanageCdsFasta {
     label "short_slurm_job"
-
+    storeDir "${params.output_dir}/${params.orf_prediction}"
     container "quay.io/biocontainers/agat:1.4.2--pl5321hdfd78af_0"
 
     input:
@@ -81,7 +82,7 @@ process extractORFanageCdsFasta {
 
 process extractORFanageTranslationFasta {
     label "short_slurm_job"
-
+    storeDir "${params.output_dir}/${params.orf_prediction}"
     container "quay.io/biocontainers/agat:1.4.2--pl5321hdfd78af_0"
 
     input:
@@ -99,7 +100,6 @@ process extractORFanageTranslationFasta {
 
 process filterOrfanageUCSC {
     storeDir "${params.output_dir}/${params.orf_prediction}/UCSC_tracks"
-    
     conda "$moduleDir/environment.yml"
 
     input:
@@ -118,6 +118,7 @@ process filterOrfanageUCSC {
 
 process getBestOrfCsv {
     conda "$moduleDir/environment.yml"
+    storeDir "${params.output_dir}/${params.orf_prediction}"
 
     input:
     path final_sample_classification
@@ -157,9 +158,9 @@ workflow ORFanage {
 
 workflow {
 
-    final_sample_gtf = "/scratch/s/shreejoy/nxu/SFARI/nextflow_results/V47/final_transcripts.gtf" 
-    final_sample_classification = "/scratch/s/shreejoy/nxu/SFARI/nextflow_results/V47/final_classification.parquet"
-    final_sample_fasta = "/scratch/s/shreejoy/nxu/SFARI/nextflow_results/V47/final_transcripts.fasta"
+    final_sample_gtf = "/scratch/nxu/SFARI/nextflow_results/V47/final_transcripts.gtf" 
+    final_sample_classification = "/scratch/nxu/SFARI/nextflow_results/V47/final_classification.parquet"
+    final_sample_fasta = "/scratch/nxu/SFARI/nextflow_results/V47/final_transcripts.fasta"
 
     runORFanage(params.genome_fasta, params.annotation_gtf, final_sample_gtf)
     fixORFanageFormat(runORFanage.out.orfanage_gtf, params.genome_fasta)

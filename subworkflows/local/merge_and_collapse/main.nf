@@ -1,8 +1,7 @@
 #!/usr/bin/env nextflow
 
 process getIDToSample {
-    storeDir "${params.output_dir}"
-
+    storeDir "${params.output_dir}/merge_and_collapse"
     conda "${moduleDir}/environment.yml"
     
     input:
@@ -29,8 +28,8 @@ process getIDToSample {
 }
 
 process mergeBamFiles {
+    storeDir "${params.output_dir}/merge_and_collapse"
     label "short_slurm_job"
-
     conda "${moduleDir}/environment.yml"
     
     input:
@@ -46,9 +45,8 @@ process mergeBamFiles {
 }
 
 process isoseqCollapse {
-    storeDir "${params.output_dir}"
+    storeDir "${params.output_dir}/merge_and_collapse"
     label "short_slurm_job"
-
     conda "${moduleDir}/environment.yml"
     
     input:
@@ -76,7 +74,7 @@ workflow merge_and_collapse {
 
     main:
     getIDToSample(flnc_bam)
-    Channel.fromPath(mapped_bam).collect().set { bamFiles }
+    channel.fromPath(mapped_bam).collect().set { bamFiles }
     mergeBamFiles(bamFiles)
     isoseqCollapse(mergeBamFiles.out)
 
@@ -87,8 +85,8 @@ workflow merge_and_collapse {
 }
 
 workflow {
-    getIDToSample(Channel.fromPath(params.flnc_bam))
-    Channel.fromPath(params.mapped_bam).collect().set { bamFiles }
+    getIDToSample(channel.fromPath(params.flnc_bam))
+    channel.fromPath(params.mapped_bam).collect().set { bamFiles }
     mergeBamFiles(bamFiles)
     isoseqCollapse(mergeBamFiles.out)
 }
