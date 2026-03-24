@@ -11,7 +11,7 @@ LR_SJ <- read_parquet("data/riboseq/riboseq_SJ.parquet")
 
 #-------------------------------------Get annotated long-read exons----------------------------
 
-ribo <- BamFile("/scratch/s/shreejoy/ehogan/sfari/riboseq/analysis/peak-calling/merged.sorted.bam") %>%
+ribo <- BamFile("/scratch/ehogan/sfari/riboseq/analysis/peak-calling/merged.sorted.bam") %>%
     scanBam(param = ScanBamParam(what = c("pos", "rname", "strand", "qwidth")))
 
 ribo <- GRanges(

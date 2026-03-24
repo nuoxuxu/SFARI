@@ -19,7 +19,13 @@ addScheme(scheme, "myScheme")
 
 # Current gene
 
-current_gene <- "UGP2"
+# current_gene <- "EXOC1"
+# novel_pb_id <- "PB.28078.226"
+# tx_to_plot <- "ENST00000381295.7"
+
+current_gene <- "ZMYND8"
+novel_pb_id <- "PB.104062.23"
+tx_to_plot <- "ENST00000360911.7"
 
 # GENCODE track
 
@@ -27,14 +33,13 @@ GENCODE_GRList <- paste0(Sys.getenv("GENOMIC_DATA_DIR"), "/GENCODE/gencode.v47.a
   makeTxDbFromGFF(format = "gtf") %>%
   exonsBy(by = "tx", use.names = TRUE)
 
-tx_to_plot <- rtracklayer::import(paste0(Sys.getenv("GENOMIC_DATA_DIR"), "/GENCODE/gencode.v47.annotation.gtf")) %>% 
-  as_tibble() %>%
-  filter(
-    gene_name == current_gene
-  ) %>%
-  distinct(transcript_id) %>%
-  drop_na() %>%
-  pull(transcript_id)
+gencode_gtf <- rtracklayer::import(paste0(Sys.getenv("GENOMIC_DATA_DIR"), "/GENCODE/gencode.v47.annotation.gtf")) %>% 
+  as_tibble()
+
+# tx_to_plot <- gencode_gtf %>%
+#   filter( gene_name == current_gene, tag == "CCDS") %>%
+#   distinct(transcript_id, .keep_all=TRUE) %>%
+#   pull(transcript_id)
 
 gencode_track <- GENCODE_GRList[tx_to_plot, ] %>%
   unlist() %>%
@@ -90,10 +95,6 @@ displayPars(peptide_track) <- list(
 
 # Isoseq track
 
-novel_pb_id <- read_parquet("nextflow_results/V47/orfanage/peptide_mapping.parquet") %>%
-  filter(peptide == peptides) %>% 
-  pull(pb)
-
 isoseq_gr <- "nextflow_results/V47/orfanage/orfanage.gtf" %>%
   makeTxDbFromGFF(format = "gtf") %>%
   exonsBy(by = "tx", use.names = TRUE) %>%
@@ -116,51 +117,25 @@ displayPars(isoseq_track) <- list(
   background.title = "#045a8d"
 )
 
-# Riboseq track
-
-riboseq_track <- AlignmentsTrack(
-  "/scratch/s/shreejoy/ehogan/sfari/riboseq/analysis/peak-calling/merged.sorted.bam",
-  name = "Ribo-seq",
-  type = "coverage",
-  isPaired = FALSE
-)
-
-displayPars(riboseq_track) <- list(
-  stacking = "squish",
-  background.panel = "transparent",
-  fill = "black",
-  col = "black",
-  lwd = 0.3,
-  col.line = "black",
-  showId = TRUE,
-  transcriptAnnotation = "transcript",
-  fontcolor.title = "black",
-  background.title = "#ef6548",
-  coverageHeight = 0.8,
-  maxCoverageHeight=10
-)
-
 # Combine all tracks
 
 chr <- as.character(seqnames(isoseq_gr))[1]
-
-axisTrack <- GenomeAxisTrack()
-ideoTrack <- IdeogramTrack(genome = "hg38", chromosome = chr)
 
 leftmost <- isoseq_gr@ranges@start %>% min()
 rightmost <- end(isoseq_gr)  %>% max()
 extra <- (rightmost - leftmost) * 0.05
 
 pdf(glue("figures/figure_2/genome_track_{current_gene}.pdf"), width = 9, height = 3)
+
 plotTracks(
   list(
-    ideoTrack, axisTrack, gencode_track, isoseq_track, peptide_track, riboseq_track
+    gencode_track, isoseq_track, peptide_track
   ),
   chromosome = chr,
   from = leftmost - extra,
   to = rightmost + extra,
   sizes = c(
-    1, 1, 1, 1, 1, 1
+    1, 1, 1
   )
 )
 dev.off()

@@ -25,14 +25,13 @@ startCapitalLetter <- function (aVec)  {
         sep = "")
 }
 
-
-
-
-
-AGO1_plotting <- function() {
+aSwitchList_part2 <- readRDS("proc/IsoformSwitchAnalyzeR/output/isoformswitch_part2_v4.rds")
+source("scripts_for_Nuo/making_figures/Functions.R")
+AGO1_plotting <- function(gene_of_interest = 'AGO1') {
+  ### Required arguments
 
 switchAnalyzeRlist = aSwitchList_part2
-  gene = 'AGO1'
+  gene = gene_of_interest
   isoform_id = NULL
   
   ### Advanced arguments
@@ -1791,3 +1790,5 @@ myTranscriptPlotData$type <- factor(myTranscriptPlotData$type, levels=c("5' UTR"
 return(myPlot)
 
 }
+AGO1_plotting("SETD1A")
+ggsave("SETD1A_isoform_plot.pdf", width=8, height=6)

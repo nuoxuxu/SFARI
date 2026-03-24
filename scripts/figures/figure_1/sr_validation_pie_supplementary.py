@@ -127,38 +127,9 @@ out = read_gtf('nextflow_results/V47/final_transcripts.gtf')\
 
 out.write_parquet("nextflow_results/V47/LR_SJ_2.parquet")
 
-to_r(out, "LR_SJ")
-r(
-    """
-    library(ggplot2)
-    LR_SJ %>% 
-        ggplot(aes(x=type, y=mean_log2_cpm, fill=SR)) +
-        geom_boxplot() +
-        labs(x = "Splice junctions", y = "Long-read RNA-seq expression\n(log2(CPM + 1))")
-    ggsave("figures/figure_1/sj_expression_by_whether_validated_3.png", width=4, height=4)
-    """
-)
-
 # Use Patowaey dataset as a validation
 
 classification = pl.read_parquet("nextflow_results/V47/final_classification.parquet")
-
-lr_log2_cpm = pl.read_parquet("nextflow_results/V47/final_expression.parquet")\
-    .rename(
-        {
-            "NPC_1_3": "NPC_1_2",
-            "NPC_3_3": "NPC_3_2",
-            "CN_1_2": "CN_1_1",
-            "CN_1_3": "CN_1_2",
-        }
-    )\
-    .with_columns(
-        (pl.selectors.numeric() / pl.sum_horizontal(pl.selectors.numeric()) * 1e6 + 1).log(2)
-    )\
-    .with_columns(
-        mean_log2_cpm = pl.mean_horizontal(pl.selectors.numeric())
-    )\
-    .select(['isoform', 'mean_log2_cpm'])
 
 classification\
     .select(["isoform", "structural_category"])\
@@ -168,12 +139,10 @@ classification\
             .when(pl.col("structural_category") != "full-splice_match")\
             .then(pl.lit('novel'))
     )\
-    .join(lr_log2_cpm, left_on="isoform", right_on="isoform", how="left")\
+    .join(lr_log2_cpm_edgeR, left_on="isoform", right_on="isoform", how="left")\
     .drop("structural_category")\
     .join(TALON_SFARI.unique("ref_id"), left_on="isoform", right_on="ref_id", how="left")\
     .with_columns(
         supported = pl.when(pl.col("transcript_id").is_null()).then(pl.lit(False)).otherwise(pl.lit(True))
     )\
     .write_parquet("nextflow_results/V47/LR_patowary.parquet")
-
-gtf = read_gtf(os.path.join(os.getenv('GENOMIC_DATA_DIR', ''), 'GENCODE', 'gencode.v47.annotation.gtf')).filter(pl.col("feature")=="exon")

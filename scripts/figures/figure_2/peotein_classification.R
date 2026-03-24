@@ -5,7 +5,7 @@ library(stringr)
 library(rtracklayer)
 library(reticulate)
 
-use_condaenv("/scratch/s/shreejoy/nxu/SFARI/envs/r_env")
+use_condaenv("/scratch/nxu/SFARI/envs/r_env")
 
 py_run_string("
 from src.utils import collapse_isoforms_to_proteoforms, read_gtf

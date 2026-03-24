@@ -8,6 +8,8 @@ library(readxl)
 library(ggtext)
 library(ggpubr)
 library(rtracklayer)
+library(readr)
+library(purrr)
 
 my_theme <- theme_classic() +
     theme(
@@ -29,7 +31,7 @@ LR_SJ_plot <- read_parquet("nextflow_results/V47/LR_SJ_2.parquet") %>%
     mutate(SR = factor(SR, levels=c(TRUE, FALSE))) %>%
     mutate(type = recode(type, "known" = "GENCODE", "novel" = "Novel", "shared" = "Shared")) %>%
     ggplot(aes(x=type, y=mean_log2_cpm, fill=SR)) +
-    geom_boxplot() +
+    geom_violin() +
     scale_fill_manual("Supproted by\nshort reads", values=colorVector) +
     stat_compare_means(aes(label = after_stat(p.signif)), method = "t.test") +
     stat_compare_means(
@@ -39,7 +41,6 @@ LR_SJ_plot <- read_parquet("nextflow_results/V47/LR_SJ_2.parquet") %>%
         label.y = c(12, 13, 14)
     ) +
     labs(x = "Splice junctions", y = expression("Mean"~log[2]*"(CPM + 1) of isoforms containing the SJ across all samples"))
-
 # Patowary validation
 LR_patowary_plot <- read_parquet("nextflow_results/V47/LR_patowary.parquet") %>% 
     mutate(supported = factor(supported, levels=c(TRUE, FALSE))) %>%
@@ -58,6 +59,8 @@ LR_patowary_plot <- read_parquet("nextflow_results/V47/LR_patowary.parquet") %>%
 
 # Peptide validation
 peptide_mapping <- read_parquet("nextflow_results/orfanage/peptide_mapping.parquet")
+novel_peptides <- read_csv("nextflow_results/orfanage/novel_peptides.csv")
+protein_classification <- read_csv("nextflow_results/V47/orfanage/isoforms_to_proteoforms.csv")
 classification <- read_parquet("nextflow_results/V47/final_classification.parquet")
 expression <- read_parquet("nextflow_results/V47/final_expression.parquet")
 dge <- DGEList(counts=as.matrix(expression[, grep("_", colnames(expression))]), genes=expression[, "isoform"])
@@ -65,24 +68,41 @@ log2_cpm <- cpm(dge, log=TRUE)
 mean_log2_cpm <- rowMeans(log2_cpm)
 mean_log2_cpm <- as_tibble(data.frame(isoform=expression$isoform, mean_log2_cpm=mean_log2_cpm))
 
-peptide_mapping <- peptide_mapping %>% 
-    left_join(classification %>% select(isoform, structural_category), join_by(pb == isoform)) %>% 
-    left_join(mean_log2_cpm, join_by(pb == isoform))
+bin_size <- 10
+detected_known_isoforms <- peptide_mapping %>% 
+    filter(grepl("^ENST", transcript_id)) %>% 
+    left_join(classification[, c("isoform", "associated_transcript")], join_by(transcript_id == associated_transcript)) %>% 
+    distinct(isoform) %>% 
+    drop_na() %>% 
+    pull(isoform)
 
-novel_detected_isoforms <- peptide_mapping %>% 
-    filter(!GENCODE) %>% 
-    distinct(pb, .keep_all = TRUE) %>% 
-    mutate(type="novel", detected=TRUE)
+detected_novel_isoforms <- novel_peptides %>% 
+    left_join(protein_classification, join_by(transcript_id == base_isoform)) %>%
+    distinct(isoform) %>%
+    pull(isoform)
 
-known_detected_isoforms <- peptide_mapping %>% 
-    filter(structural_category=="full-splice_match") %>% 
-    distinct(pb, .keep_all = TRUE) %>% 
-    mutate(type="known", detected=TRUE)
+known_only <- classification %>% 
+    filter(structural_category == "full-splice_match") %>%
+    select(c(isoform, structural_category)) %>%
+    left_join(mean_log2_cpm, join_by(isoform == isoform)) %>% 
+    mutate(
+        detected = isoform %in% detected_known_isoforms
+    ) %>% 
+    mutate(type="known")
+
+novel_only <- classification %>% 
+    filter(structural_category != "full-splice_match") %>%
+    left_join(mean_log2_cpm, join_by(isoform == isoform)) %>% 
+    mutate(
+        detected = isoform %in% detected_novel_isoforms
+    ) %>% 
+    mutate(type="novel")
 
 combined <- bind_rows(
-    novel_detected_isoforms,
-    known_detected_isoforms
-)
+        known_only,
+        novel_only
+    ) %>% 
+    mutate(detected = TRUE)
 
 peptide_plot <- combined %>% 
     mutate(type = recode(type, "known" = "GENCODE", "novel" = "Novel")) %>%

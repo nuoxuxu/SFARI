@@ -7,6 +7,8 @@ library(dplyr)
 library(arrow)
 
 mart <- useEnsembl("genes", dataset = "hsapiens_gene_ensembl")
+txdb <- makeTxDbFromGFF("/project/rrg-shreejoy/Genomic_references/GENCODE/gencode.v47.annotation.gtf")
+
 df <- getBM(
   attributes = c("hgnc_symbol", "chromosome_name", "start_position", "end_position", "strand", "ensembl_gene_id"),
   filters    = "hgnc_symbol",
@@ -17,15 +19,14 @@ gr <- GRanges(df$chromosome_name, IRanges(df$start_position, df$end_position),
   strand = ifelse(df$strand == 1, "+", "-")
 )
 
-txdb <- makeTxDbFromGFF("/project/s/shreejoy/Genomic_references/GENCODE/gencode.v47.annotation.gtf")
+chr <- paste0("chr", levels(seqnames(gr)))
+from <- start(gr)
+to <- end(gr)
+
 txTr <- GeneRegionTrack(txdb, chromosome = chr, start = from, end = to)
 
-chr <- "chr19"
-from <- 10960932
-to <- 11079426
-
 iPSC <- DataTrack(
-  range      = "data/katherine/iPSC_merged.bw", # Gviz will import just the requested window
+  range      = "nextflow_results/bigWig/t00_merged.bw", # Gviz will import just the requested window
   genome     = "hg38",
   chromosome = chr,
   name       = "iPSC",
@@ -33,7 +34,7 @@ iPSC <- DataTrack(
 )
 
 NPC <- DataTrack(
-  range      = "data/katherine/NPC_merged.bw", # Gviz will import just the requested window
+  range      = "nextflow_results/bigWig/t04_merged.bw", # Gviz will import just the requested window
   genome     = "hg38",
   chromosome = chr,
   name       = "NPC",
@@ -41,14 +42,16 @@ NPC <- DataTrack(
 )
 
 CN <- DataTrack(
-  range      = "data/katherine/CN_merged.bw", # Gviz will import just the requested window
+  range      = "nextflow_results/bigWig/t30_merged.bw", # Gviz will import just the requested window
   genome     = "hg38",
   chromosome = chr,
   name       = "CN",
   type       = "h" # "h" = histogram; try "l" for a line
 )
 
+pdf("output.pdf", width = 10, height = 6)
 plotTracks(
   list(GenomeAxisTrack(), iPSC, NPC, CN, txTr),
   chromosome = chr, from = from, to = to
 )
+dev.off()

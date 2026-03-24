@@ -10,7 +10,7 @@ final_pb_ids <- import("nextflow_results/V47/orfanage/orfanage.gtf") %>%
   pull(transcript_id)
 
 #Subset the transcript file to these PB IDs. 
-tr_count <- read_parquet("./data/final_expression.parquet")
+tr_count <- read_parquet("nextflow_results/V47/final_expression.parquet")
 tr_count <- as.data.frame(tr_count)
 
 filtered_tr_count <- tr_count[tr_count$isoform %in% final_pb_ids, ]
