@@ -17,7 +17,7 @@ process GeneMarkST {
 process CPAT {
     module "StdEnv/2023:gcc/12.3:python/3.12.4:scipy-stack/2026a:r/4.5.0"
     label "short_slurm_job"
-    storeDir "subworkflows/local/compare_other_ORF_calling"
+    storeDir "nextflow_results/compare_other_ORF_calling"
 
     input:
     
