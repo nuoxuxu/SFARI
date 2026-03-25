@@ -154,6 +154,7 @@ workflow ORFanage {
     predicted_cds_gtf = fixORFanageFormat.out
     peptide_fasta = extractORFanageTranslationFasta.out
     best_orf = getBestOrfCsv.out
+    orfanage_cds = extractORFanageCdsFasta.out
 }
 
 workflow {
