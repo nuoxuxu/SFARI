@@ -47,10 +47,79 @@ process CPAT {
     """
 }
 
+process extractGeneMarkCDS {
+    label "short_slurm_job"
+    storeDir "${params.output_dir}/compare_other_ORF_calling"
+
+    input:
+    path genemark_lst
+    path transcripts_fasta
+
+    output:
+    path "genemark_coding_sequences.fasta", emit: genemark_cds
+
+    script:
+    """
+    extract_cds.py \\
+        --lst $genemark_lst \\
+        --fasta $transcripts_fasta \\
+        --output genemark_coding_sequences.fasta
+    """
+}
+
+process subsetCpatOrfs {
+    label "short_slurm_job"
+    storeDir "${params.output_dir}/compare_other_ORF_calling"
+
+    input:
+    path orfs_fasta
+    path best_tsv
+
+    output:
+    path "SFARI.ORF_seqs.best.fa", emit: cpat_best_orfs
+
+    script:
+    """
+    subset_cpat_orfs.py \\
+        --orfs_fasta $orfs_fasta \\
+        --best_tsv $best_tsv \\
+        --output SFARI.ORF_seqs.best.fa
+    """
+}
+
+process vennOrfOverlap {
+    label "short_slurm_job"
+    storeDir "${params.output_dir}/compare_other_ORF_calling"
+
+    input:
+    path orfanage_cds
+    path genemark_cds
+    path cpat_best_orfs
+
+    output:
+    path "venn_orf_overlap.pdf"
+
+    script:
+    """
+    venn_orf_overlap.py \\
+        --orfanage $orfanage_cds \\
+        --genemark $genemark_cds \\
+        --cpat $cpat_best_orfs \\
+        --output venn_orf_overlap.pdf
+    """
+}
+
 workflow compare_other_ORF_calling {
-    channel.value(file("nextflow_results/classify_and_count/final_transcripts.fasta")).set{ final_transcripts_fasta }
-    channel.value(file("data/Human_Hexamer.tsv")).set{ Human_Hexamer }
-    channel.value(file("data/Human_logitModel.RData")).set{ Human_logitModel }
+    take:
+    final_transcripts_fasta
+    orfanage_cds
+    Human_Hexamer
+    Human_logitModel
+
+    main:
     GeneMarkST(final_transcripts_fasta)
-    CPAT(Human_Hexamer, Human_logitModel, final_transcripts_fasta)
+    CPAT(Human_Hexamer, Human_logitModel, final_transcripts_fasta)    
+    extractGeneMarkCDS(GeneMarkST.out, final_transcripts_fasta)
+    subsetCpatOrfs(CPAT.out.ORF_seqs, CPAT.out.ORF_prob_best)
+    vennOrfOverlap(orfanage_cds, extractGeneMarkCDS.out.genemark_cds, subsetCpatOrfs.out.cpat_best_orfs)
 }
