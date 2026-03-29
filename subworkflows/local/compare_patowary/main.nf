@@ -73,12 +73,16 @@ workflow compare_patowary {
     chain_file
     annotation_gtf
     final_transcripts_gtf
+    classification
 
     main:
     liftOverTalonGtf(talon_gtf, chain_file)
     getTalonGencodeV47Refmap(annotation_gtf, liftOverTalonGtf.out)
     getTalonSfariRefmap(final_transcripts_gtf, liftOverTalonGtf.out)
-    addPAtowaryColumnToClassification(params.classification, getTalonSfariRefmap.out)
+    addPAtowaryColumnToClassification(classification, getTalonSfariRefmap.out)
+
+    emit:
+    talon_gtf_lifted = liftOverTalonGtf.out.talon_gtf_lifted
 }
 
 workflow {

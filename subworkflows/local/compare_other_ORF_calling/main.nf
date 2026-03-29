@@ -109,7 +109,7 @@ process vennOrfOverlap {
     """
 }
 
-workflow compare_other_ORF_calling {
+workflow COMPARE_OTHER_ORF_CALLING {
     take:
     final_transcripts_fasta
     orfanage_cds
