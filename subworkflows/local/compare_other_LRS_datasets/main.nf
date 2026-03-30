@@ -1,6 +1,6 @@
 process filterBySampleCount {
     label "short_slurm_job"
-    storeDir "${params.output_dir}/joglekar_comparison/filtered"
+    storeDir "${params.output_dir}/compare_other_LRS_datasets/filtered"
     module 'StdEnv/2023:python/3.11.5:gcc/12.3:arrow/19.0.1:rust/1.85.0'
 
     input:
@@ -19,7 +19,7 @@ process filterBySampleCount {
 
 process bedToGtf {
     label "short_slurm_job"
-    storeDir "${params.output_dir}/joglekar_comparison/gtf"
+    storeDir "${params.output_dir}/compare_other_LRS_datasets/gtf"
     module 'StdEnv/2023:kent_tools/486'
 
     input:
@@ -37,7 +37,7 @@ process bedToGtf {
 
 process liftPatowaryGtf {
     label "short_slurm_job"
-    storeDir "${params.output_dir}/joglekar_comparison"
+    storeDir "${params.output_dir}/compare_other_LRS_datasets"
     module 'StdEnv/2023:python/3.11.5:gcc/12.3:arrow/19.0.1:rust/1.85.0'
 
     input:
@@ -56,7 +56,7 @@ process liftPatowaryGtf {
 
 process sqanti3QC {
     label "mid_slurm_job"
-    storeDir "${params.output_dir}/joglekar_comparison"
+    storeDir "${params.output_dir}/compare_other_LRS_datasets"
     container "sqanti3_latest.sif"
 
     input:
@@ -87,7 +87,7 @@ process sqanti3QC {
 
 process makeVennDiagrams {
     label "short_slurm_job"
-    storeDir "${params.output_dir}/joglekar_comparison/venn"
+    storeDir "${params.output_dir}/compare_other_LRS_datasets/venn"
     module 'StdEnv/2023:python/3.11.5:gcc/12.3:arrow/19.0.1:rust/1.85.0'
 
     input:
@@ -96,8 +96,11 @@ process makeVennDiagrams {
     path patowary_classification
     path patowary_corrected_gtf
     path joglekar_sqanti_dir
+    path encode4_gtf
+    path encode4_abundance
 
     output:
+    path("upset_*.pdf")
     path("venn_*.pdf")
 
     script:
@@ -109,11 +112,13 @@ process makeVennDiagrams {
         --patowary_classification ${patowary_classification} \\
         --patowary_gtf ${patowary_corrected_gtf} \\
         --joglekar_classification ${joglekar_sqanti_dir}/joglekar_classification.txt \\
-        --joglekar_gtf ${joglekar_sqanti_dir}/joglekar_corrected.gtf
+        --joglekar_gtf ${joglekar_sqanti_dir}/joglekar_corrected.gtf \\
+        --encode4_gtf ${encode4_gtf} \\
+        --encode4_abundance ${encode4_abundance}
     """
 }
 
-workflow JOGLEKAR_COMPARISON {
+workflow COMPARE_OTHER_LRS_DATASETS {
     take:
     bed_files
     sfari_classification
@@ -125,6 +130,8 @@ workflow JOGLEKAR_COMPARISON {
     patowary_classification
     patowary_gtf
     chain_file
+    encode4_gtf
+    encode4_abundance
 
     main:
     filterBySampleCount(bed_files.collect(), params.joglekar_min_samples)
@@ -143,6 +150,8 @@ workflow JOGLEKAR_COMPARISON {
         sfari_gtf,
         patowary_classification,
         liftPatowaryGtf.out,
-        sqanti3QC.out
+        sqanti3QC.out,
+        encode4_gtf,
+        encode4_abundance
     )
 }
