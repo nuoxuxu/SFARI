@@ -85,6 +85,79 @@ process sqanti3QC {
     """
 }
 
+process computeEncode4Overlap {
+    label "short_slurm_job"
+    storeDir "${params.output_dir}/classify_and_count"
+    module 'StdEnv/2023:python/3.11.5:gcc/12.3:arrow/19.0.1:rust/1.85.0'
+
+    input:
+    path(sfari_classification)
+    path(sfari_gtf)
+    path(encode4_gtf)
+    path(encode4_abundance)
+
+    output:
+    path("encode4_overlap.parquet")
+
+    script:
+    """
+    source /scratch/nxu/astrocytes/pytorch/bin/activate
+    compute_encode4_overlap.py \\
+        --sfari_classification ${sfari_classification} \\
+        --sfari_gtf ${sfari_gtf} \\
+        --encode4_gtf ${encode4_gtf} \\
+        --encode4_abundance ${encode4_abundance}
+    """
+}
+
+process lrsOverlapExpressionFigure {
+    label "short_slurm_job"
+    storeDir "$launchDir/figures/supplementary"
+    module 'StdEnv/2023:gcc/12.3:r/4.5.0:r-bundle-bioconductor/3.21'
+
+    input:
+    path(encode4_overlap)
+    path(expression_parquet)
+    path(lr_patowary_parquet)
+
+    output:
+    path("lrs_overlap_expression.pdf")
+
+    script:
+    """
+    export R_LIBS=\$SCRATCH/R/\$EBVERSIONR/
+    Rscript ${projectDir}/scripts/figures/supplementary/Fig_S_lrs_overlap_expression.R \\
+        ${expression_parquet} \\
+        ${lr_patowary_parquet} \\
+        ${encode4_overlap}
+    """
+}
+
+process makeFusionVennDiagram {
+    label "short_slurm_job"
+    storeDir "${params.output_dir}/compare_other_LRS_datasets/venn"
+    module 'StdEnv/2023:python/3.11.5:gcc/12.3:arrow/19.0.1:rust/1.85.0'
+
+    input:
+    path sfari_classification
+    path sfari_gtf
+    path patowary_classification
+    path patowary_corrected_gtf
+
+    output:
+    path("venn_fusion_sfari_patowary.pdf")
+
+    script:
+    """
+    source /scratch/nxu/astrocytes/pytorch/bin/activate
+    compare_fusion_venn.py \\
+        --sfari_classification ${sfari_classification} \\
+        --sfari_gtf ${sfari_gtf} \\
+        --patowary_classification ${patowary_classification} \\
+        --patowary_gtf ${patowary_corrected_gtf}
+    """
+}
+
 process makeVennDiagrams {
     label "short_slurm_job"
     storeDir "${params.output_dir}/compare_other_LRS_datasets/venn"
@@ -132,6 +205,8 @@ workflow COMPARE_OTHER_LRS_DATASETS {
     chain_file
     encode4_gtf
     encode4_abundance
+    expression_parquet
+    lr_patowary_parquet
 
     main:
     filterBySampleCount(bed_files.collect(), params.joglekar_min_samples)
@@ -153,5 +228,25 @@ workflow COMPARE_OTHER_LRS_DATASETS {
         sqanti3QC.out,
         encode4_gtf,
         encode4_abundance
+    )
+
+    makeFusionVennDiagram(
+        sfari_classification,
+        sfari_gtf,
+        patowary_classification,
+        liftPatowaryGtf.out
+    )
+
+    computeEncode4Overlap(
+        sfari_classification,
+        sfari_gtf,
+        encode4_gtf,
+        encode4_abundance
+    )
+
+    lrsOverlapExpressionFigure(
+        computeEncode4Overlap.out,
+        expression_parquet,
+        lr_patowary_parquet
     )
 }
