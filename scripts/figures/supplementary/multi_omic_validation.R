@@ -41,22 +41,6 @@ LR_SJ_plot <- read_parquet("nextflow_results/V47/LR_SJ_2.parquet") %>%
         label.y = c(12, 13, 14)
     ) +
     labs(x = "Splice junctions", y = expression("Mean"~log[2]*"(CPM + 1) of isoforms containing the SJ across all samples"))
-# Patowary validation
-LR_patowary_plot <- read_parquet("nextflow_results/V47/LR_patowary.parquet") %>% 
-    mutate(supported = factor(supported, levels=c(TRUE, FALSE))) %>%
-    mutate(type = recode(type, "known" = "GENCODE", "novel" = "Novel")) %>%
-    ggplot(aes(x=type, y=mean_log2_cpm, fill=supported)) +
-    geom_boxplot() +
-    scale_fill_manual("Supported by\nPatowary et al.", values=colorVector) +
-    stat_compare_means(aes(label = after_stat(p.signif)), method = "t.test") +
-    stat_compare_means(
-        aes(label = after_stat(p.signif)),
-        comparisons = list(c("GENCODE", "Novel")),
-        method = "t.test",
-        label.y = c(15)
-    ) +
-    labs(x = "Full-length isoforms", y = expression(atop("Mean"~log[2]*"(CPM + 1)", "across all samples")))
-
 # Peptide validation
 peptide_mapping <- read_parquet("nextflow_results/orfanage/peptide_mapping.parquet")
 novel_peptides <- read_csv("nextflow_results/orfanage/novel_peptides.csv")
@@ -143,5 +127,5 @@ ribo_seq_plot <- ribo_seq %>%
     )
 
 # Combining plots
-(LR_patowary_plot + LR_SJ_plot) / (peptide_plot + ribo_seq_plot) + plot_annotation(tag_levels = 'A') & theme(plot.tag = element_text(size = 20))
+LR_SJ_plot / (peptide_plot + ribo_seq_plot) + plot_annotation(tag_levels = 'A') & theme(plot.tag = element_text(size = 20))
 ggsave("figures/supplementary/expression_whether_novel.pdf", width = 14, height = 8)
