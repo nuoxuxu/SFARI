@@ -545,3 +545,200 @@ cluster_t30_vs_t04_df <- as.data.frame(cluster_t30_vs_t04)
 
 # Save the results as a CSV file
 write.csv(cluster_t30_vs_t04_df, file = "proc/APA/output/APA/Deseq2_cluster_lrmethod_t04_v_t30.csv", row.names = T)
+
+# SAME ANALYSIS - USING DISTAL POLYA SITE
+###T00 vs T30
+cutoff_filter <- cutoff %>%
+  filter((Avgt00 >1 & Avgt30 >1)) #2879 clusters
+
+
+#Remove the whole cluster if it doesn't meet this cutoff. 
+ident_seq_t00_t30 <- ident_seq
+ident_seq_t00_t30 <- ident_seq_t00_t30[ident_seq_t00_t30$sequence_cluster %in% cutoff_filter$sequence_cluster,] 
+length(unique(ident_seq_t00_t30$gene_id)) #2044
+
+#Calculate PAU for each cluster for each sample.
+# 1. Sum CPMs per UTR3 per sequence_cluster
+utr_sums <- ident_seq_t00_t30 %>%
+  group_by(sequence_cluster, UTR3_length_cluster) %>%
+  summarise(across(iPSC_1:CN_3_2, ~ sum(.x, na.rm = TRUE)), .groups = "drop")
+
+# 2. Total CPM sums per sequence_cluster
+cluster_totals <- utr_sums %>%
+  group_by(sequence_cluster) %>%
+  summarise(across(iPSC_1:CN_3_2, ~ sum(.x, na.rm = TRUE)), .groups = "drop")
+
+# 3. Join totals back to UTRs and calculate PAUs
+PAU <- utr_sums %>%
+  left_join(cluster_totals, by = "sequence_cluster", suffix = c("_utr", "_total")) %>%
+  mutate(across(ends_with("_utr"), 
+                ~ .x / get(gsub("_utr", "_total", cur_column())) * 100, 
+                .names = "{gsub('_utr', '_PAU', .col)}")) %>%
+  dplyr::select(sequence_cluster, UTR3_length_cluster, ends_with("_PAU"))
+
+
+
+#Calculate median PAUs.
+PAU <- PAU %>% 
+  rowwise() %>% 
+  mutate(MedianPAU_t00 = median(c(iPSC_1_PAU, iPSC_2_PAU,iPSC_3_PAU), na.rm = TRUE))
+
+PAU <- PAU %>% 
+  rowwise() %>% 
+  mutate(MedianPAU_t04 = median(c(NPC_1_1_PAU, NPC_1_3_PAU, NPC_2_1_PAU, NPC_2_2_PAU, NPC_3_1_PAU, NPC_3_3_PAU), na.rm = TRUE))
+
+PAU <- PAU %>% 
+  rowwise() %>% 
+  mutate(MedianPAU_t30 = median(c(CN_1_2_PAU, CN_1_3_PAU, CN_2_1_PAU, CN_2_2_PAU, CN_3_1_PAU, CN_3_2_PAU), na.rm = TRUE))
+
+
+###Per cluster, select the most distal PAU (DPAU).
+DPAU <- PAU %>% group_by(sequence_cluster) %>%
+  dplyr::slice(which.max(UTR3_length_cluster)) %>%
+  ungroup()
+DPAU$dDPAU <- DPAU$MedianPAU_t30 - DPAU$MedianPAU_t00 
+                                                
+
+DPAU$change <- ifelse(DPAU$dDPAU>20, "Lengthening",
+                      ifelse(DPAU$dDPAU < -20, "Shortening", "No change"))
+
+#Bring back some info:
+PAU_unique <- ident_seq_t00_t30 %>%
+  distinct(sequence_cluster, UTR3_length_cluster, .keep_all = T)
+DPAU <- merge(DPAU, PAU_unique[,c('sequence_cluster', "gene_id", "UTR3_length_cluster")],
+              by.y = c("sequence_cluster", "UTR3_length_cluster"), by.x = c("sequence_cluster", "UTR3_length_cluster"), 
+              all.y = F)
+
+#Export. 
+write.csv(DPAU,"./code/APA/output/APA/DPAU_t00_v_t30.csv", row.names = FALSE)
+
+
+####T00 vs T04:
+cutoff_filter <- cutoff %>%
+  filter((Avgt00 >1 & Avgt04 >1)) #2914 clusters
+
+
+#Remove the whole cluster if it doesn't meet this cutoff. 
+ident_seq_t00_t04 <- ident_seq
+ident_seq_t00_t04 <- ident_seq_t00_t04[ident_seq_t00_t04$sequence_cluster %in% cutoff_filter$sequence_cluster,] 
+length(unique(ident_seq_t00_t04$gene_id)) #2041
+
+#Calculate PAU for each cluster for each sample.
+# 1. Sum CPMs per UTR3 per sequence_cluster
+utr_sums <- ident_seq_t00_t04 %>%
+  group_by(sequence_cluster, UTR3_length_cluster) %>%
+  summarise(across(iPSC_1:CN_3_2, ~ sum(.x, na.rm = TRUE)), .groups = "drop")
+
+# 2. Total CPM sums per sequence_cluster
+cluster_totals <- utr_sums %>%
+  group_by(sequence_cluster) %>%
+  summarise(across(iPSC_1:CN_3_2, ~ sum(.x, na.rm = TRUE)), .groups = "drop")
+
+# 3. Join totals back to UTRs and calculate PAUs
+PAU <- utr_sums %>%
+  left_join(cluster_totals, by = "sequence_cluster", suffix = c("_utr", "_total")) %>%
+  mutate(across(ends_with("_utr"), 
+                ~ .x / get(gsub("_utr", "_total", cur_column())) * 100, 
+                .names = "{gsub('_utr', '_PAU', .col)}")) %>%
+  dplyr::select(sequence_cluster, UTR3_length_cluster, ends_with("_PAU"))
+
+
+
+#Calculate median PAUs.
+PAU <- PAU %>% 
+  rowwise() %>% 
+  mutate(MedianPAU_t00 = median(c(iPSC_1_PAU, iPSC_2_PAU,iPSC_3_PAU), na.rm = TRUE))
+
+PAU <- PAU %>% 
+  rowwise() %>% 
+  mutate(MedianPAU_t04 = median(c(NPC_1_1_PAU, NPC_1_3_PAU, NPC_2_1_PAU, NPC_2_2_PAU, NPC_3_1_PAU, NPC_3_3_PAU), na.rm = TRUE))
+
+PAU <- PAU %>% 
+  rowwise() %>% 
+  mutate(MedianPAU_t30 = median(c(CN_1_2_PAU, CN_1_3_PAU, CN_2_1_PAU, CN_2_2_PAU, CN_3_1_PAU, CN_3_2_PAU), na.rm = TRUE))
+
+
+###Per cluster, select the most distal PAU (DPAU).
+DPAU <- PAU %>% group_by(sequence_cluster) %>%
+  dplyr::slice(which.max(UTR3_length_cluster)) %>%
+  ungroup()
+DPAU$dDPAU <- DPAU$MedianPAU_t04 - DPAU$MedianPAU_t00 
+
+DPAU$change <- ifelse(DPAU$dDPAU>20, "Lengthening",
+                      ifelse(DPAU$dDPAU < -20, "Shortening", "No change"))
+
+#Bring back some info:
+PAU_unique <- ident_seq_t00_t04 %>%
+  distinct(sequence_cluster, UTR3_length_cluster, .keep_all = T)
+DPAU <- merge(DPAU, PAU_unique[,c('sequence_cluster', "gene_id", "UTR3_length_cluster")],
+              by.y = c("sequence_cluster", "UTR3_length_cluster"), by.x = c("sequence_cluster", "UTR3_length_cluster"), 
+              all.y = F)
+
+#Export. 
+write.csv(DPAU,"./code/APA/output/APA/DPAU_t00_v_t04.csv", row.names = FALSE)
+
+
+
+###T04 vs T30:
+cutoff_filter <- cutoff %>%
+  filter((Avgt04 >1 & Avgt30 >1)) #3325 clusters
+
+
+#Remove the whole cluster if it doesn't meet this cutoff. 
+ident_seq_t04_t30 <- ident_seq
+ident_seq_t04_t30 <- ident_seq_t04_t30[ident_seq_t04_t30$sequence_cluster %in% cutoff_filter$sequence_cluster,] 
+length(unique(ident_seq_t04_t30$gene_id)) #2259
+
+#Calculate PAU for each cluster for each sample.
+# 1. Sum CPMs per UTR3 per sequence_cluster
+utr_sums <- ident_seq_t04_t30 %>%
+  group_by(sequence_cluster, UTR3_length_cluster) %>%
+  summarise(across(iPSC_1:CN_3_2, ~ sum(.x, na.rm = TRUE)), .groups = "drop")
+
+# 2. Total CPM sums per sequence_cluster
+cluster_totals <- utr_sums %>%
+  group_by(sequence_cluster) %>%
+  summarise(across(iPSC_1:CN_3_2, ~ sum(.x, na.rm = TRUE)), .groups = "drop")
+
+# 3. Join totals back to UTRs and calculate PAUs
+PAU <- utr_sums %>%
+  left_join(cluster_totals, by = "sequence_cluster", suffix = c("_utr", "_total")) %>%
+  mutate(across(ends_with("_utr"), 
+                ~ .x / get(gsub("_utr", "_total", cur_column())) * 100, 
+                .names = "{gsub('_utr', '_PAU', .col)}")) %>%
+  dplyr::select(sequence_cluster, UTR3_length_cluster, ends_with("_PAU"))
+
+
+
+#Calculate median PAUs.
+PAU <- PAU %>% 
+  rowwise() %>% 
+  mutate(MedianPAU_t00 = median(c(iPSC_1_PAU, iPSC_2_PAU,iPSC_3_PAU), na.rm = TRUE))
+
+PAU <- PAU %>% 
+  rowwise() %>% 
+  mutate(MedianPAU_t04 = median(c(NPC_1_1_PAU, NPC_1_3_PAU, NPC_2_1_PAU, NPC_2_2_PAU, NPC_3_1_PAU, NPC_3_3_PAU), na.rm = TRUE))
+
+PAU <- PAU %>% 
+  rowwise() %>% 
+  mutate(MedianPAU_t30 = median(c(CN_1_2_PAU, CN_1_3_PAU, CN_2_1_PAU, CN_2_2_PAU, CN_3_1_PAU, CN_3_2_PAU), na.rm = TRUE))
+
+
+###Per cluster, select the most distal PAU (DPAU).
+DPAU <- PAU %>% group_by(sequence_cluster) %>%
+  dplyr::slice(which.max(UTR3_length_cluster)) %>%
+  ungroup()
+DPAU$dDPAU <- DPAU$MedianPAU_t30 - DPAU$MedianPAU_t04 
+
+DPAU$change <- ifelse(DPAU$dDPAU>20, "Lengthening",
+                      ifelse(DPAU$dDPAU < -20, "Shortening", "No change"))
+
+#Bring back some info:
+PAU_unique <- ident_seq_t04_t30 %>%
+  distinct(sequence_cluster, UTR3_length_cluster, .keep_all = T)
+DPAU <- merge(DPAU, PAU_unique[,c('sequence_cluster', "gene_id", "UTR3_length_cluster")],
+              by.y = c("sequence_cluster", "UTR3_length_cluster"), by.x = c("sequence_cluster", "UTR3_length_cluster"), 
+              all.y = F)
+
+#Export. 
+write.csv(DPAU,"./code/APA/output/APA/DPAU_t04_v_t30.csv", row.names = FALSE)
