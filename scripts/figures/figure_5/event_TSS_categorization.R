@@ -5,8 +5,6 @@ library(tidyr)
 library(purrr)
 library(tibble)
 
-setwd("D:/SFARI_Aim_2/FINAL_CODE/")
-
 
 ###Load in data:
 classification <- read_parquet("./data/final_classification.parquet")
