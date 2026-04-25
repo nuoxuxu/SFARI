@@ -44,7 +44,7 @@ filter_TSS_sites_by_replicates_new <- function(data_frame, min_count = 5, min_re
     data_frame <- data_frame %>%
       semi_join(TSS_ids_to_keep, by = c("event_id", "TSS_id"))
     
-    cat("Retained", nrow(TSS_ids_to_keep), "pA sites passing min_count_all_reps =", min_count_all_reps, "\n")
+    cat("Retained", nrow(TSS_ids_to_keep), "TSS sites passing min_count_all_reps =", min_count_all_reps, "\n")
   }
   # Step 2: Filter rows that meet the read count threshold
   filtered <- data_frame %>%
@@ -96,7 +96,7 @@ filtered_raw_data <- filtered_raw_data %>%
 analysis_data <- filtered_raw_data %>%
   mutate(
     BioSampleID = factor(timepoint),
-    PolyA_Site = factor(TSS_id, levels = TSS_levels_sorted),
+    TSS_id = factor(TSS_id, levels = TSS_levels_sorted),
     Time = factor(sub("_.*", "", BioSampleID), levels = time_levels_sorted)
   )
 
@@ -462,95 +462,12 @@ genes_sig <- unique(sig_events_df$gene_id) #1277
 event_table <- filtered_analysis_data_wide %>% filter(event_id %in% all_sig_events)
 
 
-# COMPARE TO 3' -----------------------------------------------------------
-sig_3 <- read.csv("./code/AS_APA/output/pA_sig_events.csv")
-
-genes_sig_5 <- genes_sig
-all_sig_events_5 <- all_sig_events
-
-genes_sig_3 <- unique(sig_3$gene_id)
-all_sig_events_3 <- unique(sig_3$event_id)
-
-##after running 3' code:
-library(ggVennDiagram)
-library(ggvenn)
-library(VennDiagram)
-
-
-gene_list <- list(
-  `genes_sig_5` = genes_sig_5,
-  `genes_sig_3` = genes_sig_3
-)
-
-# genes_venn <- ggVennDiagram(gene_list) +
-#   scale_x_continuous(expand = expansion(mult = 0.15))
-genes_venn <- venn.diagram(gene_list, category.names = c("", ""),
-             filename = NULL,
-             scaled = T,
-           #  inverted = T,
-             rotation.degree = 180,
-            # sub = expression(paste(italic("P"), " = 8.56e-288")),
-            # sub.pos = c(0.5,0.11),
-             fontfamily  = "sans",
-             cat.fontfamily = "sans", 
-             sub.fontfamily = "sans",
-             fill = c("#00A08A", "#9986A5"), 
-             alpha = 0.2, 
-             col = c("#00A08A", "#9986A5"), 
-             cex = 0.8, 
-             cat.cex = 1.3, 
-          #   cat.pos = c(-20, 20), 
-            # cat.dist = c(0.03, 0.07)
-            ) 
-
-# test <- ggdraw() +
-#   draw_plot(genes_venn,   x = 0.5, y = 0.775, width = 0.5, height = 0.225)  #B
-#   
-  
-#ggsave("./code/AS_APA/genes_venn_diagram.pdf", genes_venn, width = 7, height = 5)
-
-event_list <- list(
-  sig_events_5 = all_sig_events_5,
-  sig_events_3 = all_sig_events_3
-)
-
-events_venn <- venn.diagram(event_list, category.names = c("", ""),
-                           filename = NULL,
-                           scaled = T,
-                           #  inverted = T,
-                           rotation.degree = 180,
-                           # sub = expression(paste(italic("P"), " = 8.56e-288")),
-                           # sub.pos = c(0.5,0.11),
-                           fontfamily  = "sans",
-                           cat.fontfamily = "sans", 
-                           sub.fontfamily = "sans",
-                           fill = c("#00A08A", "#9986A5"), 
-                           alpha = 0.2, 
-                           col = c("#00A08A", "#9986A5"), 
-                           cex = 0.8, 
-                           cat.cex = 1.3, 
-                           #   cat.pos = c(-20, 20), 
-                           # cat.dist = c(0.03, 0.07)
-) 
-
-venns <- ggdraw() +
-  draw_plot(genes_venn,   x = 0.5, y = 0, width = 0.5, height = 1) +
-  draw_plot(events_venn,   x = 0, y = 0, width = 0.5, height = 1) 
-venns
-
-
-svg(paste0("./figures/Figure_5_venns.svg"), height = 4.5, width = 6)
-print(venns)
-dev.off()
-
-
-
 
 # GENOMIC DISTANCE --------------------------------------------------------
 #To get proximal coord per event_id-TSS site:
 unique_prox <- filtered_df_ES %>% distinct(gene_id, TSS_id, cluster_proximal_coord)
 
-#To get all event_ids to polyA sites:
+#To get all event_ids to TSSs:
 event_table <- event_table %>% distinct(event_id, TSS_id) %>%
   mutate(gene_id = str_extract(event_id, "^[^;]+"))
 event_table <- merge(event_table, unique_prox, 
@@ -623,7 +540,7 @@ coords_others <- coords_others %>% distinct(event_id, TSS_id, .keep_all = T)
 
 
 
-#Filter to the most proximal pA per event_id:
+#Filter to the most downstream TSS per event_id:
 coords_filtered_others <- coords_others %>% 
   mutate(TSS_num = as.integer(sub("TSS", "", TSS_id))   # extract numeric part
   ) %>%
@@ -695,33 +612,10 @@ genomic_distance <- coords_all %>%
 
 genomic_distance
 
-
-# genomic_distance <- coords_all %>%
-#   ggplot(aes(x = distance_to_3prime, group = type )) +
-#   geom_density(alpha = 0.35, linewidth = 0.6, trim = T, fill = "cornflowerblue", colour = "darkblue") +
-#   theme_classic(base_size = 9) +
-#   theme(legend.position = "none", 
-#         axis.text = element_text(color = "black"), 
-#         axis.ticks = element_line(colour = "black"), 
-#         axis.title.x = element_markdown() ) +
-#   scale_x_log10(
-#     labels = trans_format("log10", math_format(10^.x)), 
-#     limits = c(9, NA)
-#   ) +
-#   geom_vline(xintercept = median_distance, colour = "black", linetype = "dashed") +
-#   labs(
-#     x = "<span style='font-size:9pt'>Genomic Distance (nt)</span><br><span style='font-size:8pt'>(as depicted in A)</span>",
-#     y = "Density")
-# 
-# genomic_distance
-#  
-
-
-
 # NUMBER OF EXONS ---------------------------------------------------------
 ORFanage_replaced <- rtracklayer::import("./code/IsoformSwitchAnalyzeR/input/ORF_gene_id_replaced_gtf.gtf") #only using 158,844 here
 
-#Filter to only transcripts in the significant event-pA IDs (only for the most proximal pA)
+#Filter to only transcripts in the significant event-TSS IDs (only for the most downstream TSS)
 counts_filter <- counts_annotated %>% 
   filter(paste(event_id, TSS_id) %in% paste(coords_filtered$event_id, coords_filtered$TSS_id)) #2467
 counts_filter <- counts_filter %>%
@@ -897,24 +791,6 @@ counts_max_others$num_exons_in_region <- num_exons_in_region_others
 median_num_exon_others <- median(counts_max$num_exons_in_region) #3
 
 
-
-# num_exons <- counts_max %>%  
-#   ggplot(aes(x = num_exons_in_region)) +
-#   geom_bar(width = 0.7, alpha = 0.35, linewidth = 0.25,
-#            fill = "cornflowerblue", color = "darkblue") +
-#   theme_classic(base_size = 9) +
-#   coord_cartesian(ylim = c(0, 375)) +
-#   labs(
-#     x = "<span style='font-size:9pt'>Number of Exons</span><br><span style='font-size:8pt'>(as depicted in A)</span>",
-#     y = "# of AS events") +
-#   theme(axis.text.x = element_text(color = "black"), 
-#         axis.title.x = element_markdown(),
-#         axis.text.y = element_text(colour = "black"), 
-#         axis.ticks = element_line(colour = "black") ) +
-#   geom_vline(xintercept = median_num_exon, colour = "black", linetype = "dashed") 
-# 
-# num_exons
-
 #combine:
 counts_max$type <- "Sig"
 counts_max_others$type <- "Others"
@@ -959,7 +835,7 @@ num_exons
 
 # COORDINATED EXON TR REGION ----------------------------------------------
 ###Are the coordinated exons in 5'UTR, ORF or 3' UTR?
-##1) Take the most abundant transcript (WITH THE EXON INCLUDED) from each event (from any pA)
+##1) Take the most abundant transcript (WITH THE EXON INCLUDED) from each event (from any TSS)
 
 max_tr <- merge(counts_annotated, tr_count[,c("isoform", "sum_count")], 
                 by.x = "transcript_id", by.y = "isoform")
@@ -1073,124 +949,6 @@ overlap_type_bar <- ggplot(label_counts, aes(x = label, fill = label)) +
        title = "Location of Coordinated Exons")
 overlap_type_bar
 
-
-
-# FIND GOOD EXAMPLE -------------------------------------------------------
-SFARI <- read.csv("./data/SFARI-Gene_genes_04-03-2025release_04-15-2025export.csv")
-SFARI_1 <- SFARI %>% filter(gene.score == 1)
-  
-event_table_SFARI <- event_table %>% filter(gene_id %in% SFARI$gene.symbol )
-event_table_SFARI_1 <- event_table %>% filter(gene_id %in% SFARI_1$gene.symbol )
-
-plotting_events <- unique(event_table_SFARI_1$event_id)
-plotting_events <- unique(event_table_SFARI$event_id)
-
-pa_levels_sorted <- unique(raw_data$TSS_id) %>%
-  str_sort(numeric = TRUE)
-
-time_levels_sorted <- c('t00', 't04', 't30')
-
-##PSI plots for visualization:
-plot_data <- filtered_analysis_data_wide %>%
-  mutate(
-    Time = fct_rev(factor(Time, levels = c("t00", "t04", "t30"))),
-    PolyA_Site = factor(as.factor(PolyA_Site), levels = rev(pa_levels_sorted))
-  )
-# Calculate mean PSI for each group to determine the height of the bars.
-summary_data <- filtered_analysis_data_wide %>%
-  group_by(event_id, PolyA_Site, Time) %>%
-  summarise(mean_psi = mean(psi, na.rm = TRUE), .groups = 'drop') %>%
-  mutate(
-    Time = fct_rev(factor(Time, levels = c("t00", "t04", "t30"))),
-    PolyA_Site = factor(as.factor(PolyA_Site), levels = rev(pa_levels_sorted))
-  )
-
-both_results <- both_results %>% 
-  mutate(gene_id = str_extract(event_id, "^[^;]+"))
-
-facet_labels <- both_results %>%
-  group_by(event_id) %>%
-  dplyr::slice(1) %>%
-  ungroup() %>%
-  mutate(
-    label = paste0(
-      gene_id, "\n",
-      "Global FDR = ", signif(global_LRT_FDR, 3), "\n",
-      "Interaction FDR = ", signif(interaction_LRT_FDR, 3)
-    )
-  ) %>%
-  dplyr::select(event_id, label)
-label_vec <- setNames(facet_labels$label, facet_labels$event_id)
-
-
-##Add SD:
-summary_stats <- plot_data %>%
-  group_by(event_id, PolyA_Site, Time) %>%
-  summarise(
-    mean_psi = mean(psi, na.rm = TRUE),
-    sd_psi = sd(psi, na.rm = TRUE),
-    n = n()
-  ) %>%
-  ungroup()
-
-
-custom_colors <- c(
-  "t00" = "#D4C1EC",
-  "t04"  = "#8E8EEA",
-  "t30"   = "#5F58EA")
-
-# Generate the PSI plot.
-psi_plot <- summary_stats %>% filter(event_id %in% plotting_events) %>%
-  ggplot(aes(y = PolyA_Site, fill = Time)) +
-  # Bars represent the mean PSI value for each group.
-  geom_col(
-    aes(x = mean_psi),
-    position = position_dodge(width = 0.9),
-    alpha = 0.7 # Use transparency to make overlaid points more visible.
-  ) +
-  geom_errorbar(aes(xmin = mean_psi - sd_psi, xmax = mean_psi + sd_psi), 
-                position = position_dodge(width = 0.9),  # <- this fixes the alignment
-                width = 0.2) +
-  
-  # Points represent the PSI value for each individual biological replicate.
-  geom_jitter(
-    data = plot_data %>% filter(event_id %in% plotting_events),
-    aes(x = psi),
-    position = position_jitterdodge(
-      jitter.width = 0.2, # Control horizontal spread of points.
-      dodge.width = 0.9   # Ensure points align with their corresponding bars.
-    ),
-    shape = 21, color = "black", size = 1
-  ) +
-  coord_cartesian(xlim = c(0, 1)) +  # <- keeps all error bars visible
-  scale_fill_manual(values = custom_colors, 
-                    breaks = c("t00", "t04", "t30")) +
-  labs(x = "PSI",
-       y = ""
-  ) +
-  theme_classic(base_size = 9) +
-  facet_wrap(~event_id, scales = "free", labeller = as_labeller(label_vec), 
-             ncol = 3) +
-  theme( legend.key.size = unit(0.30, 'cm'),
-         legend.position = c(0.85, 0.32),
-         legend.title = element_blank()     ) 
-psi_plot
-
-
-
-pdf(paste0("./figures/tss_sfari_1.pdf"), height = 45, width = 8)
-print(psi_plot)
-dev.off()
-
-
-pdf(paste0("./figures/tss_sfari.pdf"), height = 100, width = 8)
-print(psi_plot)
-dev.off()
-
-##good global example: TSC2;SE:chr16:2050486-2053342:2053452-2054296:+
-##good interaction example: SYNCRIP;SE:chr6:85640564-85641292:85641451-85642797:-
-
-
 # PLOTTING TSC2 -----------------------------------------------------------
 TSC2 <- counts_annotated %>% filter(event_id == "TSC2;SE:chr16:2050486-2053342:2053452-2054296:+") %>%
   distinct(event_id, gene_id, transcript_id, TSS_id) %>%
@@ -1226,7 +984,7 @@ txdb_2 <- txdbmaker::makeTxDbFromGFF("./code/AS_APA/input/TSC2_gtf_2.gtf", forma
 
 
 fill_colors <- rep("steelblue", 11) 
-fill_colors[c(5)] <- "red" ##This is manual...
+fill_colors[c(5)] <- "red" 
 
 gviz_fontsize <- 7
 # 
@@ -1302,7 +1060,6 @@ SYNCRIP <-  counts_annotated %>% filter(event_id == "SYNCRIP;SE:chr6:85640564-85
   distinct(event_id, gene_id, transcript_id, TSS_id) %>%
   filter(TSS_id %in% c("TSS1", "TSS2", "TSS3", "TSS4"))
 
-counts_test2 <- tr_count %>% filter(isoform %in% SYNCRIP$transcript_id)
 SYNCRIP <- merge(SYNCRIP, counts_test2[,c('isoform', 'sum_count')], 
                  by.x = "transcript_id", by.y = "isoform")
 #Representative tr is the most highly expressed:
@@ -1351,7 +1108,7 @@ txdb_1005 <- txdbmaker::makeTxDbFromGFF("./code/AS_APA/input/SYNCRIP_gtf_1005.gt
 
 
 fill_colors <- rep("steelblue", 15) 
-fill_colors[c(12)] <- "red" ##This is manual...
+fill_colors[c(12)] <- "red" 
 
 gviz_fontsize <- 7
 
@@ -1463,15 +1220,15 @@ time_levels_sorted <- c('t00', 't04', 't30')
 plot_data <- filtered_analysis_data_wide %>%
   mutate(
     Time = fct_rev(factor(Time, levels = c("t00", "t04", "t30"))),
-    PolyA_Site = factor(as.factor(PolyA_Site), levels = rev(pa_levels_sorted))
+    TSS_id = factor(as.factor(TSS_id), levels = rev(pa_levels_sorted))
   )
 # Calculate mean PSI for each group to determine the height of the bars.
 summary_data <- filtered_analysis_data_wide %>%
-  group_by(event_id, PolyA_Site, Time) %>%
+  group_by(event_id, TSS_id, Time) %>%
   summarise(mean_psi = mean(psi, na.rm = TRUE), .groups = 'drop') %>%
   mutate(
     Time = fct_rev(factor(Time, levels = c("t00", "t04", "t30"))),
-    PolyA_Site = factor(as.factor(PolyA_Site), levels = rev(pa_levels_sorted))
+    TSS_id = factor(as.factor(TSS_id), levels = rev(pa_levels_sorted))
   )
 
 both_results <- both_results %>% 
@@ -1494,7 +1251,7 @@ label_vec <- setNames(facet_labels$label, facet_labels$event_id)
 
 ##Add SD:
 summary_stats <- plot_data %>%
-  group_by(event_id, PolyA_Site, Time) %>%
+  group_by(event_id, TSS_id, Time) %>%
   summarise(
     mean_psi = mean(psi, na.rm = TRUE),
     sd_psi = sd(psi, na.rm = TRUE),
@@ -1510,7 +1267,7 @@ custom_colors <- c(
 
 # Generate the PSI plot.
 psi_plot <- summary_stats %>% filter(event_id %in% plotting_events) %>%
-  ggplot(aes(y = PolyA_Site, fill = Time)) +
+  ggplot(aes(y = TSS_id, fill = Time)) +
   # Bars represent the mean PSI value for each group.
   geom_col(
     aes(x = mean_psi),
@@ -1547,7 +1304,7 @@ psi_plot
 
 
 
-# PLOTTING AGO1 + SMARCA4 COUNTS ------------------------------------------
+# PLOTTING COUNTS ------------------------------------------
 events_pas <- paste0(event_table$event_id, event_table$TSS_id) %>% unique()
 
 
@@ -1564,28 +1321,28 @@ raw_data2 <- raw_data2 %>%
   group_by(event_id, TSS_id, timepoint) %>%
   mutate(total_counts = sum(total))
 raw_data2 <- raw_data2 %>% distinct(event_id, TSS_id, timepoint, .keep_all = T)
-raw_data2$PolyA_Site <- raw_data2$TSS_id
+raw_data2$TSS_id <- raw_data2$TSS_id
 
 counts_data <- raw_data2 %>%
   mutate(
     BioSampleID = factor(timepoint),
-    PolyA_Site = factor(TSS_id, levels = rev(pa_levels_sorted)),
+    TSS_id = factor(TSS_id, levels = rev(pa_levels_sorted)),
     Time = factor(sub("_.*", "", BioSampleID), levels = rev(time_levels_sorted))
   )
 # Calculate mean counts for each group to determine the height of the bars.
 #counts_data_filtered <- counts_data %>% filter(event_id %in% plotting_events)
 summary_data_counts <- counts_data %>%
-  group_by(event_id, PolyA_Site, Time) %>%
+  group_by(event_id, TSS_id, Time) %>%
   summarise(mean_counts = mean(total_counts, na.rm = TRUE), .groups = 'drop') %>%
   mutate(
     Time = fct_rev(factor(Time, levels = c("t00", "t04", "t30"))),
-    PolyA_Site = factor(as.factor(PolyA_Site), levels = rev(pa_levels_sorted))
+    TSS_id = factor(as.factor(TSS_id), levels = rev(pa_levels_sorted))
   )
 
 
 ##Add SD:
 summary_stats_counts <- counts_data %>%
-  group_by(event_id, PolyA_Site, Time) %>%
+  group_by(event_id, TSS_id, Time) %>%
   summarise(
     mean_counts = mean(total_counts, na.rm = TRUE),
     sd_counts = sd(total_counts, na.rm = TRUE),
@@ -1601,7 +1358,7 @@ custom_colors <- c(
 
 # Generate the counts plot.
 counts_plot <- summary_stats_counts %>% filter(event_id %in% plotting_events) %>%
-  ggplot(aes(y = PolyA_Site, fill = Time)) +
+  ggplot(aes(y = TSS_id, fill = Time)) +
   # Bars represent the mean counts value for each group.
   geom_col(
     aes(x = mean_counts),
@@ -1645,7 +1402,7 @@ combined_summary <- bind_rows(
       sd = sd_psi,
       metric = "PSI"
     ) %>%
-    dplyr::select(event_id, PolyA_Site, Time, value, sd, metric),
+    dplyr::select(event_id, TSS_id, Time, value, sd, metric),
   
   summary_stats_counts %>%
     mutate(
@@ -1653,17 +1410,17 @@ combined_summary <- bind_rows(
       sd = sd_counts,
       metric = "Counts"
     ) %>%
-    dplyr::select(event_id, PolyA_Site, Time, value, sd, metric)
+    dplyr::select(event_id, TSS_id, Time, value, sd, metric)
 )
 
 combined_points <- bind_rows(
   plot_data %>%
-    dplyr::select(event_id, PolyA_Site, Time, psi) %>%
+    dplyr::select(event_id, TSS_id, Time, psi) %>%
     dplyr::rename(value = psi) %>%
     dplyr::mutate(metric = "PSI"),
   
   counts_data %>%
-    dplyr::select(event_id, PolyA_Site, Time, total_counts) %>%
+    dplyr::select(event_id, TSS_id, Time, total_counts) %>%
     dplyr::rename(value = total_counts) %>%
     dplyr::mutate(metric = "Counts")
 )
@@ -1674,41 +1431,6 @@ combined_summary <- combined_summary %>%
 combined_points <- combined_points %>%
   mutate(gene_id = stringr::str_extract(event_id, "^[^;]+"))
 
-# 
-# format_sci_expr <- function(x, digits = 2) {
-#   if (is.na(x)) return(NA)
-#   if (x == 0) return(0)
-#   
-#   exp <- floor(log10(x))
-#   base <- signif(x / 10^exp, digits)
-#   
-#   bquote(.(base) %*% 10^.(exp))
-# }
-# 
-# facet_labels <- both_results %>%
-#   group_by(event_id) %>%
-#   dplyr::slice(1) %>%
-#   ungroup() %>%
-#   mutate(
-#     label = paste0(
-#       gene_id, "\n",
-#       "Global FDR = ", format_sci(global_LRT_FDR),
-#       "Interaction FDR = ", format_sci(interaction_LRT_FDR)
-#       
-#     )
-#   ) %>%
-#   dplyr::select(event_id, label)
-# label_vec <- setNames(facet_labels$label, facet_labels$event_id)
-# 
-# 
-# 
-# facet_labels2 <- facet_labels %>%
-#   tidyr::crossing(metric = c("PSI", "Counts")) %>%
-#   mutate(label = paste0(label, "\n", metric))
-# 
-# label_vec2 <- setNames(facet_labels2$label,
-#                        paste(facet_labels2$event_id, facet_labels2$metric))
-# 
 
 
 plot_event <- function(event) {
@@ -1720,7 +1442,7 @@ plot_event <- function(event) {
   # ---------- PSI plot (keeps y-axis labels) ----------
   psi_plot <- ggplot(
     sum_sub %>% filter(metric == "PSI"),
-    aes(y = PolyA_Site, fill = Time)
+    aes(y = TSS_id, fill = Time)
   ) +
     geom_col(
       aes(x = value),
@@ -1750,7 +1472,7 @@ plot_event <- function(event) {
   # ---------- Counts plot (no y-axis labels) ----------
   counts_plot <- ggplot(
     sum_sub %>% filter(metric == "Counts"),
-    aes(y = PolyA_Site, fill = Time)
+    aes(y = TSS_id, fill = Time)
   ) +
     geom_col(
       aes(x = value),
@@ -1794,8 +1516,6 @@ syncrip_plot
 
 # PLOT TOGETHER -----------------------------------------------------------
 library(cowplot)
-
-
 
 full <- ggdraw() +
   draw_plot(overlap_type_bar,   x = 0.5, y = 0.775, width = 0.5, height = 0.225) +  #B
@@ -1858,185 +1578,5 @@ setB <- genes_sig
 result <- compute_fisher_enrich(setA, setB, genes)
 result <- as.data.frame(result)
 
-
-
-# EXPORT SUPP. TABLES -----------------------------------------------------
-both_results <- read.csv("./code/AS_APA/output/all_events_quasi_TSS.csv")
-both_results <- both_results[,-c(10)]
-both_emmeans <- read.csv("./code/AS_APA/output/all_events_emmeans_quasi_TSS.csv")
-both_emmeans <- both_emmeans[,-c(10)]
-results_list <- read.csv("./code/AS_APA/output/Fisher_result_TSS.csv")
-
-
-library(openxlsx)
-wb <- createWorkbook()
-addWorksheet(wb = wb, sheetName = "Quasi - Results", gridLines = T)
-writeDataTable(wb = wb, sheet = 1, x = both_results, withFilter = F, tableStyle = "None")
-
-addWorksheet(wb = wb, sheetName = "Quasi - EMMs", gridLines = T)
-writeData(wb = wb, sheet = 2, x = both_emmeans)
-
-addWorksheet(wb = wb, sheetName = "Fishers - Results", gridLines = T)
-writeData(wb = wb, sheet = 3, x = results_list)
-
-saveWorkbook(wb, "./tables/ATSS_AS.xlsx", overwrite = TRUE)
-
-
-
-
-
-# PLOT HISTOGRAM OF MAX dPSI - TSS ------------------------------------------
-#1) Calculate max dPSI for all sig. global events
-all_sig_global_events <- both_results_all_global %>% filter(global_LRT_FDR <= 0.05) %>% distinct(event_id) %>% pull(event_id)
-
-analysis_data_wide_summary_global_filter
-max_global <- analysis_data_wide_summary_global_filter %>%
-  filter(event_id %in% all_sig_global_events) %>% distinct(event_id, .keep_all = T)
-
-global_hist <- ggplot(max_global, aes(dpsi)) +
-  geom_histogram(bins = 30, fill = "lightblue", color = "black") +
-  labs(title = "Global",
-       x = "<span style='font-size:9pt'>Max ΔPSI</span>",
-       y = "# of AS Events") +
-  theme_classic(base_size = 9) +
-  coord_cartesian(xlim = c(0, 1)) +
-  theme(plot.title = element_text(hjust = 0.5, face = "bold"), 
-        axis.title.x = ggtext::element_markdown())
-  
-global_hist
-
-
-#2) Calculate max dPSI for all sig. int. events (display both filters)
-all_sig_int_events <- both_results_all_int %>% filter(interaction_LRT_FDR <= 0.05) %>% distinct(event_id) %>% pull(event_id)
-
-#dPSI for each tp, across TSS sites
-analysis_data_wide_summary_int_filter 
-max_int1 <- analysis_data_wide_summary_int_filter %>%
-  filter(event_id %in% all_sig_int_events) %>% 
-  group_by(event_id) %>%
-  slice_max(dpsi) %>%
-  distinct(event_id, .keep_all = T) %>%
-  ungroup()
-
-max_int1_hist <- ggplot(max_int1, aes(dpsi)) +
-  geom_histogram(bins = 30, fill = "lightblue", color = "black") +
-  labs(title = "Interaction",
-     #  x = expression(atop("Max " * Delta * "PSI", "(per timepoint, across TSSs)")),
-     x = "<span style='font-size:9pt'>Max ΔPSI</span><br>
-       <span style='font-size:8pt'>(per timepoint, across TSSs)</span>",
-       y = "# of AS Events") +
-  theme_classic(base_size = 9) +
-  coord_cartesian(xlim = c(0, 1)) +
-  theme(plot.title = element_text(hjust = 0.5, face = "bold"), 
-        axis.title.x = ggtext::element_markdown())
-
-max_int1_hist
-
-
-#dPSI for each TSS site, across tp
-analysis_data_wide_summary_int_total_filter 
-
-max_int2 <- analysis_data_wide_summary_int_total_filter %>%
-  filter(event_id %in% all_sig_int_events) %>% 
-  distinct(event_id, .keep_all = T)
-
-max_int2_hist <- ggplot(max_int2, aes(dpsi)) +
-  geom_histogram(bins = 30, fill = "lightblue", color = "black") +
-  labs(title = "Interaction",
-      # x = expression("Max " * Delta * "PSI (per TSS, across timepoint)"),
-      x = "<span style='font-size:9pt'>Max ΔPSI</span><br>
-       <span style='font-size:8pt'>(per TSS, across timepoint)</span>",
-      y = "# of AS Events") +
-  theme_classic(base_size = 9) +
-  coord_cartesian(xlim = c(0, 1)) +
-  theme(plot.title = element_text(hjust = 0.5, face = "bold"), 
-        axis.title.x = ggtext::element_markdown())
-
-max_int2_hist
-
-#save these files:
-write.csv(max_global, "./code/AS_APA/output/max_global_plotting_TSS.csv", row.names = F)
-write.csv(max_int1, "./code/AS_APA/output/max_int1_plotting_TSS.csv", row.names = F)
-write.csv(max_int2, "./code/AS_APA/output/max_int2_plotting_TSS.csv", row.names = F)
-
-
-##Plotting
-#5'-AS
-
-#As-3'
-max_global_3 <- read.csv("./code/AS_APA/output/max_global_plotting_pA.csv")
-max_int1_3 <- read.csv("./code/AS_APA/output/max_int1_plotting_pA.csv")
-max_int2_3 <- read.csv("./code/AS_APA/output/max_int2_plotting_pA.csv")
-
-global_hist_3 <- ggplot(max_global_3, aes(dpsi)) +
-  geom_histogram(bins = 30, fill = "lightblue", color = "black") +
-  labs(title = "Global",
-      # x = expression("Max " * Delta * "PSI"), 
-       x = "<span style='font-size:9pt'>Max ΔPSI</span>",
-       y = "# of AS Events") +
-  theme_classic(base_size = 9) +
-  coord_cartesian(xlim = c(0, 1)) +
-  theme(plot.title = element_text(hjust = 0.5, face = "bold"), 
-        axis.title.x = ggtext::element_markdown())
-
-global_hist_3
-
-
-max_int1_hist_3 <- ggplot(max_int1_3, aes(dpsi)) +
-  geom_histogram(bins = 30, fill = "lightblue", color = "black") +
-  labs(title = "Interaction",
-       x = "<span style='font-size:9pt'>Max ΔPSI</span><br>
-       <span style='font-size:8pt'>(per timepoint, across TSSs)</span>",
-       y = "# of AS Events") +
-  theme_classic(base_size = 9) +
-  coord_cartesian(xlim = c(0, 1)) +
-  theme(plot.title = element_text(hjust = 0.5, face = "bold"), 
-        axis.title.x = ggtext::element_markdown())
-
-
-max_int1_hist_3
-
-
-max_int2_hist_3 <- ggplot(max_int2_3, aes(dpsi)) +
-  geom_histogram(bins = 30, fill = "lightblue", color = "black") +
-  labs(title = "Interaction",
-       x = "<span style='font-size:9pt'>Max ΔPSI</span><br>
-       <span style='font-size:8pt'>(per TSS, across timepoint)</span>",
-       y = "# of AS Events") +
-  theme_classic(base_size = 9) +
-  coord_cartesian(xlim = c(0, 1)) +
-  theme(plot.title = element_text(hjust = 0.5, face = "bold"), 
-        axis.title.x = ggtext::element_markdown())
-
-max_int2_hist_3
-
-
-
-
-
-#Plot together:
-
-supp <- ggdraw() +
-  draw_plot(global_hist,   x = 0, y = 0.681, width = 0.32, height = 0.319) +
-  draw_plot(max_int1_hist,   x = 0.32, y = 2/3, width = 0.32, height = 1/3) +
-  draw_plot(max_int2_hist,   x = 0.64, y = 2/3, width = 0.32, height = 1/3) +
-  
-  draw_plot(global_hist_3,   x = 0, y = 0.3477, width = 0.32, height = 0.319) +
-  draw_plot(max_int1_hist_3,   x = 0.32, y = 1/3, width = 0.32, height = 1/3) +
-  draw_plot(max_int2_hist_3,   x = 0.64, y = 1/3, width = 0.32, height = 1/3) +
-  
-  draw_plot(genes_venn,   x = 0.16, y = 0, width = 1/3, height = 1/3) +
-  draw_plot(events_venn,   x = 0.57, y = 0, width = 1/3, height = 1/3) +
-
-  draw_plot_label(label = c("A", "B", "C"),
-                size  = c(12, 12, 12),
-                x     = c(0, 0, 0),
-                y     = c(1, 2/3, 1/3))
-supp
-
-
-svg(paste0("./figures/coord_supp.svg"), height = 6, width = 6)
-print(supp)
-dev.off()
 
 
