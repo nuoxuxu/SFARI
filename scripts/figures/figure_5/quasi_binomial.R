@@ -504,25 +504,118 @@ coords_filtered <- coords %>%
 median_distance <- median(coords_filtered$distance_to_3prime) #12,527
 
 
-genomic_distance <- coords_filtered %>%
-  ggplot(aes(x = distance_to_3prime )) +
-  geom_density(alpha = 0.35, linewidth = 0.6, trim = T, fill = "cornflowerblue", colour = "darkblue") +
+###ADD ALL OTHER EVENTS:
+quasi_universe <- unique(filtered_analysis_data_wide$event_id) #11766
+quasi_others <- setdiff(quasi_universe, all_sig_events) #8977
+
+event_table_others <- filtered_analysis_data_wide %>% filter(event_id %in% quasi_others)
+
+event_table_others <- event_table_others %>% distinct(event_id, pas_id) %>%
+  mutate(gene_id = str_extract(event_id, "^[^;]+"))
+event_table_others <- merge(event_table_others, unique_prox, 
+                     by.x = c("gene_id", "pas_id"), by.y = c("gene_id", "pas_id"))
+
+
+#Extract exon coords:
+coords_others <- event_table_others %>%
+  # Extract only the coordinate part of event_id: skip everything up to the first colon (after chr...)
+  mutate(coord_part = str_replace(event_id, "^[^:]+:[^:]+:", ""),  # removes up to second colon
+         
+         # Now extract just the genomic numbers (this avoids chromosome number)
+         coord_nums = str_extract_all(coord_part, "\\d+"),
+         coord_nums = lapply(coord_nums, as.numeric), 
+         strand = str_extract(event_id, ".$") ) %>%
+  
+  # Calculate most 3' coord based on strand
+  rowwise() %>%
+  mutate(
+    most_3prime_coord = if (strand == "+") max(coord_nums, na.rm = TRUE) else min(coord_nums, na.rm = TRUE),
+    distance_to_3prime = abs(cluster_proximal_coord - most_3prime_coord)
+  ) %>%
+  ungroup()
+
+coords_others <- coords_others %>% distinct(event_id, pas_id, .keep_all = T)
+
+
+
+#Filter to the most proximal pA per event_id:
+coords_filtered_others <- coords_others %>% 
+  mutate(pA_num = as.integer(sub("pA", "", pas_id))   # extract numeric part
+  ) %>%
+  group_by(event_id) %>%
+  slice_min(order_by = pA_num, with_ties = FALSE) %>%
+  ungroup() #8977
+
+median_distance_others <- median(coords_filtered_others$distance_to_3prime) #9932
+
+#combine:
+coords_filtered$type <- "Sig"
+coords_filtered_others$type <- "Others"
+
+coords_all <- bind_rows(coords_filtered, coords_filtered_others)
+# 
+# 1. Create a summary data frame for the medians
+vlines <- coords_all %>%
+  group_by(type) %>%
+  summarize(med_dist = median(distance_to_3prime, na.rm = TRUE))
+
+# 2. Update the plot
+# 1. Calculate medians and run KS test
+vlines <- coords_all %>%
+  group_by(type) %>%
+  summarize(med_dist = median(distance_to_3prime, na.rm = TRUE))
+
+ks_res <- ks.test(
+  coords_all$distance_to_3prime[coords_all$type == unique(coords_all$type)[1]],
+  coords_all$distance_to_3prime[coords_all$type == unique(coords_all$type)[2]]
+)
+
+# 2. Format the P-value string for the plot
+# This creates a plotmath expression: P = 1.2 x 10^-5
+p_label <- paste0("italic(P) == ", gsub("e", " %*% 10^", format(ks_res$p.value, scientific = TRUE, digits = 2)))
+
+# 3. Create the Plot
+genomic_distance <- coords_all %>%
+  ggplot(aes(x = distance_to_3prime, fill = type, colour = type)) +
+  geom_density(alpha = 0.35, linewidth = 0.3, trim = TRUE) +
+  scale_fill_manual(values = c("Sig" = "cornflowerblue", "Others" = "firebrick")) +
+  scale_colour_manual(values = c("Sig" = "cornflowerblue", "Others" = "firebrick")) +
   theme_classic(base_size = 9) +
-  theme(legend.position = "none", 
-        axis.text = element_text(color = "black"), 
-        axis.ticks = element_line(colour = "black"), 
-        axis.title.x = element_markdown() ) +
+  theme(
+    legend.position = "none", # Specify X and Y (0 to 1)
+    legend.title = element_blank(),  # Remove legend title
+    axis.text = element_text(color = "black"), 
+    axis.ticks = element_line(colour = "black"), 
+    axis.title.x = element_markdown()
+  ) +
   scale_x_log10(
     labels = trans_format("log10", math_format(10^.x)), 
     limits = c(9, NA)
   ) +
-  geom_vline(xintercept = median_distance, colour = "black", linetype = "dashed") +
+  # 1) Thicker vlines
+  geom_vline(
+    data = vlines, 
+    aes(xintercept = med_dist, colour = type), 
+    linetype = "dashed",
+    linewidth = 0.3, # Increased thickness
+    show.legend = FALSE
+  ) +
+  # 3) Formatted P-value
+  annotate(
+    "text", 
+    x = 12, y = Inf, 
+    label = p_label, 
+    parse = TRUE,    # This tells ggplot to render the math expression
+    hjust = 0, vjust = 2, 
+    size = 3
+  ) +
   labs(
     x = "<span style='font-size:9pt'>Genomic Distance (nt)</span><br><span style='font-size:8pt'>(as depicted in A)</span>",
-    y = "Density")
+    y = "Density"
+  )
 
 genomic_distance
- 
+
 
 
 
@@ -620,24 +713,132 @@ counts_max$num_exons_in_region <- num_exons_in_region
 
 median_num_exon <- median(counts_max$num_exons_in_region) #5
 
-num_exons <- counts_max %>%  
-  ggplot(aes(x = num_exons_in_region)) +
-  geom_bar(width = 0.7, alpha = 0.35, linewidth = 0.25,
-           fill = "cornflowerblue", color = "darkblue") +
+
+####DO FOR UNCOORD:
+counts_filter_others <- counts_annotated %>% 
+  filter(paste(event_id, pas_id) %in% paste(coords_filtered_others$event_id, coords_filtered_others$pas_id)) #2813
+counts_filter_others <- counts_filter_others %>%
+  distinct(transcript_id, event_id, .keep_all = T)
+
+#Sum across all samples:
+counts_filter_others <- merge(counts_filter_others, tr_count[,c("isoform", "sum_count")], 
+                       by.x = "transcript_id", by.y = "isoform")
+counts_max_others <- counts_filter_others %>%
+  group_by(event_id) %>%
+  slice_max(sum_count, n = 1, with_ties = FALSE) %>%
+  ungroup() #8977
+
+
+#Use gtf to get number of exons from ... to transcript_end
+counts_max_others <- counts_max_others %>%
+  # Extract only the coordinate part of event_id: skip everything up to the first colon (after chr...)
+  mutate(coord_part = str_replace(event_id, "^[^:]+:[^:]+:", ""),  # removes up to second colon
+         # Now extract just the genomic numbers (this avoids chromosome number)
+         coord_nums = str_extract_all(coord_part, "\\d+"),
+         coord_nums = lapply(coord_nums, as.numeric),
+         strand = str_extract(event_id, "[+-]$"),
+         chr = str_extract(event_id, "chr([0-9]{1,2}|X|Y)"),
+         # Pick number depending on strand
+         selected_coord = map2_dbl(coord_nums, strand, ~ if(.y == "+") .x[3] else .x[2]) )
+
+
+
+# Step 1: create regions GRanges for each event_id
+# Make sure start <= end even for negative strand
+regions_others <- GRanges(
+  seqnames = as.character(counts_max_others$chr),
+  ranges   = IRanges(
+    start = pmin(counts_max_others$selected_coord, counts_max_others$transcript_end),
+    end   = pmax(counts_max_others$selected_coord, counts_max_others$transcript_end)
+  ),
+  strand = as.character(counts_max_others$strand),
+  transcript_id = counts_max_others$transcript_id,
+  event_id      = counts_max_others$event_id
+)
+
+# Step 2: count exons per region (event_id)
+#Include exons that overlap transcript_end (right boundary).
+#Exclude exons that overlap selected_coord (left boundary).
+
+num_exons_in_region_others <- sapply(seq_along(regions_others), function(i) {
+  region_i <- regions_others[i]
+  tx_id    <- mcols(region_i)$transcript_id
+  
+  # subset exons to this transcript
+  exons_tx <- exons[mcols(exons)$transcript_id == tx_id]
+  
+  # adjust region depending on strand
+  if (as.character(strand(region_i)) == "+") {
+    region_i_adj <- GRanges(
+      seqnames = seqnames(region_i),
+      ranges   = IRanges(
+        start = start(region_i) + 1, 
+        end   = end(region_i)
+      ),
+      strand   = strand(region_i)
+    )
+  } else {
+    region_i_adj <- GRanges(
+      seqnames = seqnames(region_i),
+      ranges   = IRanges(
+        start = start(region_i), 
+        end   = end(region_i) - 1
+      ),
+      strand   = strand(region_i)
+    )
+  }
+  
+  # count overlaps
+  length(findOverlaps(region_i_adj, exons_tx, ignore.strand = FALSE))
+})
+
+# Step 3: assign back to counts_max
+counts_max_others$num_exons_in_region <- num_exons_in_region_others
+
+median_num_exon_others <- median(counts_max$num_exons_in_region) #5
+
+
+
+
+#combine:
+counts_max$type <- "Sig"
+counts_max_others$type <- "Others"
+counts_all <- bind_rows(counts_max, counts_max_others)
+
+vlines_exons <- counts_all %>%
+  group_by(type) %>%
+  summarize(med_dist = median(median_num_exon, na.rm = TRUE))
+vlines_offset <- vlines_exons %>%
+  mutate(med_dist = ifelse(row_number() == 1, 
+                           med_dist * 0.96,  # Nudge first line slightly left
+                           med_dist * 1.04)) # Nudge second line slightly right
+
+num_exons <- counts_all %>%  
+  ggplot(aes(x = num_exons_in_region, fill = type, colour = type)) +
+  geom_bar(width = 0.7, alpha = 0.35, linewidth = 0.25) +
+  scale_fill_manual(values = c("Sig" = "cornflowerblue", "Others" = "firebrick")) +
+  scale_colour_manual(values = c("Sig" = "cornflowerblue", "Others" = "firebrick")) +
   theme_classic(base_size = 9) +
-  coord_cartesian(ylim = c(0, 375)) +
+ # coord_cartesian(ylim = c(0, 375)) +
   labs(
     x = "<span style='font-size:9pt'>Number of Exons</span><br><span style='font-size:8pt'>(as depicted in A)</span>",
     y = "# of AS events") +
-  theme(axis.text.x = element_text(color = "black"), 
+  theme( legend.key.size = unit(0.30, 'cm'),
+    legend.position = c(0.9, 0.8), # Specify X and Y (0 to 1)
+        legend.title = element_blank(),  # Remove legend title
+        axis.text.x = element_text(color = "black"), 
         axis.title.x = element_markdown(),
         axis.text.y = element_text(colour = "black"), 
         axis.ticks = element_line(colour = "black") ) +
-  geom_vline(xintercept = median_num_exon, colour = "black", linetype = "dashed") 
+  geom_vline(
+    data = vlines_offset, 
+    aes(xintercept = med_dist, colour = type), 
+    linetype = "dashed",
+    linewidth = 0.3,
+    show.legend = FALSE
+  ) 
 
 num_exons
-
-
 
 
 # COORDINATED EXON TR REGION ----------------------------------------------
