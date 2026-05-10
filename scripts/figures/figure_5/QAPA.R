@@ -456,3 +456,194 @@ cluster_t30_vs_t04_df <- as.data.frame(cluster_t30_vs_t04)
 
 # Save the results as a CSV file
 write.csv(cluster_t30_vs_t04_df, file = "proc/APA/output/QAPA/Deseq2_cluster_t04_v_t30.csv", row.names = T)
+
+# SAME ANALYSIS - USING DISTAL SITES --------------------------------------
+# T00 VS T30 --------------------------------------------------------------
+#Calculate PAU for each cluster for each sample.
+cutoff_filter <- cutoff %>%
+  filter(Avgt00 >1 & Avgt30 >1) #6109 genes
+
+
+#Remove the whole gene if it doesn't meet this cutoff. 
+BED_seq_t00_v_t30 <- BED_seq[BED_seq$GeneName %in% cutoff_filter$GeneName,] #73,876
+length(unique(BED_seq_t00_v_t30$GeneName)) #6109 genes
+
+# 1. Sum counts per GeneName and Cluster
+utr_sums <- BED_seq_t00_v_t30 %>%
+  group_by(GeneName, Cluster) %>%
+  summarise(across(iPSC_1:CN_3_2, ~ sum(.x, na.rm = TRUE)), .groups = "drop")
+
+# 2. Calculate total CPM per GeneName (summing across clusters per gene)
+gene_totals <- utr_sums %>%
+  group_by(GeneName) %>%
+  summarise(across(iPSC_1:CN_3_2, ~ sum(.x, na.rm = TRUE)), .groups = "drop")
+
+# 3. Join totals back to utr_sums and calculate PAU
+PAU <- utr_sums %>%
+  left_join(gene_totals, by = "GeneName", suffix = c("_cluster", "_gene")) %>%
+  mutate(across(ends_with("_cluster"),
+                ~ .x / get(gsub("_cluster", "_gene", cur_column())) * 100,
+                .names = "{gsub('_cluster', '_PAU', .col)}")) %>%
+  # Adjust this select line to include the desired identifiers and PAUs
+  dplyr::select(GeneName, Cluster, ends_with("_PAU"))
+
+#Calculate median PAUs.
+PAU <- PAU %>% 
+  rowwise() %>% 
+  mutate(MedianPAU_t00 = median(c(iPSC_1_PAU, iPSC_2_PAU,iPSC_3_PAU), na.rm = TRUE))
+
+PAU <- PAU %>% 
+  rowwise() %>% 
+  mutate(MedianPAU_t04 = median(c(NPC_1_1_PAU, NPC_1_3_PAU, NPC_2_1_PAU, NPC_2_2_PAU, NPC_3_1_PAU, NPC_3_3_PAU), na.rm = TRUE))
+
+PAU <- PAU %>% 
+  rowwise() %>% 
+  mutate(MedianPAU_t30 = median(c(CN_1_2_PAU, CN_1_3_PAU, CN_2_1_PAU, CN_2_2_PAU, CN_3_1_PAU, CN_3_2_PAU), na.rm = TRUE))
+
+
+###Per cluster, select the most distal PAU (DPAU).
+PAU_unique <- BED_seq_t00_v_t30 %>%
+  distinct(GeneName, Cluster, .keep_all = T)
+
+PAU <- merge(PAU, PAU_unique[,c('Cluster', 'UTR3Length')])
+
+DPAU <- PAU %>% group_by(GeneName) %>%
+  dplyr::slice(which.max(UTR3Length)) %>%
+  ungroup()
+DPAU$dDPAU <- DPAU$MedianPAU_t30 - DPAU$MedianPAU_t00  
+
+DPAU$change <- ifelse(DPAU$dDPAU>20, "Lengthening",
+                      ifelse(DPAU$dDPAU < -20, "Shortening", "No change"))
+
+
+#Export. 
+write.csv(DPAU,"./code/APA/output/QAPA/QAPA_DPAU_t00_v_t30.csv", row.names = FALSE)
+
+
+
+
+# T00 VS T04 --------------------------------------------------------------
+#Calculate PAU for each cluster for each sample.
+cutoff_filter <- cutoff %>%
+  filter(Avgt00 >1 & Avgt04 >1) #5989 genes
+
+
+#Remove the whole cluster if it doesn't meet this cutoff. 
+BED_seq_t00_v_t04 <- BED_seq[BED_seq$GeneName %in% cutoff_filter$GeneName,] #73,233
+length(unique(BED_seq_t00_v_t04$GeneName)) #5989 genes
+
+# 1. Sum counts per GeneName and Cluster
+utr_sums <- BED_seq_t00_v_t04 %>%
+  group_by(GeneName, Cluster) %>%
+  summarise(across(iPSC_1:CN_3_2, ~ sum(.x, na.rm = TRUE)), .groups = "drop")
+
+# 2. Calculate total CPM per GeneName (summing across clusters per gene)
+gene_totals <- utr_sums %>%
+  group_by(GeneName) %>%
+  summarise(across(iPSC_1:CN_3_2, ~ sum(.x, na.rm = TRUE)), .groups = "drop")
+
+# 3. Join totals back to utr_sums and calculate PAU
+PAU <- utr_sums %>%
+  left_join(gene_totals, by = "GeneName", suffix = c("_cluster", "_gene")) %>%
+  mutate(across(ends_with("_cluster"),
+                ~ .x / get(gsub("_cluster", "_gene", cur_column())) * 100,
+                .names = "{gsub('_cluster', '_PAU', .col)}")) %>%
+  # Adjust this select line to include the desired identifiers and PAUs
+  dplyr::select(GeneName, Cluster, ends_with("_PAU"))
+
+#Calculate median PAUs.
+PAU <- PAU %>% 
+  rowwise() %>% 
+  mutate(MedianPAU_t00 = median(c(iPSC_1_PAU, iPSC_2_PAU,iPSC_3_PAU), na.rm = TRUE))
+
+PAU <- PAU %>% 
+  rowwise() %>% 
+  mutate(MedianPAU_t04 = median(c(NPC_1_1_PAU, NPC_1_3_PAU, NPC_2_1_PAU, NPC_2_2_PAU, NPC_3_1_PAU, NPC_3_3_PAU), na.rm = TRUE))
+
+PAU <- PAU %>% 
+  rowwise() %>% 
+  mutate(MedianPAU_t30 = median(c(CN_1_2_PAU, CN_1_3_PAU, CN_2_1_PAU, CN_2_2_PAU, CN_3_1_PAU, CN_3_2_PAU), na.rm = TRUE))
+
+
+###Per cluster, select the most distal PAU (DPAU).
+PAU_unique <- BED_seq_t00_v_t04 %>%
+  distinct(GeneName, Cluster, .keep_all = T)
+
+PAU <- merge(PAU, PAU_unique[,c('Cluster', 'UTR3Length')])
+
+DPAU <- PAU %>% group_by(GeneName) %>%
+  dplyr::slice(which.max(UTR3Length)) %>%
+  ungroup()
+DPAU$dDPAU <- DPAU$MedianPAU_t04 - DPAU$MedianPAU_t00  
+
+DPAU$change <- ifelse(DPAU$dDPAU>20, "Lengthening",
+                      ifelse(DPAU$dDPAU < -20, "Shortening", "No change"))
+
+
+
+#Export. 
+write.csv(DPAU,"./code/APA/output/QAPA/QAPA_DPAU_t00_v_t04.csv", row.names = FALSE)
+
+
+# T04 VS T30 --------------------------------------------------------------
+#Calculate PAU for each cluster for each sample.
+cutoff_filter <- cutoff %>%
+  filter(Avgt04 >1 & Avgt30 >1) #6262 genes
+
+
+#Remove the whole cluster if it doesn't meet this cutoff. 
+BED_seq_t04_v_t30 <- BED_seq[BED_seq$GeneName %in% cutoff_filter$GeneName,] #75,306
+length(unique(BED_seq_t04_v_t30$GeneName)) #6262 genes
+
+# 1. Sum counts per GeneName and Cluster
+utr_sums <- BED_seq_t04_v_t30 %>%
+  group_by(GeneName, Cluster) %>%
+  summarise(across(iPSC_1:CN_3_2, ~ sum(.x, na.rm = TRUE)), .groups = "drop")
+
+# 2. Calculate total CPM per GeneName (summing across clusters per gene)
+gene_totals <- utr_sums %>%
+  group_by(GeneName) %>%
+  summarise(across(iPSC_1:CN_3_2, ~ sum(.x, na.rm = TRUE)), .groups = "drop")
+
+# 3. Join totals back to utr_sums and calculate PAU
+PAU <- utr_sums %>%
+  left_join(gene_totals, by = "GeneName", suffix = c("_cluster", "_gene")) %>%
+  mutate(across(ends_with("_cluster"),
+                ~ .x / get(gsub("_cluster", "_gene", cur_column())) * 100,
+                .names = "{gsub('_cluster', '_PAU', .col)}")) %>%
+  # Adjust this select line to include the desired identifiers and PAUs
+  dplyr::select(GeneName, Cluster, ends_with("_PAU"))
+
+#Calculate median PAUs.
+PAU <- PAU %>% 
+  rowwise() %>% 
+  mutate(MedianPAU_t00 = median(c(iPSC_1_PAU, iPSC_2_PAU,iPSC_3_PAU), na.rm = TRUE))
+
+PAU <- PAU %>% 
+  rowwise() %>% 
+  mutate(MedianPAU_t04 = median(c(NPC_1_1_PAU, NPC_1_3_PAU, NPC_2_1_PAU, NPC_2_2_PAU, NPC_3_1_PAU, NPC_3_3_PAU), na.rm = TRUE))
+
+PAU <- PAU %>% 
+  rowwise() %>% 
+  mutate(MedianPAU_t30 = median(c(CN_1_2_PAU, CN_1_3_PAU, CN_2_1_PAU, CN_2_2_PAU, CN_3_1_PAU, CN_3_2_PAU), na.rm = TRUE))
+
+
+###Per cluster, select the most distal PAU (DPAU).
+PAU_unique <- BED_seq_t04_v_t30 %>%
+  distinct(GeneName, Cluster, .keep_all = T)
+
+PAU <- merge(PAU, PAU_unique[,c('Cluster', 'UTR3Length')])
+
+DPAU <- PAU %>% group_by(GeneName) %>%
+  dplyr::slice(which.max(UTR3Length)) %>%
+  ungroup()
+DPAU$dDPAU <- DPAU$MedianPAU_t30 - DPAU$MedianPAU_t04 #changed
+
+DPAU$change <- ifelse(DPAU$dDPAU>20, "Lengthening",
+                      ifelse(DPAU$dDPAU < -20, "Shortening", "No change"))
+
+
+
+
+#Export. 
+write.csv(DPAU,"./code/APA/output/QAPA/QAPA_DPAU_t04_v_t30.csv", row.names = FALSE)
