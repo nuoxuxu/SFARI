@@ -100,7 +100,7 @@ def plot_B(ax, df):
         pl.col("delta_auc").first()
     )
 
-    y_positions = np.arange(len(TISSUE_ORDER))
+    y_positions = np.arange(len(TISSUE_ORDER) - 1, -1, -1)
     height = 0.35
 
     for exon_type, offset in [("soloT", height / 2), ("dualT", -height / 2)]:
