@@ -11,11 +11,7 @@ library(gridExtra)
 library(purrr)
 library(gplots)
 library(RColorBrewer)
-
-##############
-#This scripts analyzes ENCODE long-read seq data to find TSS-TES correlations and the analysis of sequencing depth with subsampling
-setwd('~/Dropbox (UMass Medical School)/PaiLab/members/Ezequiel/3rd year/TSS-TES/ENCODE_full/annotations_split/')
-
+library(GenomicRanges)
 
 setDTthreads(threads = 192)
 #Gets first and last exons
@@ -40,10 +36,48 @@ intersect_function <- function(reads_all_list){
   #Split starts and ends from the classification output
   read_starts <- reads_all_list[["reads_all_first"]][,c('chr','start','end','read_name','gene_id','strand')]
   read_ends <- reads_all_list[["reads_all_last"]][,c('chr','start','end','read_name','gene_id','strand')]
+  gr_starts <- GRanges(
+    seqnames = read_starts$chr,
+    ranges = IRanges(start=read_starts$start+1, end=read_starts$end),
+    strand = read_starts$strand,
+    name = read_starts$read_name,
+    gene_name = read_starts$gene_id
+  )
+  gr_ends <- GRanges(
+    seqnames = read_ends$chr,
+    ranges = IRanges(start=read_ends$start+1, end=read_ends$end),
+    strand = read_ends$strand,
+    name = read_ends$read_name,
+    gene_name = read_ends$gene_id
+  )  
+  polyA_sites <- fread("data/atlas.clusters.2.0.GRCh38.96.bed",fill = T,sep = '\t') %>% 
+    as.data.frame()
+  gr_polyA <- GRanges(
+    seqnames = polyA_sites$V1,
+    ranges = IRanges(start=polyA_sites$V2, end=polyA_sites$V3),
+    strand = polyA_sites$V6
+  )
+  # Find all overlaps between full last exon ranges and polyA clusters
+  hits <- findOverlaps(gr_ends, gr_polyA, ignore.strand = FALSE)
+
+  # Compute the width of each pairwise intersection
+  overlap_widths <- width(pintersect(
+      gr_ends[queryHits(hits)],
+      gr_polyA[subjectHits(hits)]
+  ))
   
-  # Write the location information to a temp file
-  fwrite(read_starts, "~/Dropbox (UMass Medical School)/PaiLab/members/Ezequiel/3rd year/TSS-TES/ENCODE_full/annotations_split/read_start_tmp.bed", sep = "\t", append = FALSE, col.names = FALSE,row.names = F,quote = F)
-  fwrite(read_ends, "~/Dropbox (UMass Medical School)/PaiLab/members/Ezequiel/3rd year/TSS-TES/ENCODE_full/annotations_split/read_end_tmp.bed", sep = "\t", append = FALSE, col.names = FALSE,row.names = F,quote = F)
+  # Build a data frame of all hits with their overlap widths
+  hits_df <- data.frame(
+      exon_idx    = queryHits(hits),
+      cluster_idx = subjectHits(hits),
+      overlap     = overlap_widths
+  )
+
+  # For each last exon, keep only the polyA cluster with the largest overlap
+  best_hits <- hits_df |>
+      dplyr::group_by(exon_idx) |>
+      dplyr::slice_max(overlap, n = 1, with_ties = FALSE) |>
+      dplyr::ungroup()
   
   # Run bedtools to extract the sequence
   system("bedtools intersect -s -wao -a read_start_tmp.bed -b first_exonstmp.bed > starts_intersect.bed")
@@ -70,16 +104,7 @@ intersect_function <- function(reads_all_list){
 }
 
 #####
-
-#Only use protein coding genes,pseudogenes and lincRNA coding genes
-genes_to_consider <- read.table('~/Desktop/Genomes/filter_tss_tes.bed',sep = '\t',header = F)
-genes_to_consider <- genes_to_consider[(genes_to_consider$V3-genes_to_consider$V2)>200,]
-genes_to_consider <- genes_to_consider$V4
-
-#####
 #Initiate variables
-files_all <-  list.files(path = '~/Dropbox (UMass Medical School)/PaiLab/members/Ezequiel/3rd year/TSS-TES/ENCODE_full/annotations_split/',pattern = '*.gz')
-#organism_temp <- 'Homo sapiens' #Get organism from the file
 spearman_per_sample <- list()
 gene_list_no_FE <- list()
 gene_list_no_polyA <- list()
@@ -88,27 +113,15 @@ reads_across_datasets_3utr <- list()
 truncation_metrics_list <- list()
 file_counter <- 1
 
-for (i in 1:length(files_all)){
-  print(paste('Starting sample',i,'of',length(files_all)))
-  
-  raw_reads <- fread(paste('~/Dropbox (UMass Medical School)/PaiLab/members/Ezequiel/3rd year/TSS-TES/ENCODE_full/annotations_split/',files_all[i],sep=''),fill = T,sep = '\t')
-  raw_reads <- as.data.frame(raw_reads)
-  raw_reads_genes_to_use <- raw_reads[raw_reads$V10%in%genes_to_consider,]
-  reads_all <- raw_reads_genes_to_use[,c(1,2,3,4,6,10)]
-  
-  file_name <- gsub("\\..*","",files_all[i])
+bed_files <- list.files(path = 'nextflow_results/alternative_start_codon',pattern = '*.bed')
+for (i in 1:length(bed_files)){
+  reads_all <- fread("nextflow_results/alternative_start_codon/CN_1_3.aligned.bed",fill = T,sep = '\t') %>% 
+    as.data.frame() %>% 
+    select(-V5)
   colnames(reads_all) <- c('chr','start','end','read_name','strand','gene_id')
   
   reads_all$end <- as.numeric(reads_all$end)
   reads_all$start <- as.numeric(reads_all$start)
-  
-  #Find reads not covering a splice site (starting and ending on the same exon) ran this once to avoid doing it everytime: for i in *bed.gz;do gunzip -cd $i | cut -f 4 | sort | uniq -c > counts_per_read/$i;done
-
-  counts_per_read <- fread(paste('~/Dropbox (UMass Medical School)/PaiLab/members/Ezequiel/3rd year/TSS-TES/ENCODE_full/annotations_split/counts_per_read/',files_all[i],sep=''),col.names = c('Freq','read_name')) %>% as.data.frame()
-  terminal_reads <- counts_per_read[counts_per_read$Freq==1,'read_name']
-  non_terminal_reads <- counts_per_read[counts_per_read$Freq!=1,'read_name']
-  reads_across_datasets_3utr[[file_name]] <- reads_all[reads_all$read_name%in%terminal_reads,]
-  reads_all <- reads_all[reads_all$read_name%in%non_terminal_reads,]
   
   #Split read starts and ends to make bed file 
   reads_all_list <- firs_last_fun(reads = setDT(reads_all))

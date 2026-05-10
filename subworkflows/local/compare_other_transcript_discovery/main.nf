@@ -49,35 +49,6 @@ process index_bam {
     """
 }
 
-process isoquant {
-    module "StdEnv/2023:python/3.11.5:gcc/12.3:arrow/19.0.1:rust/1.85.0:minimap2/2.28:samtools/1.22.1"
-    label "long_slurm_job"
-    storeDir "nextflow_results/comapre_other_LRS_tools/isoquant"
-
-    input:
-    path(minimap_bam)
-    path(bam_indexes)
-    path(annotation_gtf)
-    path(genome_fasta)
-
-    output:
-    path("isoquant_out")
-
-    script:
-    """
-    source /scratch/nxu/SFARI/.virtualenvs/isoquant/bin/activate
-    HOME="\$SLURM_TMPDIR" isoquant \\
-        --reference ${genome_fasta} \\
-        --genedb ${annotation_gtf} \\
-        --complete_genedb \\
-        --bam ${minimap_bam.join(' ')} \\
-        --data_type pacbio_ccs \\
-        --fl_data \\
-        --threads ${task.cpus} \\
-        --output isoquant_out
-    """
-}
-
 process bambu {
     module "StdEnv/2023:gcc/12.3:r/4.5.0:r-bundle-bioconductor/3.21"
     label "long_slurm_job"
@@ -87,13 +58,68 @@ process bambu {
     path annotation_gtf
     path genome_fasta
     output:
-    path("supportedTranscriptModels.gtf"), emit: supported_tx_gtf
-    path("novelTranscripts.gtf"), emit: novel_tx_gtf
     path("bambu_result.rds"), emit: bambu_rds
+
     script:
     """
     export R_LIBS="\${SCRATCH}/R/\${EBVERSIONR}"
-    run_bambu.R ${annotation_gtf} "*.aligned.bam" ${genome_fasta} ${task.cpus} bambu_result.rds
+    run_bambu.R ${annotation_gtf} "*.aligned.bam" ${genome_fasta} 96 bambu_result.rds
+    """
+}
+
+process wrangle_bambu_result {
+    conda "/scratch/nxu/astrocytes/env"
+    label "short_slurm_job"
+    storeDir "nextflow_results/comapre_other_LRS_tools/bambu"
+    input:
+    path(bambu_rds)
+    output:
+    path("supportedTranscriptModels.gtf"), emit: supported_tx_gtf
+    path("supportedTxClassification.txt"), emit: supported_tx_classification
+    path("bambu_expression.csv"),           emit: bambu_expression
+
+    script:
+    """
+    wrangle_bambu_result.R ${bambu_rds}
+    """
+}
+
+process plot_lrs_comparison {
+    module "StdEnv/2023:gcc/12.3:arrow/19.0.1:rust/1.85.0:python/3.11.5"
+    label "short_slurm_job"
+    storeDir "nextflow_results/comapre_other_LRS_tools"
+
+    input:
+    path(bambu_gtf)
+    path(bambu_classification)
+    path(bambu_expression)
+    path(isoseq_gtf)
+    path(isoseq_classification)
+    path(isoseq_expression)
+    path(isoseq_filtered_lite_classification)
+    path(star_sj_files)
+    path(cage_bed)
+    path(polya_site)
+
+    output:
+    path("lrs_comparison.pdf")
+    path("lrs_comparison.png")
+
+    script:
+    """
+    source ${projectDir}/.venv/bin/activate
+    plot_lrs_comparison.py \\
+        --bambu-gtf ${bambu_gtf} \\
+        --bambu-classification ${bambu_classification} \\
+        --bambu-expression ${bambu_expression} \\
+        --isoseq-gtf ${isoseq_gtf} \\
+        --isoseq-classification ${isoseq_classification} \\
+        --isoseq-expression ${isoseq_expression} \\
+        --isoseq-filtered-lite-classification ${isoseq_filtered_lite_classification} \\
+        --sj ${star_sj_files.join(' ')} \\
+        --cage ${cage_bed} \\
+        --polya ${polya_site} \\
+        --output lrs_comparison.pdf
     """
 }
 
@@ -102,6 +128,13 @@ workflow COMPARE_OTHER_TRANSCRIPT_DISCOVERY {
     flnc_bam
     annotation_gtf
     genome_fasta
+    isoseq_gtf
+    isoseq_classification
+    isoseq_expression
+    isoseq_filtered_lite_classification
+    star_sj_files
+    cage_bed
+    polya_site
 
     main:
     flnc_bam
@@ -114,10 +147,20 @@ workflow COMPARE_OTHER_TRANSCRIPT_DISCOVERY {
     minimap2_genome(convert_flnc_bam_to_fastqz.out, genome_fasta)
     index_bam(minimap2_genome.out)
     bambu(minimap2_genome.out.collect(), annotation_gtf, genome_fasta)
-    isoquant(minimap2_genome.out.collect(), index_bam.out.collect(), annotation_gtf, genome_fasta)
+    wrangle_bambu_result(bambu.out.bambu_rds)
+    plot_lrs_comparison(
+        wrangle_bambu_result.out.supported_tx_gtf,
+        wrangle_bambu_result.out.supported_tx_classification,
+        wrangle_bambu_result.out.bambu_expression,
+        isoseq_gtf,
+        isoseq_classification,
+        isoseq_expression,
+        isoseq_filtered_lite_classification,
+        star_sj_files,
+        cage_bed,
+        polya_site,
+    )
 
     emit:
-    supported_tx_gtf = bambu.out.supported_tx_gtf
-    novel_tx_gtf     = bambu.out.novel_tx_gtf
-    isoquant_out     = isoquant.out
+    genome_bam = minimap2_genome.out
 }

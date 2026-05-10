@@ -26,9 +26,9 @@ workflow {
 
     // channel.value(file("data/Human_Hexamer.tsv")).set{ Human_Hexamer }
     // channel.value(file("data/Human_logitModel.RData")).set{ Human_logitModel }
-    // COMPARE_OTHER_ORF_CALLING(classify_and_count.out.final_sample_fasta, ORFanage.out.orfanage_cds, Human_Hexamer, Human_logitModel)
-    COMPARE_OTHER_TRANSCRIPT_DISCOVERY(flnc_bams, params.annotation_gtf, params.genome_fasta)
-    // bigWig()
+    COMPARE_OTHER_ORF_CALLING(classify_and_count.out.final_sample_fasta, ORFanage.out.orfanage_cds, Human_Hexamer, Human_logitModel)
+    channel.fromPath("nextflow_results/STAR/*.SJ.out.tab").collect().set { star_sj_files }
+    COMPARE_OTHER_TRANSCRIPT_DISCOVERY(flnc_bams, params.annotation_gtf, params.genome_fasta, classify_and_count.out.filtered_lite_gff, classify_and_count.out.final_sample_classification, classify_and_count.out.full_expression, classify_and_count.out.filtered_lite_classification, star_sj_files, params.refTSS, params.polyA_site)
     COMPARE_OTHER_LRS_DATASETS(
         channel.fromPath("data/joglekar_2024/other/*_corrected_reads.bed"),
         classify_and_count.out.final_sample_classification,

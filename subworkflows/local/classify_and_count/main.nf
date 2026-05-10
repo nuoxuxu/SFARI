@@ -160,6 +160,10 @@ workflow classify_and_count {
     final_sample_gtf = filterByExpressionExternalSupport.out.final_sample_gtf
     final_sample_classification = filterByExpressionExternalSupport.out.final_sample_classification
     final_sample_fasta = extractTranscriptFasta.out.final_sample_fasta
+    final_expression = filterByExpressionExternalSupport.out.final_sample_expression
+    filtered_lite_gff = pigeonFilter.out.filtered_gff
+    filtered_lite_classification = pigeonFilter.out.filtered_classification
+    full_expression = getFullExpression.out
 }
 
 workflow {

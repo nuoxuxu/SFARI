@@ -26,13 +26,3 @@ bambu_result <- bambu::bambu(
 )
 
 saveRDS(bambu_result, output_rds)
-
-do.call(cbind, lapply(bambu_result, function(df) assays(df)$counts)) %>% 
-    as.matrix() %>% 
-    write.csv("nextflow_results/comapre_other_LRS_tools/bambu/bambu_expression.csv")
-
-bambu_result <- bambu_result[[1]]
-supportedTx <- !is.na(rowData(bambu_result)$readCount)
-writeToGTF(rowRanges(bambu_result)[supportedTx, ], file = "nextflow_results/comapre_other_LRS_tools/bambu/supportedTranscriptModels.gtf")
-data.frame(rowData(bambu_result)[supportedTx, ]) %>% 
-    write_tsv(file="nextflow_results/comapre_other_LRS_tools/bambu/supportedTxClassification.txt")
